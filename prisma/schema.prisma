@@ -1,0 +1,279 @@
+// Multi-Tenant Vault — PostgreSQL + Prisma
+// Tenant isolation strategy: shared schema, every row scoped by tenantId.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// DEV 1 — Platform & Tenancy
+// ─────────────────────────────────────────────
+model Tenant {
+  id           String   @id @default(uuid())
+  name         String
+  slug         String   @unique
+  domain       String?  @unique
+  status       TenantStatus @default(ACTIVE)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  users         User[]
+  subscription  Subscription?
+  business      Business?
+  products      Product[]
+  catalogs      Catalog[]
+  documents     Document[]
+  customers     Customer[]
+  conversations Conversation[]
+  orders        Order[]
+  quotes        Quote[]
+  whatsappAccount WhatsappAccount?
+
+  @@map("tenants")
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String?  // null for platform super admins
+  email        String
+  passwordHash String
+  name         String?
+  roleId       String?
+  isSuperAdmin Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+  role   Role?   @relation(fields: [roleId], references: [id])
+
+  @@unique([tenantId, email])
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  tenantId    String?  // null = platform-level role
+  name        String
+  permissions Json     @default("[]")
+  users       User[]
+
+  @@unique([tenantId, name])
+  @@map("roles")
+}
+
+model Subscription {
+  id        String   @id @default(uuid())
+  tenantId  String   @unique
+  plan      String   @default("free")
+  status    String   @default("active")
+  renewsAt  DateTime?
+  meta      Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("subscriptions")
+}
+
+// ─────────────────────────────────────────────
+// DEV 2 — Business, Products, Catalog, Website
+// ─────────────────────────────────────────────
+model Business {
+  id          String   @id @default(uuid())
+  tenantId    String   @unique
+  displayName String
+  description String?
+  logoUrl     String?
+  settings    Json     @default("{}")
+  website     WebsitePage[]
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("businesses")
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  priceMinor  Int      @default(0) // store money in minor units
+  currency    String   @default("NGN")
+  attributes  Json     @default("{}")
+  stock       Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("products")
+}
+
+// JSONB catalog (diagram: "JSONB Catalogs"), AI fetches via tool-calling
+model Catalog {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  data      Json     @default("{}") // normalized catalog payload (CSV/Form -> JSONB)
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("catalogs")
+}
+
+model WebsitePage {
+  id         String   @id @default(uuid())
+  businessId String
+  slug       String
+  title      String
+  content    Json     @default("{}")
+  published  Boolean  @default(false)
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@unique([businessId, slug])
+  @@map("website_pages")
+}
+
+// ─────────────────────────────────────────────
+// DEV 3 — Knowledge / RAG
+// ─────────────────────────────────────────────
+model Document {
+  id        String   @id @default(uuid())
+  tenantId  String
+  filename  String
+  mimeType  String
+  status    String   @default("pending") // pending|processing|ready|failed
+  createdAt DateTime @default(now())
+
+  tenant Tenant          @relation(fields: [tenantId], references: [id])
+  chunks DocumentChunk[]
+
+  @@index([tenantId])
+  @@map("documents")
+}
+
+model DocumentChunk {
+  id         String   @id @default(uuid())
+  documentId String
+  tenantId   String
+  content    String
+  vectorId   String?  // id in Qdrant
+  position   Int
+
+  document Document @relation(fields: [documentId], references: [id])
+
+  @@index([tenantId])
+  @@map("document_chunks")
+}
+
+// ─────────────────────────────────────────────
+// DEV 4 — Conversation, Orders, Quotes, WhatsApp
+// ─────────────────────────────────────────────
+model WhatsappAccount {
+  id            String  @id @default(uuid())
+  tenantId      String  @unique
+  wabaId        String? // from Meta Embedded Signup
+  phoneNumberId String?
+  accessToken   String? // encrypted at rest
+  verified      Boolean @default(false)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("whatsapp_accounts")
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  tenantId  String
+  phone     String
+  name      String?
+  meta      Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  conversations Conversation[]
+
+  @@unique([tenantId, phone])
+  @@map("customers")
+}
+
+model Conversation {
+  id         String   @id @default(uuid())
+  tenantId   String
+  customerId String
+  channel    String   @default("whatsapp")
+  status     String   @default("open") // open|escalated|closed
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  customer Customer  @relation(fields: [customerId], references: [id])
+  messages Message[]
+
+  @@index([tenantId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String
+  role           String   // customer|ai|staff
+  content        String
+  meta           Json     @default("{}")
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@index([conversationId])
+  @@map("messages")
+}
+
+model Order {
+  id          String   @id @default(uuid())
+  tenantId    String
+  customerId  String?
+  status      String   @default("pending") // pending|confirmed|paid|fulfilled|cancelled
+  totalMinor  Int      @default(0)
+  currency    String   @default("NGN")
+  items       Json     @default("[]")
+  measurements Json    @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("orders")
+}
+
+model Quote {
+  id         String   @id @default(uuid())
+  tenantId   String
+  customerId String?
+  status     String   @default("draft") // draft|sent|accepted|rejected
+  amountMinor Int     @default(0)
+  currency   String   @default("NGN")
+  details    Json     @default("{}")
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("quotes")
+}

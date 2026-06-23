@@ -1,0 +1,38 @@
+openapi: 3.0.3
+info:
+  title: AI-Powered Business Commerce Platform API
+  version: 0.1.0
+  description: Multi-Tenant B2B SaaS + WhatsApp AI Agent + Website Builder
+servers:
+  - url: http://localhost:4000/api/v1
+    description: Local
+tags:
+  - name: Auth
+  - name: Tenants
+  - name: Users
+  - name: RBAC
+  - name: Billing
+  - name: Business
+  - name: Products
+  - name: Catalog
+  - name: Inventory
+  - name: Website
+  - name: Knowledge
+  - name: AI
+  - name: WhatsApp
+  - name: Conversations
+  - name: Customers
+  - name: Orders
+  - name: Quotes
+  - name: Payments
+  - name: Notifications
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - bearerAuth: []
+paths: {}
+# TODO: define paths — or generate from JSDoc @openapi blocks via swagger-jsdoc
