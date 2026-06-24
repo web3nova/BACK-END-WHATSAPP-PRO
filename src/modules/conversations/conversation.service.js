@@ -84,17 +84,19 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
     if (mediaArr && mediaArr.length) {
       for (const m of mediaArr) {
         try {
-          await db.mediaAsset.create({ data: {
-            tenantId,
-            messageId: msg.id,
-            provider: m.provider || 'whatsapp',
-            providerMediaId: m.providerMediaId,
-            mimeType: m.mimeType,
-            size: m.size,
-            storageKey: m.storageKey,
-            url: m.url,
-            meta: m.meta || {}
-          } });
+          await db.mediaAsset.create({
+            data: {
+              tenantId,
+              messageId: msg.id,
+              provider: m.provider || 'whatsapp',
+              providerMediaId: m.providerMediaId,
+              mimeType: m.mimeType,
+              size: m.size,
+              storageKey: m.storageKey,
+              url: m.url,
+              meta: m.meta || {}
+            }
+          });
         } catch (err) {
           // best-effort: log but don't fail the whole transaction for media record errors
           console.warn('[Conversation Service] Failed to persist media asset', err?.message || err);
@@ -122,7 +124,7 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
       where: { tenantId, customerId: customer.id, status: 'open' },
       orderBy: { updatedAt: 'desc' }
     });
-      if (existing) {
+    if (existing) {
       // Create message attached to the existing conversation
       const msg = await createMessageAndAssets(prisma, existing.id, text, messageId, media);
 
@@ -198,17 +200,19 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
     if (media && media.length) {
       for (const m of media) {
         try {
-          await tx.mediaAsset.create({ data: {
-            tenantId,
-            messageId: message.id,
-            provider: m.provider || 'whatsapp',
-            providerMediaId: m.providerMediaId,
-            mimeType: m.mimeType,
-            size: m.size,
-            storageKey: m.storageKey,
-            url: m.url,
-            meta: m.meta || {}
-          } });
+          await tx.mediaAsset.create({
+            data: {
+              tenantId,
+              messageId: message.id,
+              provider: m.provider || 'whatsapp',
+              providerMediaId: m.providerMediaId,
+              mimeType: m.mimeType,
+              size: m.size,
+              storageKey: m.storageKey,
+              url: m.url,
+              meta: m.meta || {}
+            }
+          });
         } catch (err) {
           console.warn('[Conversation Service] Failed to persist media asset (fallback path)', err?.message || err);
         }

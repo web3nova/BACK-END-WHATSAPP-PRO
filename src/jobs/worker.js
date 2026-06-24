@@ -6,7 +6,7 @@ import processOutbox from './processors/outbox.job.js';
 
 export const startWorker = () => {
   console.log('[Worker] Starting background worker...');
-  
+
   const worker = new Worker('main', async (job) => {
     switch (job.name) {
       case 'aiReply':
