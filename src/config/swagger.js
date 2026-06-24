@@ -13,7 +13,12 @@ const swaggerDefinition = {
   },
   servers: [
     {
+      url: config.apiPrefix,
+      description: 'Current host',
+    },
+    {
       url: `${config.appUrl}${config.apiPrefix}`,
+      description: 'Configured app URL',
     },
   ],
   components: {

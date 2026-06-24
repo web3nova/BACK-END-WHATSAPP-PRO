@@ -13,6 +13,18 @@ import { swaggerSpec } from './config/swagger.js';
 export function createApp() {
   const app = express();
 
+  app.get(`${config.apiPrefix}/docs.json`, (_req, res) => res.json(swaggerSpec));
+  app.use(
+    `${config.apiPrefix}/docs`,
+    swaggerUi.serve,
+    swaggerUi.setup(swaggerSpec, {
+      swaggerOptions: {
+        persistAuthorization: true,
+        tryItOutEnabled: true,
+      },
+    }),
+  );
+
   app.use(helmet());
   app.use(cors());
   app.use(compression());
@@ -22,7 +34,6 @@ export function createApp() {
 
   // Mount the API gateway under the configured prefix.
   app.use(config.apiPrefix, routes);
-  app.use(`${config.apiPrefix}/docs`, swaggerUi.serve, swaggerUi.setup(swaggerSpec));
   app.use(notFoundMiddleware);
   app.use(errorMiddleware);
 
