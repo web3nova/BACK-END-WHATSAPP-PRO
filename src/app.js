@@ -7,6 +7,8 @@ import { config } from './config/index.js';
 import routes from './routes/index.js';
 import { errorMiddleware } from './middleware/error.middleware.js';
 import { notFoundMiddleware } from './middleware/notFound.middleware.js';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './config/swagger.js';
 
 export function createApp() {
   const app = express();
@@ -20,7 +22,7 @@ export function createApp() {
 
   // Mount the API gateway under the configured prefix.
   app.use(config.apiPrefix, routes);
-
+  app.use(`${config.apiPrefix}/docs`, swaggerUi.serve, swaggerUi.setup(swaggerSpec));
   app.use(notFoundMiddleware);
   app.use(errorMiddleware);
 
