@@ -271,6 +271,7 @@ model OutboxMessage {
   channel          String   @default("whatsapp")
   to               String
   payload          Json
+  messageId        String?
   attempts         Int      @default(0)
   status           String   @default("pending") // pending|in_progress|sent|failed
   lastError        String?
@@ -280,7 +281,10 @@ model OutboxMessage {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  message Message? @relation(fields: [messageId], references: [id])
+
   @@index([tenantId])
+  @@index([messageId])
   @@map("outbox_messages")
 }
 
