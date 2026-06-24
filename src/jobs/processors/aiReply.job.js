@@ -28,7 +28,7 @@ export default async function processAiReply(job) {
   // Idempotency: if an AI reply for this message already exists, skip
   if (messageId) {
     const existingAi = await prisma.message.findFirst({
-      where: { conversationId, role: 'ai', meta: { contains: { aiForMessageId: messageId } } }
+      where: { conversationId, role: 'ai', meta: { path: ['aiForMessageId'], equals: messageId } }
     });
     if (existingAi) {
       console.log(`[aiReply] AI reply already exists for message ${messageId}, skipping.`);
