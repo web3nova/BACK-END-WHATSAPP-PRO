@@ -1,5 +1,6 @@
 import { claudeProvider } from './claude.provider.js';
 import { openaiProvider } from './openai.provider.js';
+import { geminiProvider } from './gemini.provider.js';
 import { config } from '../../../config/index.js';
 
 /**
@@ -21,10 +22,11 @@ import { config } from '../../../config/index.js';
 const chatProviders = {
   anthropic: claudeProvider,
   openai: openaiProvider,
+  gemini: geminiProvider,
 };
 
 export function getChatProvider() {
-  return chatProviders[config.ai.chatProvider] ?? claudeProvider;
+  return chatProviders[process.env.AI_CHAT_PROVIDER] ?? chatProviders[config.ai.chatProvider] ?? claudeProvider;
 }
 
 // Only OpenAI implements embeddings here; Claude has no embedding endpoint.
@@ -32,4 +34,5 @@ export function getEmbeddingProvider() {
   return openaiProvider;
 }
 
-export { claudeProvider, openaiProvider };
+export { claudeProvider, openaiProvider, geminiProvider };
+

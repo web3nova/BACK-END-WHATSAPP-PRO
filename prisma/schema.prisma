@@ -232,6 +232,7 @@ model Conversation {
 
 model Message {
   id             String   @id @default(uuid())
+  externalId     String?  @unique
   conversationId String
   role           String   // customer|ai|staff
   content        String
