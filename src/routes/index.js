@@ -14,6 +14,7 @@ import tenantRoutes from '../modules/tenants/tenant.routes.js';
 import billingRoutes from '../modules/billing/billing.routes.js';
 import adminRoutes from '../modules/superadmin/admin.routes.js';
 import tenantRouter from '../modules/tenants/tenant.routes.js';
+import adminRouter from '../modules/superadmin/admin.routes.js';
 
 // ── DEV 2 — Business, Catalog, Website ─────────────────
 import businessRoutes from '../modules/business/business.routes.js';
@@ -47,6 +48,7 @@ router.use('/tenant', tenantRoutes);
 router.use('/billing', billingRoutes);
 router.use('/admin', adminRoutes);
 router.use('/tenants', tenantRouter);
+router.use('/admin', adminRouter);
 
 // Dev 2
 router.use('/business', businessRoutes);
