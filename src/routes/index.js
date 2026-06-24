@@ -13,6 +13,7 @@ import rbacRoutes from '../modules/rbac/rbac.routes.js';
 import tenantRoutes from '../modules/tenants/tenant.routes.js';
 import billingRoutes from '../modules/billing/billing.routes.js';
 import adminRoutes from '../modules/superadmin/admin.routes.js';
+import tenantRouter from '../modules/tenants/tenant.routes.js';
 
 // ── DEV 2 — Business, Catalog, Website ─────────────────
 import businessRoutes from '../modules/business/business.routes.js';
@@ -45,6 +46,7 @@ router.use('/rbac', rbacRoutes);
 router.use('/tenant', tenantRoutes);
 router.use('/billing', billingRoutes);
 router.use('/admin', adminRoutes);
+router.use('/tenants', tenantRouter);
 
 // Dev 2
 router.use('/business', businessRoutes);

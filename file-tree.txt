@@ -1,4 +1,5 @@
 BACK-END-WHATSAPP-PRO/
+├── .dockerignore
 ├── .env.example
 ├── .eslintrc.json
 ├── .gitignore
@@ -6,6 +7,7 @@ BACK-END-WHATSAPP-PRO/
 ├── Dockerfile
 ├── README.md
 ├── docker-compose.yml
+├── package-lock.json
 ├── package.json
 ├── docs/
 │   ├── api/
@@ -13,6 +15,10 @@ BACK-END-WHATSAPP-PRO/
 │   ├── architecture.md
 │   └── diagram.png
 ├── prisma/
+│   ├── migrations/
+│   │   ├── 20260624114458_init/
+│   │   │   └── migration.sql
+│   │   └── migration_lock.toml
 │   └── schema.prisma
 ├── scripts/
 │   ├── createSuperAdmin.js
@@ -48,8 +54,11 @@ BACK-END-WHATSAPP-PRO/
 │   │   └── whatsapp.js
 │   ├── database/
 │   │   ├── migrations/
+│   │   │   └── .gitkeep
 │   │   ├── models/
+│   │   │   └── .gitkeep
 │   │   └── seeders/
+│   │       └── .gitkeep
 │   ├── jobs/
 │   │   ├── queue.js
 │   │   ├── worker.js
@@ -186,5 +195,8 @@ BACK-END-WHATSAPP-PRO/
 │       └── index.js
 └── tests/
     ├── fixtures/
+    │   └── .gitkeep
     ├── integration/
+    │   └── .gitkeep
     └── unit/
+        └── .gitkeep

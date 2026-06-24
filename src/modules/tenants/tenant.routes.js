@@ -1,15 +1,62 @@
 import { Router } from 'express';
+import { authMiddleware } from '../../middleware/auth.middleware.js';
+import { tenantMiddleware } from '../../middleware/tenant.middleware.js';
+import { validate } from '../../middleware/validate.middleware.js';
+import * as controller from './tenant.controller.js';
+import {
+  listTenantsSchema,
+  getTenantSchema,
+  updateTenantSchema,
+  deleteTenantSchema,
+} from './tenant.validation.js';
 
-// ============================================================
-// Tenants — Owner: Dev 1
-// 👉 START HERE. This stub is already mounted in src/routes/index.js.
-// Build the matching *.controller.js + *.service.js in this folder,
-// then declare routes below.
-// Pattern + conventions: docs/architecture.md  (worked example: src/modules/knowledge)
-// ============================================================
 const router = Router();
 
-// router.get('/', controller.list);
-// router.post('/', controller.create);
+// ── Tenant self-service routes (any authenticated tenant user) ──
+router.get(
+  '/me',
+  authMiddleware,
+  tenantMiddleware,
+  controller.getOwn
+);
+
+router.patch(
+  '/me',
+  authMiddleware,
+  tenantMiddleware,
+  validate(updateTenantSchema),  // reuses schema but status field ignored in updateOwnTenant
+  controller.updateOwn
+);
+
+// ── Super admin only routes ──
+// Note: superadmin guard will be added via requireSuperAdmin middleware in the superadmin module.
+// For now, protected by authMiddleware — tighten when superadmin module is built.
+router.get(
+  '/',
+  authMiddleware,
+  validate(listTenantsSchema),
+  controller.list
+);
+
+router.get(
+  '/:id',
+  authMiddleware,
+  validate(getTenantSchema),
+  controller.getOne
+);
+
+router.patch(
+  '/:id',
+  authMiddleware,
+  validate(updateTenantSchema),
+  controller.update
+);
+
+router.delete(
+  '/:id',
+  authMiddleware,
+  validate(deleteTenantSchema),
+  controller.remove
+);
 
 export default router;
