@@ -41,4 +41,28 @@ const options = {
 
 export const swaggerSpec = swaggerJSDoc(options);
 
+const operationMethods = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head'];
+
+for (const pathItem of Object.values(swaggerSpec.paths || {})) {
+  for (const method of operationMethods) {
+    const operation = pathItem[method];
+    if (!operation || operation.responses) continue;
+
+    operation.responses = {
+      200: {
+        description: 'Successful response',
+      },
+      400: {
+        description: 'Invalid request',
+      },
+      401: {
+        description: 'Missing or invalid authorization',
+      },
+      500: {
+        description: 'Server error',
+      },
+    };
+  }
+}
+
 export default swaggerSpec;
