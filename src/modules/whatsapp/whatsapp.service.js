@@ -1,4 +1,7 @@
 import * as conversationService from '../conversations/conversation.service.js';
+import { prisma } from '../../config/prisma.js';
+import { mainQueue } from '../../jobs/queue.js';
+import { fetchAndStoreMedia } from './media.service.js';
 
 /**
  * Process the incoming Meta Webhook payload asynchronously.
@@ -48,12 +51,32 @@ export const processIncoming = async (payload) => {
 
         console.log(`[WhatsApp] Message from ${senderPhone} to ${phoneNumberId}: ${text}`);
 
+        // If media present, attempt to download and store it (best-effort)
+        const mediaAssets = [];
+        try {
+          if (message.type === 'image' || message.type === 'audio' || message.type === 'video' || message.type === 'document') {
+            const mediaObj = message[message.type];
+            const mediaId = mediaObj?.id;
+            if (mediaId) {
+              // lookup account to get tenant & access token
+              const account = await prisma.whatsappAccount.findFirst({ where: { phoneNumberId } });
+              if (account && account.accessToken) {
+                const asset = await fetchAndStoreMedia({ tenantId: account.tenantId, mediaId, accessToken: account.accessToken });
+                if (asset) mediaAssets.push(asset);
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[WhatsApp] Failed to fetch/store media:', err?.message || err);
+        }
+
         await conversationService.handleIncomingMessage({
           phoneNumberId,
           senderPhone,
           senderName,
           text,
-          messageId: message.id
+          messageId: message.id,
+          media: mediaAssets
         });
       }
     }
@@ -61,74 +84,23 @@ export const processIncoming = async (payload) => {
 };
 
 /**
- * Send a message via Meta's WhatsApp Cloud API
+ * Create an outbox entry and enqueue background job to deliver it.
+ * Returns the outbox DB row.
  */
-export const sendMessage = async (tenantId, toPhone, text) => {
-  // We need the tenant's WhatsApp Account config (access token and phone number ID)
-  // Usually this is fetched from the DB
-  const { prisma } = await import('../../config/prisma.js');
-  const account = await prisma.whatsappAccount.findUnique({
-    where: { tenantId }
+export const sendMessage = async (tenantId, toPhone, payloadOrText) => {
+  const payload = typeof payloadOrText === 'string' ? { type: 'text', body: payloadOrText } : payloadOrText;
+
+  const outbox = await prisma.outboxMessage.create({
+    data: {
+      tenantId,
+      to: toPhone,
+      payload,
+    }
   });
 
-  if (!account || !account.accessToken || !account.phoneNumberId) {
-    console.error(`[WhatsApp] Cannot send message, missing config for tenant ${tenantId}`);
-    return;
-  }
+  // enqueue a job to deliver the outbox item (idempotent by jobId)
+  await mainQueue.add('sendOutbox', { outboxId: outbox.id }, { jobId: outbox.id, removeOnComplete: true, attempts: 5, backoff: { type: 'exponential', delay: 5000 } });
 
-  const url = `https://graph.facebook.com/${process.env.WHATSAPP_API_VERSION || 'v20.0'}/${account.phoneNumberId}/messages`;
-
-  const payload = {
-    messaging_product: 'whatsapp',
-    to: toPhone,
-    type: 'text',
-    text: { body: text }
-  };
-
-  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  const maxAttempts = 3;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${account.accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (response.ok) {
-        console.log(`[WhatsApp] Message sent to ${toPhone}`);
-        return data;
-      }
-
-      // Respect Retry-After if provided
-      const retryAfter = response.headers?.get ? response.headers.get('retry-after') : null;
-      let waitMs = retryAfter ? parseInt(retryAfter, 10) * 1000 : Math.pow(2, attempt) * 1000;
-
-      console.error(`[WhatsApp] Failed to send message (attempt ${attempt}):`, data);
-      if (attempt < maxAttempts) {
-        console.log(`[WhatsApp] Retrying in ${waitMs}ms...`);
-        await sleep(waitMs);
-        continue;
-      }
-
-      console.error(`[WhatsApp] Giving up sending message to ${toPhone} after ${attempt} attempts`);
-      return data;
-    } catch (error) {
-      const waitMs = Math.pow(2, attempt) * 1000;
-      console.error(`[WhatsApp] Network error sending message (attempt ${attempt}):`, error?.message || error);
-      if (attempt < maxAttempts) {
-        console.log(`[WhatsApp] Retrying in ${waitMs}ms...`);
-        await sleep(waitMs);
-        continue;
-      }
-      console.error(`[WhatsApp] Giving up after ${attempt} attempts due to network errors`);
-      throw error;
-    }
-  }
+  return outbox;
 };
 

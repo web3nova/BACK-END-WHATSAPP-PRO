@@ -1,6 +1,7 @@
 import { Worker } from 'bullmq';
 import { redis } from '../config/redis.js';
 import processAiReply from './processors/aiReply.job.js';
+import processOutbox from './processors/outbox.job.js';
 // other processors like embedding.job.js could be imported here
 
 export const startWorker = () => {
@@ -10,6 +11,9 @@ export const startWorker = () => {
     switch (job.name) {
       case 'aiReply':
         await processAiReply(job);
+        break;
+      case 'sendOutbox':
+        await processOutbox(job);
         break;
       // Add other cases here
       default:

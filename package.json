@@ -13,6 +13,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "seed": "node scripts/seed.js",
     "create:admin": "node scripts/createSuperAdmin.js",
+    "test:webhook": "node scripts/test_whatsapp_webhook.js",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "node --test"
