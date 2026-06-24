@@ -1,0 +1,189 @@
+BACK-END-WHATSAPP-PRO/
+├── .env.example
+├── .eslintrc.json
+├── .gitignore
+├── .prettierrc
+├── Dockerfile
+├── README.md
+├── docker-compose.yml
+├── package.json
+├── docs/
+│   ├── api/
+│   │   └── openapi.yaml
+│   ├── architecture.md
+│   └── diagram.png
+├── prisma/
+│   └── schema.prisma
+├── scripts/
+│   ├── createSuperAdmin.js
+│   └── seed.js
+├── src/
+│   ├── app.js
+│   ├── server.js
+│   ├── common/
+│   │   ├── constants/
+│   │   │   ├── index.js
+│   │   │   ├── orderStatus.js
+│   │   │   ├── permissions.js
+│   │   │   └── roles.js
+│   │   ├── errors/
+│   │   │   ├── AppError.js
+│   │   │   ├── httpErrors.js
+│   │   │   └── index.js
+│   │   └── utils/
+│   │       ├── apiResponse.js
+│   │       ├── asyncHandler.js
+│   │       ├── hash.js
+│   │       ├── pagination.js
+│   │       ├── slugify.js
+│   │       └── token.js
+│   ├── config/
+│   │   ├── index.js
+│   │   ├── logger.js
+│   │   ├── prisma.js
+│   │   ├── redis.js
+│   │   ├── storage.js
+│   │   ├── swagger.js
+│   │   ├── vectordb.js
+│   │   └── whatsapp.js
+│   ├── database/
+│   │   ├── migrations/
+│   │   ├── models/
+│   │   └── seeders/
+│   ├── jobs/
+│   │   ├── queue.js
+│   │   ├── worker.js
+│   │   └── processors/
+│   │       ├── aiReply.job.js
+│   │       ├── embedding.job.js
+│   │       ├── notification.job.js
+│   │       └── websiteBuild.job.js
+│   ├── middleware/
+│   │   ├── auth.middleware.js
+│   │   ├── error.middleware.js
+│   │   ├── notFound.middleware.js
+│   │   ├── rateLimiter.middleware.js
+│   │   ├── rbac.middleware.js
+│   │   ├── subscription.middleware.js
+│   │   ├── tenant.middleware.js
+│   │   └── validate.middleware.js
+│   ├── modules/
+│   │   ├── ai/
+│   │   │   ├── ai.controller.js
+│   │   │   ├── ai.routes.js
+│   │   │   ├── ai.service.js
+│   │   │   ├── memory/
+│   │   │   │   └── conversationMemory.js
+│   │   │   ├── prompts/
+│   │   │   │   ├── quotation.prompt.js
+│   │   │   │   ├── salesAgent.prompt.js
+│   │   │   │   └── system.prompt.js
+│   │   │   ├── providers/
+│   │   │   │   ├── claude.provider.js
+│   │   │   │   ├── index.js
+│   │   │   │   └── openai.provider.js
+│   │   │   └── tools/
+│   │   │       ├── catalogTools.js
+│   │   │       ├── index.js
+│   │   │       └── orderTools.js
+│   │   ├── auth/
+│   │   │   ├── auth.controller.js
+│   │   │   ├── auth.routes.js
+│   │   │   ├── auth.service.js
+│   │   │   └── auth.validation.js
+│   │   ├── billing/
+│   │   │   ├── billing.controller.js
+│   │   │   ├── billing.routes.js
+│   │   │   ├── billing.service.js
+│   │   │   └── webhooks/
+│   │   │       └── payment.webhook.js
+│   │   ├── business/
+│   │   │   ├── business.controller.js
+│   │   │   ├── business.routes.js
+│   │   │   ├── business.service.js
+│   │   │   └── business.validation.js
+│   │   ├── catalog/
+│   │   │   ├── catalog.controller.js
+│   │   │   ├── catalog.routes.js
+│   │   │   └── catalog.service.js
+│   │   ├── conversations/
+│   │   │   ├── conversation.controller.js
+│   │   │   ├── conversation.routes.js
+│   │   │   └── conversation.service.js
+│   │   ├── customers/
+│   │   │   ├── customer.controller.js
+│   │   │   ├── customer.routes.js
+│   │   │   └── customer.service.js
+│   │   ├── inventory/
+│   │   │   ├── inventory.controller.js
+│   │   │   ├── inventory.routes.js
+│   │   │   └── inventory.service.js
+│   │   ├── knowledge/
+│   │   │   ├── knowledge.controller.js
+│   │   │   ├── knowledge.routes.js
+│   │   │   ├── knowledge.service.js
+│   │   │   └── pipeline/
+│   │   │       ├── chunker.js
+│   │   │       ├── embedder.js
+│   │   │       ├── extractor.js
+│   │   │       └── retriever.js
+│   │   ├── notifications/
+│   │   │   ├── notification.controller.js
+│   │   │   ├── notification.routes.js
+│   │   │   ├── notification.service.js
+│   │   │   └── channels/
+│   │   │       ├── email.channel.js
+│   │   │       ├── sms.channel.js
+│   │   │       └── whatsapp.channel.js
+│   │   ├── orders/
+│   │   │   ├── order.controller.js
+│   │   │   ├── order.routes.js
+│   │   │   ├── order.service.js
+│   │   │   └── order.validation.js
+│   │   ├── payments/
+│   │   │   ├── payment.controller.js
+│   │   │   ├── payment.routes.js
+│   │   │   └── payment.service.js
+│   │   ├── products/
+│   │   │   ├── product.controller.js
+│   │   │   ├── product.routes.js
+│   │   │   ├── product.service.js
+│   │   │   └── product.validation.js
+│   │   ├── quotes/
+│   │   │   ├── quote.controller.js
+│   │   │   ├── quote.routes.js
+│   │   │   └── quote.service.js
+│   │   ├── rbac/
+│   │   │   ├── rbac.controller.js
+│   │   │   ├── rbac.routes.js
+│   │   │   └── rbac.service.js
+│   │   ├── superadmin/
+│   │   │   ├── admin.controller.js
+│   │   │   ├── admin.routes.js
+│   │   │   └── admin.service.js
+│   │   ├── tenants/
+│   │   │   ├── tenant.controller.js
+│   │   │   ├── tenant.routes.js
+│   │   │   ├── tenant.service.js
+│   │   │   └── tenant.validation.js
+│   │   ├── users/
+│   │   │   ├── user.controller.js
+│   │   │   ├── user.routes.js
+│   │   │   ├── user.service.js
+│   │   │   └── user.validation.js
+│   │   ├── website/
+│   │   │   ├── website.controller.js
+│   │   │   ├── website.routes.js
+│   │   │   └── website.service.js
+│   │   └── whatsapp/
+│   │       ├── embeddedSignup.service.js
+│   │       ├── whatsapp.controller.js
+│   │       ├── whatsapp.parser.js
+│   │       ├── whatsapp.routes.js
+│   │       └── whatsapp.service.js
+│   └── routes/
+│       └── index.js
+└── tests/
+    ├── fixtures/
+    ├── integration/
+    └── unit/
