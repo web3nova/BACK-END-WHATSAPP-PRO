@@ -33,6 +33,7 @@ model Tenant {
   orders        Order[]
   quotes        Quote[]
   whatsappAccount WhatsappAccount?
+  payments      Payment[]
 
   @@map("tenants")
 }
@@ -241,6 +242,7 @@ model Message {
 
   conversation Conversation @relation(fields: [conversationId], references: [id])
   mediaAssets MediaAsset[]
+  outboxMessages OutboxMessage[]
 
   @@index([conversationId])
   @@map("messages")
@@ -301,6 +303,7 @@ model Order {
   updatedAt   DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
+  payments Payment[]
 
   @@index([tenantId])
   @@map("orders")
@@ -321,3 +324,26 @@ model Quote {
   @@index([tenantId])
   @@map("quotes")
 }
+
+model Payment {
+  id               String   @id @default(uuid())
+  tenantId         String
+  orderId          String?
+  reference        String   @unique
+  provider         String   @default("paystack")
+  providerReference String?  @unique
+  amountMinor      Int      @default(0)
+  currency         String   @default("NGN")
+  status           String   @default("pending") // pending|success|failed|cancelled
+  meta             Json     @default("{}")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  order  Order? @relation(fields: [orderId], references: [id])
+
+  @@index([tenantId])
+  @@index([orderId])
+  @@map("payments")
+}
+
