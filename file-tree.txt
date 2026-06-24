@@ -156,7 +156,8 @@ BACK-END-WHATSAPP-PRO/
 │   │   ├── rbac/
 │   │   │   ├── rbac.controller.js
 │   │   │   ├── rbac.routes.js
-│   │   │   └── rbac.service.js
+│   │   │   ├── rbac.service.js
+│   │   │   └── rbac.validation.js
 │   │   ├── superadmin/
 │   │   │   ├── admin.controller.js
 │   │   │   ├── admin.routes.js
