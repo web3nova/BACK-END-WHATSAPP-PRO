@@ -9,7 +9,51 @@ import { Router } from 'express';
 // ============================================================
 const router = Router();
 
-// router.get('/', controller.list);
-// router.post('/', controller.create);
+import * as controller from './whatsapp.controller.js';
+import { verifySignature } from './whatsapp.middleware.js';
+
+/**
+ * @openapi
+ * /webhook:
+ *   get:
+ *     summary: Verify WhatsApp Webhook
+ *     tags: [WhatsApp]
+ *     parameters:
+ *       - in: query
+ *         name: hub.mode
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: hub.verify_token
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: hub.challenge
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Webhook verified
+ *         content:
+ *           text/plain:
+ *             schema:
+ *               type: string
+ */
+router.get('/', controller.verifyWebhook);
+
+/**
+ * @openapi
+ * /webhook:
+ *   post:
+ *     summary: Receive WhatsApp Messages
+ *     tags: [WhatsApp]
+ *     responses:
+ *       200:
+ *         description: Message received
+ */
+router.post('/', verifySignature, controller.receiveWebhook);
 
 export default router;
