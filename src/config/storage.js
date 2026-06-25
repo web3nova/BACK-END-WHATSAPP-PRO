@@ -1,13 +1,27 @@
 import { config } from './index.js';
+import fs from 'fs';
+import path from 'path';
+import { promisify } from 'util';
 
-// Thin placeholder around an S3-compatible client.
-// Swap the body for @aws-sdk/client-s3 when wiring real storage.
+const mkdir = promisify(fs.mkdir);
+const writeFile = promisify(fs.writeFile);
+
+const storageDir = path.resolve(process.cwd(), 'storage');
+
+// Local filesystem-backed storage adapter for development.
+// In production swap this implementation for an S3-compatible client.
 export const storage = {
-  async put(_key, _body, _contentType) {
-    throw new Error('storage.put not implemented — wire up S3 client');
+  async put(key, body, _contentType) {
+    const fullPath = path.join(storageDir, key);
+    await mkdir(path.dirname(fullPath), { recursive: true });
+    const buf = Buffer.isBuffer(body) ? body : Buffer.from(body);
+    await writeFile(fullPath, buf);
+    return key;
   },
-  async getSignedUrl(_key) {
-    throw new Error('storage.getSignedUrl not implemented');
+  async getSignedUrl(key) {
+    // No signing for local storage — return an app URL that serves static files.
+    const base = config.appUrl || `http://localhost:${process.env.PORT || 4000}`;
+    return `${base.replace(/\/$/, '')}/storage/${encodeURIComponent(key)}`;
   },
   bucket: config.storage.bucket,
 };

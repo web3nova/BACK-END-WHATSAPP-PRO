@@ -1,1 +1,152 @@
-// TODO: implement
+import { prisma } from '../../config/prisma.js';
+import { NotFoundError } from '../../common/errors/index.js';
+
+const quoteSelect = {
+  id: true,
+  tenantId: true,
+  customerId: true,
+  status: true,
+  amountMinor: true,
+  currency: true,
+  details: true,
+  createdAt: true,
+};
+
+const customerSelect = {
+  id: true,
+  phone: true,
+  name: true,
+  meta: true,
+  createdAt: true,
+};
+
+const toRecordMap = (rows) => new Map(rows.map((row) => [row.id, row]));
+
+async function loadCustomers(tenantId, customerIds = []) {
+  const ids = [...new Set(customerIds.filter(Boolean))];
+  if (!ids.length) return new Map();
+
+  const customers = await prisma.customer.findMany({
+    where: { tenantId, id: { in: ids } },
+    select: customerSelect,
+  });
+
+  return toRecordMap(customers);
+}
+
+function attachCustomer(record, customerMap) {
+  return {
+    ...record,
+    customer: record.customerId ? customerMap.get(record.customerId) ?? null : null,
+  };
+}
+
+async function ensureCustomerExists(tenantId, customerId) {
+  if (!customerId) return null;
+
+  const customer = await prisma.customer.findFirst({
+    where: { id: customerId, tenantId },
+    select: { id: true },
+  });
+
+  if (!customer) {
+    throw new NotFoundError('Customer not found');
+  }
+
+  return customerId;
+}
+
+export const listQuotes = async (tenantId, filters = {}) => {
+  const where = { tenantId };
+  if (filters.status) where.status = filters.status;
+  if (filters.customerId) where.customerId = filters.customerId;
+
+  const quotes = await prisma.quote.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    select: quoteSelect,
+  });
+
+  const customerMap = await loadCustomers(tenantId, quotes.map((quote) => quote.customerId));
+  return quotes.map((quote) => attachCustomer(quote, customerMap));
+};
+
+export const getQuote = async (tenantId, id) => {
+  const quote = await prisma.quote.findFirst({
+    where: { id, tenantId },
+    select: quoteSelect,
+  });
+
+  if (!quote) {
+    throw new NotFoundError('Quote not found');
+  }
+
+  const customerMap = await loadCustomers(tenantId, [quote.customerId]);
+  return attachCustomer(quote, customerMap);
+};
+
+export const createQuote = async (tenantId, data) => {
+  const customerId = await ensureCustomerExists(tenantId, data.customerId ?? null);
+  const quote = await prisma.quote.create({
+    data: {
+      tenantId,
+      customerId,
+      status: data.status,
+      amountMinor: data.amountMinor,
+      currency: data.currency,
+      details: data.details ?? {},
+    },
+    select: quoteSelect,
+  });
+
+  const customerMap = await loadCustomers(tenantId, [quote.customerId]);
+  return attachCustomer(quote, customerMap);
+};
+
+export const updateQuoteStatus = async (tenantId, id, status) => {
+  const quote = await prisma.quote.findFirst({
+    where: { id, tenantId },
+    select: { id: true, customerId: true },
+  });
+
+  if (!quote) {
+    throw new NotFoundError('Quote not found');
+  }
+
+  const quoteResult = await prisma.quote.update({
+    where: { id },
+    data: { status }
+  });
+
+  const customerMap = await loadCustomers(tenantId, [quote.customerId]);
+  return attachCustomer(quoteResult, customerMap);
+};
+
+export const updateQuote = async (tenantId, id, data) => {
+  const quote = await prisma.quote.findFirst({
+    where: { id, tenantId },
+    select: { id: true },
+  });
+
+  if (!quote) {
+    throw new NotFoundError('Quote not found');
+  }
+
+  const customerId = data.customerId === undefined ? undefined : await ensureCustomerExists(tenantId, data.customerId);
+  const updateData = {
+    ...(data.status !== undefined ? { status: data.status } : {}),
+    ...(data.amountMinor !== undefined ? { amountMinor: data.amountMinor } : {}),
+    ...(data.currency !== undefined ? { currency: data.currency } : {}),
+    ...(data.details !== undefined ? { details: data.details } : {}),
+    ...(data.customerId !== undefined ? { customerId } : {}),
+  };
+
+  const quoteResult = await prisma.quote.update({
+    where: { id },
+    data: updateData,
+    select: quoteSelect,
+  });
+
+  const customerMap = await loadCustomers(tenantId, [quoteResult.customerId]);
+  return attachCustomer(quoteResult, customerMap);
+};

@@ -65,9 +65,9 @@ export const config = {
 
   payment: {
     provider: process.env.PAYMENT_PROVIDER || 'paystack',
-    secretKey: process.env.PAYMENT_SECRET_KEY,
-    publicKey: process.env.PAYMENT_PUBLIC_KEY,
-    webhookSecret: process.env.PAYMENT_WEBHOOK_SECRET,
+    secretKey: process.env.PAYMENT_SECRET_KEY || process.env.PAYSTACK_SECRET_KEY,
+    publicKey: process.env.PAYMENT_PUBLIC_KEY || process.env.PAYSTACK_PUBLIC_KEY,
+    webhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || process.env.PAYSTACK_WEBHOOK_SECRET || process.env.PAYSTACK_SECRET_KEY,
   },
 };
 

@@ -33,6 +33,7 @@ model Tenant {
   orders        Order[]
   quotes        Quote[]
   whatsappAccount WhatsappAccount?
+  payments      Payment[]
 
   @@map("tenants")
 }
@@ -232,6 +233,7 @@ model Conversation {
 
 model Message {
   id             String   @id @default(uuid())
+  externalId     String?  @unique
   conversationId String
   role           String   // customer|ai|staff
   content        String
@@ -239,9 +241,53 @@ model Message {
   createdAt      DateTime @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id])
+  mediaAssets MediaAsset[]
+  outboxMessages OutboxMessage[]
 
   @@index([conversationId])
   @@map("messages")
+}
+
+model MediaAsset {
+  id              String   @id @default(uuid())
+  tenantId        String
+  messageId       String?
+  provider        String   // e.g. whatsapp
+  providerMediaId String?
+  mimeType        String?
+  size            Int?
+  storageKey      String
+  url             String?
+  meta            Json     @default("{}")
+  createdAt       DateTime @default(now())
+
+  message Message? @relation(fields: [messageId], references: [id])
+
+  @@index([tenantId])
+  @@map("media_assets")
+}
+
+model OutboxMessage {
+  id               String   @id @default(uuid())
+  tenantId         String
+  channel          String   @default("whatsapp")
+  to               String
+  payload          Json
+  messageId        String?
+  attempts         Int      @default(0)
+  status           String   @default("pending") // pending|in_progress|sent|failed
+  lastError        String?
+  scheduledAt      DateTime?
+  sentAt           DateTime?
+  providerResponse Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  message Message? @relation(fields: [messageId], references: [id])
+
+  @@index([tenantId])
+  @@index([messageId])
+  @@map("outbox_messages")
 }
 
 model Order {
@@ -257,6 +303,7 @@ model Order {
   updatedAt   DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
+  payments Payment[]
 
   @@index([tenantId])
   @@map("orders")
@@ -277,3 +324,26 @@ model Quote {
   @@index([tenantId])
   @@map("quotes")
 }
+
+model Payment {
+  id               String   @id @default(uuid())
+  tenantId         String
+  orderId          String?
+  reference        String   @unique
+  provider         String   @default("paystack")
+  providerReference String?  @unique
+  amountMinor      Int      @default(0)
+  currency         String   @default("NGN")
+  status           String   @default("pending") // pending|success|failed|cancelled
+  meta             Json     @default("{}")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  order  Order? @relation(fields: [orderId], references: [id])
+
+  @@index([tenantId])
+  @@index([orderId])
+  @@map("payments")
+}
+
