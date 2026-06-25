@@ -46,7 +46,7 @@ enum TenantStatus {
 
 model User {
   id           String   @id @default(uuid())
-  tenantId     String?  // null for platform super admins
+  tenantId     String?
   email        String
   passwordHash String
   name         String?
@@ -57,6 +57,7 @@ model User {
 
   tenant Tenant? @relation(fields: [tenantId], references: [id])
   role   Role?   @relation(fields: [roleId], references: [id])
+  passwordResetTokens PasswordResetToken[]   // 👈 add this here
 
   @@unique([tenantId, email])
   @@map("users")
@@ -86,6 +87,19 @@ model Subscription {
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@map("subscriptions")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])  // 👈 only this line
+
+  @@map("password_reset_tokens")
 }
 
 // ─────────────────────────────────────────────

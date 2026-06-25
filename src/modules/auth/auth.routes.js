@@ -1,8 +1,20 @@
 // src/modules/auth/auth.routes.js
 import { Router } from 'express';
-import { registerHandler, loginHandler, refreshHandler } from './auth.controller.js';
+import {
+  registerHandler,
+  loginHandler,
+  refreshHandler,
+  forgotPasswordHandler,
+  resetPasswordHandler,
+} from './auth.controller.js';
 import { validate } from '../../middleware/validate.middleware.js';
-import { registerSchema, loginSchema, refreshSchema } from './auth.validation.js';
+import {
+  registerSchema,
+  loginSchema,
+  refreshSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+} from './auth.validation.js';
 
 const router = Router();
 
@@ -79,5 +91,47 @@ router.post('/login', validate(loginSchema), loginHandler);
  *                 type: string
  */
 router.post('/refresh', validate(refreshSchema), refreshHandler);
+
+/**
+ * @openapi
+ * /auth/forgot-password:
+ *   post:
+ *     summary: Request a password reset email
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ */
+router.post('/forgot-password', validate(forgotPasswordSchema), forgotPasswordHandler);
+
+/**
+ * @openapi
+ * /auth/reset-password:
+ *   post:
+ *     summary: Reset password using a token from email
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token, password]
+ *             properties:
+ *               token:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *                 minLength: 8
+ */
+router.post('/reset-password', validate(resetPasswordSchema), resetPasswordHandler);
 
 export default router;

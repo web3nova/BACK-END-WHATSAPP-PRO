@@ -1,4 +1,5 @@
 // src/modules/auth/auth.service.js
+import crypto from 'crypto';
 import prisma from '../../config/prisma.js';
 import { hashPassword, comparePassword } from '../../common/utils/hash.js';
 import {
@@ -11,6 +12,7 @@ import {
   UnauthorizedError,
   NotFoundError,
 } from '../../common/errors/index.js';
+import { sendMail } from '../../config/mailer.js';
 
 const buildTokenPayload = (user) => ({
   sub: user.id,
@@ -84,4 +86,61 @@ const sanitizeUser = (user) => {
   return safe;
 };
 
-export default { register, login, refresh };
+export const forgotPassword = async ({ email }) => {
+  const user = await prisma.user.findFirst({ where: { email } });
+
+  if (!user) return;
+
+  await prisma.passwordResetToken.updateMany({
+    where: { userId: user.id, used: false },
+    data: { used: true },
+  });
+
+  const token     = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 60);
+
+  await prisma.passwordResetToken.create({
+    data: { userId: user.id, token, expiresAt },
+  });
+
+  const resetUrl = `${process.env.APP_URL}/reset-password?token=${token}`;
+
+  await sendMail({
+    to:      email,
+    subject: 'Reset your password',
+    html: `
+      <p>You requested a password reset.</p>
+      <p>Click the link below to reset your password. This link expires in 1 hour.</p>
+      <a href="${resetUrl}">${resetUrl}</a>
+      <p>If you did not request this, please ignore this email.</p>
+    `,
+  });
+};
+
+export const resetPassword = async ({ token, password }) => {
+  const record = await prisma.passwordResetToken.findUnique({
+    where: { token },
+    include: { user: true },
+  });
+
+  if (!record)                       throw new BadRequestError('Invalid or expired reset token');
+  if (record.used)                   throw new BadRequestError('Reset token has already been used');
+  if (record.expiresAt < new Date()) throw new BadRequestError('Reset token has expired');
+
+  const passwordHash = await hashPassword(password);
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: record.userId },
+      data: { passwordHash },
+    }),
+    prisma.passwordResetToken.update({
+      where: { id: record.id },
+      data: { used: true },
+    }),
+  ]);
+
+  return { message: 'Password reset successfully' };
+};
+
+export default { register, login, refresh, forgotPassword, resetPassword };
