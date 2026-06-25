@@ -33,6 +33,12 @@ import notificationRoutes from '../modules/notifications/notification.routes.js'
 const router = Router();
 
 router.get('/health', (_req, res) => res.json({ status: 'ok' }));
+router.get('/', (_req, res) => res.json({
+  status: 'ok',
+  message: 'BACK-END-WHATSAPP-PRO API',
+  version: 'v1',
+  docs: '/api/v1/docs',
+}));
 
 // Dev 3
 router.use('/ai', aiRoutes);
