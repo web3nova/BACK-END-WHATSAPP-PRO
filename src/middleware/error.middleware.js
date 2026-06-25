@@ -15,6 +15,15 @@ export const errorMiddleware = (err, req, res, next) => {
     });
   }
 
+  // HTTP errors from body-parser / express (malformed JSON → 400, payload too large → 413, etc.)
+  const httpStatus = err.status || err.statusCode;
+  if (httpStatus && httpStatus < 500) {
+    return res.status(httpStatus).json({
+      success: false,
+      message: err.message || 'Bad request',
+    });
+  }
+
   // Anything unexpected — log full detail, never leak internals to the client
   logger.error(err.stack || err.message || err);
 

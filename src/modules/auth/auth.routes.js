@@ -24,6 +24,7 @@ const router = Router();
  *   post:
  *     summary: Register a new tenant + first user
  *     tags: [Auth]
+ *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -46,6 +47,24 @@ const router = Router();
  *               tenantName:
  *                 type: string
  *                 example: Acme Corp
+ *     responses:
+ *       201:
+ *         description: Tenant and user created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     accessToken: { type: string }
+ *                     refreshToken: { type: string }
+ *                     user: { type: object }
+ *                     tenant: { type: object }
+ *       400:
+ *         description: Validation error or email already in use
  */
 router.post('/register', validate(registerSchema), registerHandler);
 
@@ -55,6 +74,7 @@ router.post('/register', validate(registerSchema), registerHandler);
  *   post:
  *     summary: Login with email + password
  *     tags: [Auth]
+ *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -70,6 +90,25 @@ router.post('/register', validate(registerSchema), registerHandler);
  *               password:
  *                 type: string
  *                 example: password123
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     accessToken: { type: string }
+ *                     refreshToken: { type: string }
+ *                     user: { type: object }
+ *       400:
+ *         description: Validation error (missing/invalid fields)
+ *       401:
+ *         description: Invalid credentials
  */
 router.post('/login', validate(loginSchema), loginHandler);
 
@@ -79,6 +118,7 @@ router.post('/login', validate(loginSchema), loginHandler);
  *   post:
  *     summary: Exchange a refresh token for a new access token
  *     tags: [Auth]
+ *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -89,6 +129,24 @@ router.post('/login', validate(loginSchema), loginHandler);
  *             properties:
  *               refreshToken:
  *                 type: string
+ *     responses:
+ *       200:
+ *         description: New token pair issued
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     accessToken: { type: string }
+ *                     refreshToken: { type: string }
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Invalid or expired refresh token
  */
 router.post('/refresh', validate(refreshSchema), refreshHandler);
 
@@ -98,6 +156,7 @@ router.post('/refresh', validate(refreshSchema), refreshHandler);
  *   post:
  *     summary: Request a password reset email
  *     tags: [Auth]
+ *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -109,6 +168,22 @@ router.post('/refresh', validate(refreshSchema), refreshHandler);
  *               email:
  *                 type: string
  *                 format: email
+ *                 example: test@example.com
+ *     responses:
+ *       200:
+ *         description: Reset link sent (always 200 to avoid email enumeration)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     message: { type: string }
+ *       400:
+ *         description: Validation error
  */
 router.post('/forgot-password', validate(forgotPasswordSchema), forgotPasswordHandler);
 
@@ -118,6 +193,7 @@ router.post('/forgot-password', validate(forgotPasswordSchema), forgotPasswordHa
  *   post:
  *     summary: Reset password using a token from email
  *     tags: [Auth]
+ *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -131,6 +207,22 @@ router.post('/forgot-password', validate(forgotPasswordSchema), forgotPasswordHa
  *               password:
  *                 type: string
  *                 minLength: 8
+ *                 example: newpassword123
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     message: { type: string }
+ *       400:
+ *         description: Invalid, expired, or already-used reset token
  */
 router.post('/reset-password', validate(resetPasswordSchema), resetPasswordHandler);
 

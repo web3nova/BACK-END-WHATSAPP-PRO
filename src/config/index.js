@@ -5,8 +5,7 @@ dotenv.config();
 const required = ['DATABASE_URL', 'JWT_SECRET'];
 for (const key of required) {
   if (!process.env[key]) {
-    // eslint-disable-next-line no-console
-    console.warn(`[config] Missing env var: ${key}`);
+    throw new Error(`[config] Missing required env var: ${key}. Set it in .env or your deployment environment.`);
   }
 }
 
@@ -19,7 +18,7 @@ export const config = {
   jwt: {
     secret: process.env.JWT_SECRET,
     expiresIn: process.env.JWT_EXPIRES_IN || '15m',
-    refreshSecret: process.env.JWT_REFRESH_SECRET,
+    refreshSecret: process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   },
 
