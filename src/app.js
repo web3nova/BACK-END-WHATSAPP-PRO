@@ -14,7 +14,17 @@ import { swaggerSpec } from './config/swagger.js';
 export function createApp() {
   const app = express();
 
-  app.use(helmet());
+  app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      connectSrc: ["'self'", 'http://localhost:4000', 'https://back-end-whatsapp-pro.onrender.com'],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+    },
+  },
+}));
   app.use(cors({
   origin: [
     config.frontendUrl,
