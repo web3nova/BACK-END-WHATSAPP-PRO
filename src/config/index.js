@@ -78,6 +78,8 @@ export const config = {
   password: process.env.EMAIL_PASSWORD,
   from:     process.env.EMAIL_FROM     || 'no-reply@whatsapppro.com',
 },
+
+frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
 };
 
 export default config;

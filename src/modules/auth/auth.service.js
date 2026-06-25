@@ -103,7 +103,7 @@ export const forgotPassword = async ({ email }) => {
     data: { userId: user.id, token, expiresAt },
   });
 
-  const resetUrl = `${process.env.APP_URL}/reset-password?token=${token}`;
+  const resetUrl = `${config.frontendUrl}/reset-password?token=${token}`;
 
   await sendMail({
     to:      email,
