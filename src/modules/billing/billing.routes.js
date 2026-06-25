@@ -1,15 +1,60 @@
 import { Router } from 'express';
+import { authMiddleware } from '../../middleware/auth.middleware.js';
+import { tenantMiddleware } from '../../middleware/tenant.middleware.js';
+import { validate } from '../../middleware/validate.middleware.js';
+import * as controller from './billing.controller.js';
+import {
+  createSubscriptionSchema,
+  updateSubscriptionSchema,
+} from './billing.validation.js';
 
-// ============================================================
-// Billing — Owner: Dev 1
-// 👉 START HERE. This stub is already mounted in src/routes/index.js.
-// Build the matching *.controller.js + *.service.js in this folder,
-// then declare routes below.
-// Pattern + conventions: docs/architecture.md  (worked example: src/modules/knowledge)
-// ============================================================
 const router = Router();
 
-// router.get('/', controller.list);
-// router.post('/', controller.create);
+router.use(authMiddleware, tenantMiddleware);
+
+/**
+ * @openapi
+ * /billing/subscription:
+ *   get:
+ *     summary: Get current tenant subscription
+ *     tags: [Billing]
+ */
+router.get('/subscription', controller.getSubscription);
+
+/**
+ * @openapi
+ * /billing/subscription:
+ *   post:
+ *     summary: Create a subscription for the tenant
+ *     tags: [Billing]
+ */
+router.post('/subscription', validate(createSubscriptionSchema), controller.createSubscription);
+
+/**
+ * @openapi
+ * /billing/subscription:
+ *   patch:
+ *     summary: Update the tenant subscription plan or status
+ *     tags: [Billing]
+ */
+router.patch('/subscription', validate(updateSubscriptionSchema), controller.updateSubscription);
+
+/**
+ * @openapi
+ * /billing/subscription/cancel:
+ *   patch:
+ *     summary: Cancel the tenant subscription
+ *     tags: [Billing]
+ */
+router.patch('/subscription/cancel', controller.cancelSubscription);
+
+/**
+ * @openapi
+ * /billing/limits:
+ *   get:
+ *     summary: Get current plan limits for the tenant
+ *     tags: [Billing]
+ */
+router.get('/limits', controller.getLimits);
 
 export default router;

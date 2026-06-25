@@ -1,1 +1,116 @@
-// TODO: implement
+import prisma from '../../config/prisma.js';
+import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
+import { hashPassword } from '../../common/utils/hash.js';
+
+// ── Platform stats ──
+export const getPlatformStats = async () => {
+  const [
+    totalTenants,
+    activeTenants,
+    totalUsers,
+    totalOrders,
+    suspendedTenants,
+  ] = await Promise.all([
+    prisma.tenant.count(),
+    prisma.tenant.count({ where: { status: 'ACTIVE' } }),
+    prisma.user.count({ where: { isSuperAdmin: false } }),
+    prisma.order.count(),
+    prisma.tenant.count({ where: { status: 'SUSPENDED' } }),
+  ]);
+
+  return {
+    totalTenants,
+    activeTenants,
+    suspendedTenants,
+    totalUsers,
+    totalOrders,
+  };
+};
+
+// ── Tenant management ──
+export const suspendTenant = async (id) => {
+  const tenant = await prisma.tenant.findUnique({ where: { id } });
+  if (!tenant) throw new NotFoundError('Tenant not found');
+  if (tenant.status === 'SUSPENDED') {
+    throw new BadRequestError('Tenant is already suspended');
+  }
+
+  return prisma.tenant.update({
+    where: { id },
+    data: { status: 'SUSPENDED' },
+  });
+};
+
+export const activateTenant = async (id) => {
+  const tenant = await prisma.tenant.findUnique({ where: { id } });
+  if (!tenant) throw new NotFoundError('Tenant not found');
+  if (tenant.status === 'ACTIVE') {
+    throw new BadRequestError('Tenant is already active');
+  }
+
+  return prisma.tenant.update({
+    where: { id },
+    data: { status: 'ACTIVE' },
+  });
+};
+
+// ── Super admin user management ──
+export const listSuperAdmins = async () => {
+  return prisma.user.findMany({
+    where: { isSuperAdmin: true },
+    select: { id: true, email: true, name: true, createdAt: true },
+    orderBy: { createdAt: 'desc' },
+  });
+};
+
+export const createSuperAdmin = async ({ email, password, name }) => {
+  const existing = await prisma.user.findFirst({ where: { email } });
+  if (existing) throw new BadRequestError('Email already in use');
+
+  const passwordHash = await hashPassword(password);
+
+  return prisma.user.create({
+    data: { email, passwordHash, name, isSuperAdmin: true, tenantId: null },
+    select: { id: true, email: true, name: true, createdAt: true },
+  });
+};
+
+export const deleteSuperAdmin = async (id, requestingUserId) => {
+  if (id === requestingUserId) {
+    throw new BadRequestError('You cannot delete your own super admin account');
+  }
+
+  const user = await prisma.user.findFirst({
+    where: { id, isSuperAdmin: true },
+  });
+  if (!user) throw new NotFoundError('Super admin not found');
+
+  await prisma.user.delete({ where: { id } });
+  return { id };
+};
+
+// ── Subscription override (manual plan changes) ──
+export const setTenantPlan = async (tenantId, { plan, status, renewsAt }) => {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant) throw new NotFoundError('Tenant not found');
+
+  return prisma.subscription.upsert({
+    where: { tenantId },
+    update: {
+      ...(plan     !== undefined ? { plan }     : {}),
+      ...(status   !== undefined ? { status }   : {}),
+      ...(renewsAt !== undefined ? { renewsAt } : {}),
+    },
+    create: { tenantId, plan: plan || 'free', status: status || 'active', renewsAt },
+  });
+};
+
+export default {
+  getPlatformStats,
+  suspendTenant,
+  activateTenant,
+  listSuperAdmins,
+  createSuperAdmin,
+  deleteSuperAdmin,
+  setTenantPlan,
+};
