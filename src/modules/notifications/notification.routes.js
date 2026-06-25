@@ -1,15 +1,30 @@
 import { Router } from 'express';
+import { sendNotification } from './notification.controller.js';
 
-// ============================================================
-// Notifications — Owner: Dev 4
-// 👉 START HERE. This stub is already mounted in src/routes/index.js.
-// Build the matching *.controller.js + *.service.js in this folder,
-// then declare routes below.
-// Pattern + conventions: docs/architecture.md  (worked example: src/modules/knowledge)
-// ============================================================
 const router = Router();
 
-// router.get('/', controller.list);
-// router.post('/', controller.create);
+/**
+ * @openapi
+ * /notifications/send:
+ *   post:
+ *     tags: [Notifications]
+ *     summary: Send a notification via email, whatsapp or sms
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [channel, to, text]
+ *             properties:
+ *               channel: { type: string, enum: [email, whatsapp, sms] }
+ *               to: { type: string }
+ *               subject: { type: string }
+ *               text: { type: string }
+ *               html: { type: string }
+ *     responses:
+ *       200: { description: Notification sent }
+ */
+router.post('/send', sendNotification);
 
 export default router;

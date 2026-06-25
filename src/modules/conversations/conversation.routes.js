@@ -1,40 +1,59 @@
 import { Router } from 'express';
-
-// ============================================================
-// Conversations — Owner: Dev 4
-// 👉 START HERE. This stub is already mounted in src/routes/index.js.
-// Build the matching *.controller.js + *.service.js in this folder,
-// then declare routes below.
-// Pattern + conventions: docs/architecture.md  (worked example: src/modules/knowledge)
-// ============================================================
+import { authMiddleware } from '../../middleware/auth.middleware.js';
+import { tenantMiddleware } from '../../middleware/tenant.middleware.js';
 import * as controller from './conversation.controller.js';
 
 const router = Router();
 
-// Temporary mock tenant middleware for testing before tenant.middleware is implemented.
-// It sets req.tenant.id from header `x-tenant-id` or falls back to TEST_TENANT_ID env or a test id.
-const mockTenantMiddleware = (req, _res, next) => {
-    if (!req.tenant) {
-        const fromHeader = req.headers['x-tenant-id'];
-        req.tenant = { id: fromHeader || process.env.TEST_TENANT_ID || 'test-tenant-id' };
-    }
-    next();
-};
-
-router.use(mockTenantMiddleware);
+router.use(authMiddleware, tenantMiddleware);
 
 /**
- * GET / - list conversations for tenant
+ * @openapi
+ * /conversations:
+ *   get:
+ *     tags: [Conversations]
+ *     summary: List conversations for the tenant
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 25 }
+ *     responses:
+ *       200: { description: Paginated conversations }
  */
 router.get('/', controller.getAll);
 
 /**
- * GET /:id/messages - conversation history
+ * @openapi
+ * /conversations/{id}/messages:
+ *   get:
+ *     tags: [Conversations]
+ *     summary: Get message history for a conversation
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Paginated messages }
  */
 router.get('/:id/messages', controller.getHistory);
 
 /**
- * PATCH /:id/resolve - mark conversation closed
+ * @openapi
+ * /conversations/{id}/resolve:
+ *   patch:
+ *     tags: [Conversations]
+ *     summary: Close a conversation
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Conversation resolved }
  */
 router.patch('/:id/resolve', controller.resolve);
 

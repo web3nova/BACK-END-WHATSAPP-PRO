@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { authMiddleware } from '../middleware/auth.middleware.js';
+import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 
 // NOTE: AI & Knowledge routers below are owned by Dev 3. Other devs: add your
 // imports/mounts in your own sections; please don't edit the Dev 3 lines.
@@ -32,6 +34,7 @@ import notificationRoutes from '../modules/notifications/notification.routes.js'
 
 const router = Router();
 
+// ── Public ─────────────────────────────────────────────
 router.get('/health', (_req, res) => res.json({ status: 'ok' }));
 router.get('/', (_req, res) => res.json({
   status: 'ok',
@@ -40,12 +43,21 @@ router.get('/', (_req, res) => res.json({
   docs: '/api/v1/docs',
 }));
 
+// Auth (public — no JWT required)
+router.use('/auth', authRoutes);
+
+// WhatsApp webhook (verified by Meta signature, not JWT)
+router.use('/webhook', whatsappRoutes);
+
+// ── Protected (JWT + tenant) ───────────────────────────
+// All routes below require a valid access token and an active tenant.
+router.use(authMiddleware, tenantMiddleware);
+
 // Dev 3
 router.use('/ai', aiRoutes);
 router.use('/knowledge', knowledgeRoutes);
 
 // Dev 1
-router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/rbac', rbacRoutes);
 router.use('/tenant', tenantRoutes);
@@ -60,7 +72,6 @@ router.use('/catalog', catalogRoutes);
 router.use('/website', websiteRoutes);
 
 // Dev 4
-router.use('/webhook', whatsappRoutes);
 router.use('/conversations', conversationRoutes);
 router.use('/customers', customerRoutes);
 router.use('/orders', orderRoutes);

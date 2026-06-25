@@ -13,6 +13,7 @@ import {
   NotFoundError,
 } from '../../common/errors/index.js';
 import { sendMail } from '../../config/mailer.js';
+import { config } from '../../config/index.js';
 
 const buildTokenPayload = (user) => ({
   sub: user.id,
