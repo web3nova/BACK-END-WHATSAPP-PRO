@@ -23,7 +23,7 @@ export const startWorker = () => {
       default:
         console.warn(`[Worker] Unknown job name: ${job.name}`);
     }
-  }, { connection: redis });
+  }, { connection: redis, checkCompatibility: false });
 
   worker.on('completed', job => {
     console.log(`[Worker] Job ${job.id} completed!`);

@@ -2,7 +2,43 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const required = ['DATABASE_URL', 'JWT_SECRET'];
+const required = [
+  // Core
+  'DATABASE_URL',
+  'JWT_SECRET',
+  'FRONTEND_URL',
+
+  // Redis / BullMQ (Upstash)
+  'REDIS_URL',
+
+  // Vector DB (Qdrant Cloud)
+  'QDRANT_URL',
+  'QDRANT_API_KEY',
+
+  // AI — chat provider (Anthropic) + embeddings (OpenAI)
+  'ANTHROPIC_API_KEY',
+  'OPENAI_API_KEY',
+
+  // WhatsApp Cloud API
+  'META_APP_ID',
+  'META_APP_SECRET',
+  'WHATSAPP_VERIFY_TOKEN',
+  'WHATSAPP_ACCESS_TOKEN',
+
+  // Payment gateway (Paystack)
+  'PAYMENT_SECRET_KEY',
+
+  // Email (Nodemailer)
+  'EMAIL_USER',
+  'EMAIL_PASSWORD',
+
+  // Object storage (S3-compatible)
+  'STORAGE_ENDPOINT',
+  'STORAGE_BUCKET',
+  'STORAGE_ACCESS_KEY',
+  'STORAGE_SECRET_KEY',
+];
+
 for (const key of required) {
   if (!process.env[key]) {
     throw new Error(`[config] Missing required env var: ${key}. Set it in .env or your deployment environment.`);
@@ -23,11 +59,11 @@ export const config = {
   },
 
   databaseUrl: process.env.DATABASE_URL,
-  redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
+  redisUrl: process.env.REDIS_URL,
 
   qdrant: {
-    url: process.env.QDRANT_URL || 'http://localhost:6333',
-    apiKey: process.env.QDRANT_API_KEY || undefined,
+    url: process.env.QDRANT_URL,
+    apiKey: process.env.QDRANT_API_KEY,
     collection: process.env.QDRANT_COLLECTION || 'knowledge',
   },
 
@@ -50,7 +86,7 @@ export const config = {
     bucket: process.env.STORAGE_BUCKET,
     accessKey: process.env.STORAGE_ACCESS_KEY,
     secretKey: process.env.STORAGE_SECRET_KEY,
-    region: process.env.STORAGE_REGION || 'us-east-1',
+    region: process.env.STORAGE_REGION || 'auto',
   },
 
   whatsapp: {
@@ -64,21 +100,21 @@ export const config = {
 
   payment: {
     provider: process.env.PAYMENT_PROVIDER || 'paystack',
-    secretKey: process.env.PAYMENT_SECRET_KEY || process.env.PAYSTACK_SECRET_KEY,
-    publicKey: process.env.PAYMENT_PUBLIC_KEY || process.env.PAYSTACK_PUBLIC_KEY,
-    webhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || process.env.PAYSTACK_WEBHOOK_SECRET || process.env.PAYSTACK_SECRET_KEY,
+    secretKey: process.env.PAYMENT_SECRET_KEY,
+    publicKey: process.env.PAYMENT_PUBLIC_KEY,
+    webhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || process.env.PAYMENT_SECRET_KEY,
   },
 
   email: {
-  host:     process.env.EMAIL_HOST     || 'smtp.gmail.com',
-  port:     Number(process.env.EMAIL_PORT || 587),
-  secure:   process.env.EMAIL_SECURE   === 'true',
-  user:     process.env.EMAIL_USER,
-  password: process.env.EMAIL_PASSWORD,
-  from:     process.env.EMAIL_FROM     || 'no-reply@whatsapppro.com',
-},
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: Number(process.env.EMAIL_PORT || 587),
+    secure: process.env.EMAIL_SECURE === 'true',
+    user: process.env.EMAIL_USER,
+    password: process.env.EMAIL_PASSWORD,
+    from: process.env.EMAIL_FROM || 'no-reply@whatsapppro.com',
+  },
 
-frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
+  frontendUrl: process.env.FRONTEND_URL,
 };
 
 export default config;
