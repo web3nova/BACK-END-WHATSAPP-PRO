@@ -1,4 +1,3 @@
-// src/modules/users/user.routes.js
 import { Router } from 'express';
 import { authMiddleware } from '../../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../../middleware/tenant.middleware.js';
@@ -22,19 +21,8 @@ router.use(authMiddleware, tenantMiddleware);
  *   get:
  *     summary: List users in the current tenant
  *     tags: [Users]
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           example: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           example: 20
  */
-router.get('/', validate(listUsersSchema), controller.list);
+router.get('/',     validate(listUsersSchema, 'query'), controller.list);
 
 /**
  * @openapi
@@ -42,15 +30,8 @@ router.get('/', validate(listUsersSchema), controller.list);
  *   get:
  *     summary: Get a single user
  *     tags: [Users]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
  */
-router.get('/:id', validate(getUserSchema), controller.getOne);
+router.get('/:id',  validate(getUserSchema, 'params'), controller.getOne);
 
 /**
  * @openapi
@@ -58,31 +39,8 @@ router.get('/:id', validate(getUserSchema), controller.getOne);
  *   post:
  *     summary: Create a new user in the current tenant
  *     tags: [Users]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [email, password]
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *                 example: newuser@example.com
- *               password:
- *                 type: string
- *                 minLength: 8
- *                 example: password123
- *               name:
- *                 type: string
- *                 example: New User
- *               roleId:
- *                 type: string
- *                 format: uuid
- *                 nullable: true
  */
-router.post('/', validate(createUserSchema), controller.create);
+router.post('/',    validate(createUserSchema, 'body'), controller.create);
 
 /**
  * @openapi
@@ -90,29 +48,8 @@ router.post('/', validate(createUserSchema), controller.create);
  *   patch:
  *     summary: Update a user
  *     tags: [Users]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               name:
- *                 type: string
- *                 example: Updated Name
- *               roleId:
- *                 type: string
- *                 format: uuid
- *                 nullable: true
  */
-router.patch('/:id', validate(updateUserSchema), controller.update);
+router.patch('/:id', validate(updateUserSchema, 'body'), controller.update);
 
 /**
  * @openapi
@@ -120,14 +57,7 @@ router.patch('/:id', validate(updateUserSchema), controller.update);
  *   delete:
  *     summary: Delete a user
  *     tags: [Users]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
  */
-router.delete('/:id', validate(deleteUserSchema), controller.remove);
+router.delete('/:id', validate(deleteUserSchema, 'params'), controller.remove);
 
 export default router;

@@ -28,16 +28,16 @@ router.get('/subscription', controller.getSubscription);
  *     summary: Create a subscription for the tenant
  *     tags: [Billing]
  */
-router.post('/subscription', validate(createSubscriptionSchema), controller.createSubscription);
+router.post('/subscription',        validate(createSubscriptionSchema, 'body'), controller.createSubscription);
 
 /**
  * @openapi
  * /billing/subscription:
  *   patch:
- *     summary: Update the tenant subscription plan or status
+ *     summary: Update the tenant subscription
  *     tags: [Billing]
  */
-router.patch('/subscription', validate(updateSubscriptionSchema), controller.updateSubscription);
+router.patch('/subscription',       validate(updateSubscriptionSchema, 'body'), controller.updateSubscription);
 
 /**
  * @openapi

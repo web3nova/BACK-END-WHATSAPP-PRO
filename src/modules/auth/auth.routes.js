@@ -134,4 +134,10 @@ router.post('/forgot-password', validate(forgotPasswordSchema), forgotPasswordHa
  */
 router.post('/reset-password', validate(resetPasswordSchema), resetPasswordHandler);
 
+router.post('/register', validate(registerSchema, 'body'), registerHandler);
+router.post('/login', validate(loginSchema, 'body'), loginHandler);
+router.post('/refresh', validate(refreshSchema, 'body'), refreshHandler);
+router.post('/forgot-password', validate(forgotPasswordSchema, 'body'), forgotPasswordHandler);
+router.post('/reset-password', validate(resetPasswordSchema, 'body'), resetPasswordHandler);
+
 export default router;
