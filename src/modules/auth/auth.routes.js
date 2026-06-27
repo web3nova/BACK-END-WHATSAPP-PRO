@@ -3,6 +3,7 @@ import { Router } from 'express';
 import {
   registerHandler,
   loginHandler,
+  verifyOtpHandler,
   refreshHandler,
   forgotPasswordHandler,
   resetPasswordHandler,
@@ -11,6 +12,7 @@ import { validate } from '../../middleware/validate.middleware.js';
 import {
   registerSchema,
   loginSchema,
+  verifyOtpSchema,
   refreshSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
@@ -47,13 +49,13 @@ const router = Router();
  *                 type: string
  *                 example: Acme Corp
  */
-router.post('/register', validate(registerSchema), registerHandler);
+router.post('/register', validate(registerSchema, 'body'), registerHandler);
 
 /**
  * @openapi
  * /auth/login:
  *   post:
- *     summary: Login with email + password
+ *     summary: Login with email + password — sends OTP to email
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -71,7 +73,31 @@ router.post('/register', validate(registerSchema), registerHandler);
  *                 type: string
  *                 example: password123
  */
-router.post('/login', validate(loginSchema), loginHandler);
+router.post('/login', validate(loginSchema, 'body'), loginHandler);
+
+/**
+ * @openapi
+ * /auth/verify-otp:
+ *   post:
+ *     summary: Verify OTP after login — returns access + refresh tokens
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, otp]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: test@example.com
+ *               otp:
+ *                 type: string
+ *                 example: "123456"
+ */
+router.post('/verify-otp', validate(verifyOtpSchema, 'body'), verifyOtpHandler);
 
 /**
  * @openapi
@@ -90,7 +116,7 @@ router.post('/login', validate(loginSchema), loginHandler);
  *               refreshToken:
  *                 type: string
  */
-router.post('/refresh', validate(refreshSchema), refreshHandler);
+router.post('/refresh', validate(refreshSchema, 'body'), refreshHandler);
 
 /**
  * @openapi
@@ -110,7 +136,7 @@ router.post('/refresh', validate(refreshSchema), refreshHandler);
  *                 type: string
  *                 format: email
  */
-router.post('/forgot-password', validate(forgotPasswordSchema), forgotPasswordHandler);
+router.post('/forgot-password', validate(forgotPasswordSchema, 'body'), forgotPasswordHandler);
 
 /**
  * @openapi
@@ -132,12 +158,6 @@ router.post('/forgot-password', validate(forgotPasswordSchema), forgotPasswordHa
  *                 type: string
  *                 minLength: 8
  */
-router.post('/reset-password', validate(resetPasswordSchema), resetPasswordHandler);
-
-router.post('/register', validate(registerSchema, 'body'), registerHandler);
-router.post('/login', validate(loginSchema, 'body'), loginHandler);
-router.post('/refresh', validate(refreshSchema, 'body'), refreshHandler);
-router.post('/forgot-password', validate(forgotPasswordSchema, 'body'), forgotPasswordHandler);
 router.post('/reset-password', validate(resetPasswordSchema, 'body'), resetPasswordHandler);
 
 export default router;
