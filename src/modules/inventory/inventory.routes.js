@@ -1,5 +1,11 @@
 import { Router } from 'express';
+import { validate } from '../../middleware/validate.middleware.js';
 import * as inventoryController from './inventory.controller.js';
+import {
+  adjustInventorySchema,
+  inventoryProductParamsSchema,
+  listInventorySchema,
+} from './inventory.validation.js';
 
 const router = Router();
 
@@ -19,7 +25,7 @@ const router = Router();
  *     responses:
  *       200: { description: Paginated stock list }
  */
-router.get('/', inventoryController.list);
+router.get('/', validate(listInventorySchema, 'query'), inventoryController.list);
 
 /**
  * @openapi
@@ -50,6 +56,11 @@ router.get('/', inventoryController.list);
  *       400: { description: Stock cannot go negative }
  *       404: { description: Product not found }
  */
-router.patch('/:productId', inventoryController.adjust);
+router.patch(
+  '/:productId',
+  validate(inventoryProductParamsSchema, 'params'),
+  validate(adjustInventorySchema, 'body'),
+  inventoryController.adjust,
+);
 
 export default router;

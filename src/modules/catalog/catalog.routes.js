@@ -1,6 +1,13 @@
 import { Router } from 'express';
 import multer from 'multer';
+import { BadRequestError } from '../../common/errors/index.js';
+import { validate } from '../../middleware/validate.middleware.js';
 import * as catalogController from './catalog.controller.js';
+import {
+  catalogParamsSchema,
+  ingestCatalogFormSchema,
+  listCatalogsSchema,
+} from './catalog.validation.js';
 
 // Accept CSV only; cap at 5 MB.
 const upload = multer({
@@ -10,7 +17,7 @@ const upload = multer({
     if (file.mimetype === 'text/csv' || file.originalname.toLowerCase().endsWith('.csv')) {
       cb(null, true);
     } else {
-      cb(new Error('Only .csv files are accepted.'));
+      cb(new BadRequestError('Only .csv files are accepted.'));
     }
   },
 });
@@ -33,7 +40,7 @@ const router = Router();
  *     responses:
  *       200: { description: Paginated catalog list }
  */
-router.get('/', catalogController.list);
+router.get('/', validate(listCatalogsSchema, 'query'), catalogController.list);
 
 /**
  * @openapi
@@ -79,7 +86,7 @@ router.post('/upload', upload.single('file'), catalogController.uploadCSV);
  *     responses:
  *       201: { description: Catalog created from form data }
  */
-router.post('/form', catalogController.ingestForm);
+router.post('/form', validate(ingestCatalogFormSchema, 'body'), catalogController.ingestForm);
 
 /**
  * @openapi
@@ -96,7 +103,7 @@ router.post('/form', catalogController.ingestForm);
  *       200: { description: Catalog with data }
  *       404: { description: Not found }
  */
-router.get('/:id', catalogController.getById);
+router.get('/:id', validate(catalogParamsSchema, 'params'), catalogController.getById);
 
 /**
  * @openapi
@@ -112,6 +119,6 @@ router.get('/:id', catalogController.getById);
  *     responses:
  *       204: { description: Deleted }
  */
-router.delete('/:id', catalogController.remove);
+router.delete('/:id', validate(catalogParamsSchema, 'params'), catalogController.remove);
 
 export default router;

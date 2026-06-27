@@ -1,63 +1,39 @@
-import { z } from 'zod';
 import { asyncHandler } from '../../common/utils/asyncHandler.js';
 import { ok, created, noContent } from '../../common/utils/apiResponse.js';
-import { BadRequestError } from '../../common/errors/index.js';
+import { getTenantId } from '../../common/utils/tenantContext.js';
 import * as websiteService from './website.service.js';
 
-function tenantId(req) {
-  const id = req.tenant?.id || req.headers['x-tenant-id'];
-  if (!id) throw new BadRequestError('Missing tenant context (req.tenant or x-tenant-id header).');
-  return id;
-}
-
-const pageSchema = z.object({
-  slug: z.string().min(1).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens only.'),
-  title: z.string().min(1),
-  content: z.record(z.unknown()).optional().default({}),
-  published: z.boolean().optional().default(false),
-});
-
-const updatePageSchema = pageSchema.omit({ slug: true }).partial();
-
 export const listPages = asyncHandler(async (req, res) => {
-  const result = await websiteService.listPages(tenantId(req), req.query);
+  const result = await websiteService.listPages(getTenantId(req), req.query);
   return ok(res, result.items, result.meta);
 });
 
 export const createPage = asyncHandler(async (req, res) => {
-  const parsed = pageSchema.safeParse(req.body);
-  if (!parsed.success) throw new BadRequestError('Invalid page data.', parsed.error.flatten());
-  const data = await websiteService.createPage(tenantId(req), parsed.data);
+  const data = await websiteService.createPage(getTenantId(req), req.body);
   return created(res, data);
 });
 
 export const getPage = asyncHandler(async (req, res) => {
-  const data = await websiteService.getPage(tenantId(req), req.params.slug);
+  const data = await websiteService.getPage(getTenantId(req), req.params.slug);
   return ok(res, data);
 });
 
 export const updatePage = asyncHandler(async (req, res) => {
-  const parsed = updatePageSchema.safeParse(req.body);
-  if (!parsed.success) throw new BadRequestError('Invalid page data.', parsed.error.flatten());
-  const data = await websiteService.updatePage(tenantId(req), req.params.slug, parsed.data);
+  const data = await websiteService.updatePage(getTenantId(req), req.params.slug, req.body);
   return ok(res, data);
 });
 
 export const deletePage = asyncHandler(async (req, res) => {
-  await websiteService.deletePage(tenantId(req), req.params.slug);
+  await websiteService.deletePage(getTenantId(req), req.params.slug);
   return noContent(res);
 });
 
 export const setPublished = asyncHandler(async (req, res) => {
-  const { published } = req.body;
-  if (typeof published !== 'boolean') {
-    throw new BadRequestError('"published" must be a boolean.');
-  }
-  const data = await websiteService.setPublished(tenantId(req), req.params.slug, published);
+  const data = await websiteService.setPublished(getTenantId(req), req.params.slug, req.body.published);
   return ok(res, data);
 });
 
 export const getStorefront = asyncHandler(async (req, res) => {
-  const data = await websiteService.getStorefront(tenantId(req));
+  const data = await websiteService.getStorefront(req);
   return ok(res, data);
 });

@@ -1,7 +1,20 @@
 import { Router } from 'express';
+import { requireFeature } from '../../middleware/subscription.middleware.js';
+import { validate } from '../../middleware/validate.middleware.js';
 import * as websiteController from './website.controller.js';
+import {
+  createPageSchema,
+  listPagesSchema,
+  pageParamsSchema,
+  publishPageSchema,
+  storefrontQuerySchema,
+  updatePageSchema,
+} from './website.validation.js';
 
+export const publicWebsiteRoutes = Router();
 const router = Router();
+
+router.use(requireFeature('websiteBuilder'));
 
 /**
  * @openapi
@@ -13,7 +26,11 @@ const router = Router();
  *       200: { description: Storefront payload }
  *       404: { description: Business profile not set up }
  */
-router.get('/storefront', websiteController.getStorefront);
+publicWebsiteRoutes.get(
+  '/storefront',
+  validate(storefrontQuerySchema, 'query'),
+  websiteController.getStorefront,
+);
 
 /**
  * @openapi
@@ -31,7 +48,7 @@ router.get('/storefront', websiteController.getStorefront);
  *     responses:
  *       200: { description: Paginated page list }
  */
-router.get('/pages', websiteController.listPages);
+router.get('/pages', validate(listPagesSchema, 'query'), websiteController.listPages);
 
 /**
  * @openapi
@@ -55,7 +72,7 @@ router.get('/pages', websiteController.listPages);
  *       201: { description: Page created }
  *       400: { description: Slug already exists }
  */
-router.post('/pages', websiteController.createPage);
+router.post('/pages', validate(createPageSchema, 'body'), websiteController.createPage);
 
 /**
  * @openapi
@@ -72,7 +89,7 @@ router.post('/pages', websiteController.createPage);
  *       200: { description: Page }
  *       404: { description: Not found }
  */
-router.get('/pages/:slug', websiteController.getPage);
+router.get('/pages/:slug', validate(pageParamsSchema, 'params'), websiteController.getPage);
 
 /**
  * @openapi
@@ -88,7 +105,12 @@ router.get('/pages/:slug', websiteController.getPage);
  *     responses:
  *       200: { description: Updated page }
  */
-router.put('/pages/:slug', websiteController.updatePage);
+router.put(
+  '/pages/:slug',
+  validate(pageParamsSchema, 'params'),
+  validate(updatePageSchema, 'body'),
+  websiteController.updatePage,
+);
 
 /**
  * @openapi
@@ -104,7 +126,7 @@ router.put('/pages/:slug', websiteController.updatePage);
  *     responses:
  *       204: { description: Deleted }
  */
-router.delete('/pages/:slug', websiteController.deletePage);
+router.delete('/pages/:slug', validate(pageParamsSchema, 'params'), websiteController.deletePage);
 
 /**
  * @openapi
@@ -129,6 +151,11 @@ router.delete('/pages/:slug', websiteController.deletePage);
  *     responses:
  *       200: { description: Updated page }
  */
-router.patch('/pages/:slug/publish', websiteController.setPublished);
+router.patch(
+  '/pages/:slug/publish',
+  validate(pageParamsSchema, 'params'),
+  validate(publishPageSchema, 'body'),
+  websiteController.setPublished,
+);
 
 export default router;

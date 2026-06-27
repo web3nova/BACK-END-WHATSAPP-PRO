@@ -21,7 +21,7 @@ import businessRoutes from '../modules/business/business.routes.js';
 import productRoutes from '../modules/products/product.routes.js';
 import inventoryRoutes from '../modules/inventory/inventory.routes.js';
 import catalogRoutes from '../modules/catalog/catalog.routes.js';
-import websiteRoutes from '../modules/website/website.routes.js';
+import websiteRoutes, { publicWebsiteRoutes } from '../modules/website/website.routes.js';
 
 // ── DEV 4 — Conversation, Orders, Payments ─────────────
 import whatsappRoutes from '../modules/whatsapp/whatsapp.routes.js';
@@ -48,6 +48,9 @@ router.use('/auth', authRoutes);
 
 // WhatsApp webhook (verified by Meta signature, not JWT)
 router.use('/webhook', whatsappRoutes);
+
+// Public storefront endpoints resolve tenant by query/header/domain instead of JWT.
+router.use('/website', publicWebsiteRoutes);
 
 // ── Protected (JWT + tenant) ───────────────────────────
 // All routes below require a valid access token and an active tenant.

@@ -5,30 +5,76 @@ import { paginate, paginatedResponse } from '../../common/utils/pagination.js';
 // Parse a CSV buffer into an array of objects using the first row as column headers.
 function parseCSV(buffer) {
   const text = buffer.toString('utf8');
-  const lines = text.split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length < 2) {
+  const rows = [];
+  let row = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (ch === '"') {
+      if (inQuotes && next === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (ch === ',' && !inQuotes) {
+      row.push(current.trim());
+      current = '';
+      continue;
+    }
+
+    if ((ch === '\n' || ch === '\r') && !inQuotes) {
+      if (ch === '\r' && next === '\n') i += 1;
+      row.push(current.trim());
+      if (row.some((value) => value !== '')) rows.push(row);
+      row = [];
+      current = '';
+      continue;
+    }
+
+    current += ch;
+  }
+
+  row.push(current.trim());
+  if (row.some((value) => value !== '')) rows.push(row);
+
+  if (inQuotes) {
+    throw new BadRequestError('CSV contains an unterminated quoted field.');
+  }
+
+  if (rows.length < 2) {
     throw new BadRequestError('CSV must have a header row and at least one data row.');
   }
 
-  // Split by comma but respect double-quoted fields.
-  const splitLine = (line) => {
-    const result = [];
-    let current = '';
-    let inQuotes = false;
-    for (const ch of line) {
-      if (ch === '"') { inQuotes = !inQuotes; continue; }
-      if (ch === ',' && !inQuotes) { result.push(current.trim()); current = ''; continue; }
-      current += ch;
-    }
-    result.push(current.trim());
-    return result;
-  };
+  const headers = rows[0].map((header) => header.trim()).filter(Boolean);
+  if (!headers.length) {
+    throw new BadRequestError('CSV header row must include at least one column name.');
+  }
 
-  const headers = splitLine(lines[0]);
-  return lines.slice(1).map((line) => {
-    const values = splitLine(line);
-    return Object.fromEntries(headers.map((h, i) => [h, values[i] ?? '']));
-  });
+  return rows.slice(1).map((values) =>
+    Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ''])),
+  );
+}
+
+function parseInteger(value, fallback = 0) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseMinorUnits(value) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? Math.round(parsed * 100) : 0;
+}
+
+function normalizeCurrency(value) {
+  return typeof value === 'string' && value.trim() ? value.trim().toUpperCase() : undefined;
 }
 
 // If a "price" field exists (float), convert to priceMinor (integer minor units).
@@ -36,13 +82,17 @@ function normalizeItems(items) {
   return items.map((item) => {
     const out = { ...item };
     if (out.price !== undefined && out.priceMinor === undefined) {
-      out.priceMinor = Math.round(parseFloat(out.price) * 100) || 0;
+      out.priceMinor = parseMinorUnits(out.price);
     }
     if (out.priceMinor !== undefined) {
-      out.priceMinor = parseInt(out.priceMinor, 10) || 0;
+      out.priceMinor = parseInteger(out.priceMinor);
     }
     if (out.stock !== undefined) {
-      out.stock = parseInt(out.stock, 10) || 0;
+      out.stock = parseInteger(out.stock);
+    }
+    const currency = normalizeCurrency(out.currency);
+    if (currency) {
+      out.currency = currency;
     }
     return out;
   });
