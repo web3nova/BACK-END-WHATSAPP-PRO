@@ -36,12 +36,14 @@ const router = Router();
 
 // ── Public ─────────────────────────────────────────────
 router.get('/health', (_req, res) => res.json({ status: 'ok' }));
-router.get('/', (_req, res) => res.json({
-  status: 'ok',
-  message: 'BACK-END-WHATSAPP-PRO API',
-  version: 'v1',
-  docs: '/api/v1/docs',
-}));
+router.get('/', (_req, res) =>
+  res.json({
+    status: 'ok',
+    message: 'BACK-END-WHATSAPP-PRO API',
+    version: 'v1',
+    docs: '/api/v1/docs',
+  }),
+);
 
 // Auth (public — no JWT required)
 router.use('/auth', authRoutes);

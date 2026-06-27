@@ -29,7 +29,21 @@ export const deletePage = asyncHandler(async (req, res) => {
 });
 
 export const setPublished = asyncHandler(async (req, res) => {
-  const data = await websiteService.setPublished(getTenantId(req), req.params.slug, req.body.published);
+  const data = await websiteService.setPublished(
+    getTenantId(req),
+    req.params.slug,
+    req.body.published,
+  );
+  return ok(res, data);
+});
+
+export const getSettings = asyncHandler(async (req, res) => {
+  const data = await websiteService.getSettings(getTenantId(req));
+  return ok(res, data);
+});
+
+export const updateSettings = asyncHandler(async (req, res) => {
+  const data = await websiteService.updateSettings(getTenantId(req), req.body);
   return ok(res, data);
 });
 

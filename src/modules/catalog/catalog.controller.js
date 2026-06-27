@@ -16,7 +16,9 @@ export const getById = asyncHandler(async (req, res) => {
 
 export const uploadCSV = asyncHandler(async (req, res) => {
   if (!req.file) {
-    throw new BadRequestError('No file uploaded. Send multipart/form-data with field "file" (CSV).');
+    throw new BadRequestError(
+      'No file uploaded. Send multipart/form-data with field "file" (CSV).',
+    );
   }
   const name = (req.body.name || req.file.originalname).trim();
   const data = await catalogService.ingestCSV(getTenantId(req), { name, buffer: req.file.buffer });

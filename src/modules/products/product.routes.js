@@ -60,7 +60,12 @@ router.get('/', validate(listProductsSchema, 'query'), productController.list);
  *     responses:
  *       201: { description: Product created }
  */
-router.post('/', enforceProductLimit, validate(createProductSchema, 'body'), productController.create);
+router.post(
+  '/',
+  enforceProductLimit,
+  validate(createProductSchema, 'body'),
+  productController.create,
+);
 
 /**
  * @openapi

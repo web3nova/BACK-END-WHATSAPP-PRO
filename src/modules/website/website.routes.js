@@ -8,6 +8,7 @@ import {
   pageParamsSchema,
   publishPageSchema,
   storefrontQuerySchema,
+  updateWebsiteSettingsSchema,
   updatePageSchema,
 } from './website.validation.js';
 
@@ -15,6 +16,46 @@ export const publicWebsiteRoutes = Router();
 const router = Router();
 
 router.use(requireFeature('websiteBuilder'));
+
+/**
+ * @openapi
+ * /website/settings:
+ *   get:
+ *     tags: [Website]
+ *     summary: Get website builder settings for the tenant
+ *     responses:
+ *       200: { description: Website settings }
+ */
+router.get('/settings', websiteController.getSettings);
+
+/**
+ * @openapi
+ * /website/settings:
+ *   put:
+ *     tags: [Website]
+ *     summary: Update website builder settings for the tenant
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               theme: { type: object }
+ *               navigation:
+ *                 type: array
+ *                 items: { type: object }
+ *               seo: { type: object }
+ *               social: { type: object }
+ *               published: { type: boolean }
+ *     responses:
+ *       200: { description: Updated website settings }
+ */
+router.put(
+  '/settings',
+  validate(updateWebsiteSettingsSchema, 'body'),
+  websiteController.updateSettings,
+);
 
 /**
  * @openapi

@@ -58,9 +58,11 @@ function parseCSV(buffer) {
     throw new BadRequestError('CSV header row must include at least one column name.');
   }
 
-  return rows.slice(1).map((values) =>
-    Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ''])),
-  );
+  return rows
+    .slice(1)
+    .map((values) =>
+      Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ''])),
+    );
 }
 
 function parseInteger(value, fallback = 0) {
@@ -131,7 +133,11 @@ export async function ingestForm(tenantId, { name, items }) {
   if (!Array.isArray(items) || !items.length) {
     throw new BadRequestError('items must be a non-empty array.');
   }
-  const data = { items: normalizeItems(items), source: 'form', ingestedAt: new Date().toISOString() };
+  const data = {
+    items: normalizeItems(items),
+    source: 'form',
+    ingestedAt: new Date().toISOString(),
+  };
   return prisma.catalog.create({ data: { tenantId, name, data } });
 }
 

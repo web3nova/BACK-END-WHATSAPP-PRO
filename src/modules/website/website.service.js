@@ -25,18 +25,21 @@ async function requirePage(businessId, slug) {
   return page;
 }
 
+const defaultSettings = {
+  theme: {},
+  navigation: [],
+  seo: {},
+  social: {},
+  published: false,
+};
+
 async function resolveStorefrontTenant(req) {
   const tenantId = req.query.tenantId || req.headers['x-tenant-id'];
   const slug = req.query.slug;
-  const domain = req.query.domain || normalizeHost(req.headers['x-forwarded-host'] || req.headers.host);
+  const domain =
+    req.query.domain || normalizeHost(req.headers['x-forwarded-host'] || req.headers.host);
 
-  const where = tenantId
-    ? { id: tenantId }
-    : slug
-      ? { slug }
-      : domain
-        ? { domain }
-        : null;
+  const where = tenantId ? { id: tenantId } : slug ? { slug } : domain ? { domain } : null;
 
   if (!where) {
     throw new BadRequestError('Provide tenantId, slug, or domain to load a storefront.');
@@ -102,11 +105,33 @@ export async function setPublished(tenantId, slug, published) {
   });
 }
 
+export async function getSettings(tenantId) {
+  const business = await requireBusiness(tenantId);
+  return prisma.websiteSettings.upsert({
+    where: { businessId: business.id },
+    create: { businessId: business.id, ...defaultSettings },
+    update: {},
+  });
+}
+
+export async function updateSettings(tenantId, data) {
+  const business = await requireBusiness(tenantId);
+  return prisma.websiteSettings.upsert({
+    where: { businessId: business.id },
+    create: { businessId: business.id, ...defaultSettings, ...data },
+    update: data,
+  });
+}
+
 // Public storefront: tenant + business info + published pages + in-stock products.
 export async function getStorefront(req) {
   const tenant = await resolveStorefrontTenant(req);
   const business = await requireBusiness(tenant.id);
-  const [pages, products] = await Promise.all([
+  const [settings, pages, products] = await Promise.all([
+    prisma.websiteSettings.findUnique({
+      where: { businessId: business.id },
+      select: { theme: true, navigation: true, seo: true, social: true, published: true },
+    }),
     prisma.websitePage.findMany({
       where: { businessId: business.id, published: true },
       orderBy: { slug: 'asc' },
@@ -115,7 +140,14 @@ export async function getStorefront(req) {
     prisma.product.findMany({
       where: { tenantId: tenant.id, stock: { gt: 0 } },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, name: true, description: true, priceMinor: true, currency: true, attributes: true },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        priceMinor: true,
+        currency: true,
+        attributes: true,
+      },
     }),
   ]);
   return {
@@ -125,6 +157,7 @@ export async function getStorefront(req) {
       description: business.description,
       logoUrl: business.logoUrl,
     },
+    settings: settings ?? defaultSettings,
     pages,
     products,
   };
