@@ -67,7 +67,7 @@ model User {
 
 model Role {
   id          String   @id @default(uuid())
-  tenantId    String?  // null = platform-level role
+  tenantId    String?
   name        String
   permissions Json     @default("[]")
   users       User[]
@@ -76,20 +76,46 @@ model Role {
   @@map("roles")
 }
 
-model Subscription {
-  id        String   @id @default(uuid())
-  tenantId  String   @unique
-  plan      String   @default("free")
-  status    String   @default("trial")
-  trialEndsAt DateTime?
-  renewsAt  DateTime?
-  meta      Json     @default("{}")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model BillingPlan {
+  id          String   @id @default(uuid())
+  name        String   @unique  // e.g. "monthly", "yearly"
+  label       String            // e.g. "Monthly Plan", "Yearly Plan"
+  priceMinor  Int               // price in kobo (NGN minor units)
+  currency    String   @default("NGN")
+  intervalDays Int              // 30 for monthly, 365 for yearly
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  subscriptions Subscription[]
+
+  @@map("billing_plans")
+}
+
+model Subscription {
+  id            String   @id @default(uuid())
+  tenantId      String   @unique
+  planId        String?
+  status        SubscriptionStatus @default(TRIAL)
+  trialStartsAt DateTime @default(now())
+  trialEndsAt   DateTime
+  renewsAt      DateTime?
+  monnifyRef    String?
+  meta          Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id])
+  plan   BillingPlan? @relation(fields: [planId], references: [id])
 
   @@map("subscriptions")
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  EXPIRED
+  CANCELLED
 }
 
 model PasswordResetToken {
@@ -269,8 +295,8 @@ model Message {
   meta           Json     @default("{}")
   createdAt      DateTime @default(now())
 
-  conversation Conversation @relation(fields: [conversationId], references: [id])
-  mediaAssets MediaAsset[]
+  conversation   Conversation   @relation(fields: [conversationId], references: [id])
+  mediaAssets    MediaAsset[]
   outboxMessages OutboxMessage[]
 
   @@index([conversationId])
@@ -359,7 +385,7 @@ model Payment {
   tenantId          String
   orderId           String?
   reference         String   @unique
-  provider          String   @default("paystack")
+  provider          String   @default("monnify")
   providerReference String?  @unique
   amountMinor       Int      @default(0)
   currency          String   @default("NGN")

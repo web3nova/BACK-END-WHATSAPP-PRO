@@ -1,11 +1,15 @@
+// src/modules/billing/billing.validation.js
 import { z } from 'zod';
 
-export const createSubscriptionSchema = z.object({
-  plan: z.enum(['free', 'starter', 'pro','enterprise']),
+export const initPaymentSchema = z.object({
+  planId: z.string().uuid('Invalid plan ID'),
 });
 
-export const updateSubscriptionSchema = z.object({
-  plan:     z.enum(['free', 'starter', 'pro', 'enterprise']).optional(),
-  status:   z.enum(['active', 'cancelled', 'past_due', 'trialing']).optional(),
-  renewsAt: z.coerce.date().optional().nullable(),
+export const upsertPlanSchema = z.object({
+  name:         z.string().min(1),
+  label:        z.string().min(1),
+  priceMinor:   z.number().int().positive('Price must be a positive integer in kobo'),
+  currency:     z.string().default('NGN'),
+  intervalDays: z.number().int().positive(),
+  isActive:     z.boolean().optional(),
 });

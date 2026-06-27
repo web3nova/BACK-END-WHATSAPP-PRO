@@ -14,6 +14,7 @@ import {
   NotFoundError,
 } from '../../common/errors/index.js';
 import { sendMail } from '../../config/mailer.js';
+import { startTrial } from '../billing/billing.service.js';
 
 const buildTokenPayload = (user) => ({
   sub: user.id,
@@ -59,6 +60,8 @@ export const register = async ({ email, password, name, tenantName }) => {
 
     return { tenant, user };
   });
+
+  await startTrial(tenant.id);
 
   const tokens = issueTokens(user);
   return { tenant, user: sanitizeUser(user), ...tokens };
