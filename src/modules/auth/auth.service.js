@@ -67,7 +67,13 @@ export const register = async ({ email, password, name, tenantName }) => {
   if (existing) throw new BadRequestError('Email already in use');
 
   const passwordHash = await hashPassword(password);
-  const slug = tenantName.toLowerCase().trim().replace(/\s+/g, '-');
+  const baseSlug = tenantName.toLowerCase().trim().replace(/\s+/g, '-');
+
+  // Ensure the slug is unique — append a short hex suffix when taken
+  const slugTaken = await prisma.tenant.findUnique({ where: { slug: baseSlug } });
+  const slug = slugTaken
+    ? `${baseSlug}-${crypto.randomBytes(3).toString('hex')}`
+    : baseSlug;
 
   const { tenant, user } = await prisma.$transaction(async (tx) => {
     const tenant = await tx.tenant.create({
@@ -162,6 +168,9 @@ export const refresh = async ({ refreshToken }) => {
   } catch {
     throw new UnauthorizedError('Invalid or expired refresh token');
   }
+
+  // Tokens issued before the jti field was introduced have no jti claim
+  if (!payload.jti) throw new UnauthorizedError('Invalid or expired refresh token');
 
   const record = await prisma.refreshToken.findUnique({
     where: { jti: payload.jti },

@@ -179,6 +179,7 @@ router.post('/verify-otp', validate(verifyOtpSchema, 'body'), verifyOtpHandler);
  *             properties:
  *               refreshToken:
  *                 type: string
+ *                 example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
  *     responses:
  *       200:
  *         description: New access token issued
@@ -214,6 +215,7 @@ router.post('/refresh', validate(refreshSchema, 'body'), refreshHandler);
  *             properties:
  *               refreshToken:
  *                 type: string
+ *                 example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
  *     responses:
  *       200:
  *         description: Logged out successfully
