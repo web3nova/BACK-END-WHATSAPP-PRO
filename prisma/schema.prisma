@@ -61,6 +61,7 @@ model User {
   role                Role?                @relation(fields: [roleId], references: [id])
   passwordResetTokens PasswordResetToken[]
   otpTokens         OtpToken[]
+  refreshTokens     RefreshToken[]
 
   @@unique([tenantId, email])
   @@map("users")
@@ -143,6 +144,20 @@ model OtpToken {
   user User @relation(fields: [userId], references: [id])
 
   @@map("otp_tokens")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  userId     String
+  jti        String   @unique
+  lastUsedAt DateTime @default(now())
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
 }
 
 // ─────────────────────────────────────────────

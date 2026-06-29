@@ -16,6 +16,9 @@ import {
 import { sendMail } from '../../config/mailer.js';
 import { startTrial } from '../billing/billing.service.js';
 
+// 10 minutes of inactivity → force OTP re-authentication
+const INACTIVITY_MS = 10 * 60 * 1000;
+
 const buildTokenPayload = (user) => ({
   sub: user.id,
   tenantId: user.tenantId,
@@ -23,10 +26,16 @@ const buildTokenPayload = (user) => ({
   roleId: user.roleId,
 });
 
-const issueTokens = (user) => ({
-  accessToken: signAccessToken(buildTokenPayload(user)),
-  refreshToken: signRefreshToken({ sub: user.id }),
-});
+const issueTokens = async (user) => {
+  const accessToken = signAccessToken(buildTokenPayload(user));
+  const { token: refreshToken, jti, expiresAt } = signRefreshToken({ sub: user.id });
+
+  await prisma.refreshToken.create({
+    data: { userId: user.id, jti, expiresAt },
+  });
+
+  return { accessToken, refreshToken };
+};
 
 const generateOtp = () =>
   Math.floor(100000 + Math.random() * 900000).toString();
@@ -34,6 +43,23 @@ const generateOtp = () =>
 const sanitizeUser = (user) => {
   const { passwordHash, ...safe } = user;
   return safe;
+};
+
+const sendOtp = async (user) => {
+  // Invalidate any existing unused OTPs for this user
+  await prisma.otpToken.updateMany({
+    where: { userId: user.id, used: false },
+    data: { used: true },
+  });
+
+  const code      = generateOtp();
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 5); // 5 minutes
+
+  await prisma.otpToken.create({
+    data: { userId: user.id, code, expiresAt },
+  });
+
+  return { code, email: user.email, name: user.name };
 };
 
 export const register = async ({ email, password, name, tenantName }) => {
@@ -63,8 +89,21 @@ export const register = async ({ email, password, name, tenantName }) => {
 
   await startTrial(tenant.id);
 
-  const tokens = issueTokens(user);
-  return { tenant, user: sanitizeUser(user), ...tokens };
+  const { code } = await sendOtp(user);
+
+  await sendMail({
+    to:      email,
+    subject: 'Complete your registration — verify your email',
+    html: `
+      <p>Hi${name ? ` ${name}` : ''},</p>
+      <p>Your account has been created. Enter the code below to complete setup:</p>
+      <h2 style="letter-spacing: 4px;">${code}</h2>
+      <p>This code expires in <strong>5 minutes</strong>.</p>
+      <p>If you did not create this account, please ignore this email.</p>
+    `,
+  });
+
+  return { message: 'Registration successful. Check your email for an OTP to complete setup.' };
 };
 
 export const login = async ({ email, password }) => {
@@ -76,21 +115,8 @@ export const login = async ({ email, password }) => {
   const valid = await comparePassword(password, user.passwordHash);
   if (!valid) throw new UnauthorizedError('Invalid credentials');
 
-  // Invalidate any existing unused OTPs for this user
-  await prisma.otpToken.updateMany({
-    where: { userId: user.id, used: false },
-    data: { used: true },
-  });
+  const { code } = await sendOtp(user);
 
-  // Generate and store new OTP
-  const code      = generateOtp();
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 5); // 5 minutes
-
-  await prisma.otpToken.create({
-    data: { userId: user.id, code, expiresAt },
-  });
-
-  // Send OTP via email
   await sendMail({
     to:      email,
     subject: 'Your login OTP',
@@ -120,13 +146,12 @@ export const verifyOtp = async ({ email, otp }) => {
   if (!record)                       throw new BadRequestError('Invalid OTP');
   if (record.expiresAt < new Date()) throw new BadRequestError('OTP has expired');
 
-  // Mark OTP as used
   await prisma.otpToken.update({
     where: { id: record.id },
     data: { used: true },
   });
 
-  const tokens = issueTokens(user);
+  const tokens = await issueTokens(user);
   return { user: sanitizeUser(user), ...tokens };
 };
 
@@ -138,11 +163,39 @@ export const refresh = async ({ refreshToken }) => {
     throw new UnauthorizedError('Invalid or expired refresh token');
   }
 
+  const record = await prisma.refreshToken.findUnique({
+    where: { jti: payload.jti },
+  });
+
+  if (!record) throw new UnauthorizedError('Session not found, please log in again');
+
+  // Enforce 10-minute inactivity timeout
+  if (Date.now() - record.lastUsedAt.getTime() > INACTIVITY_MS) {
+    await prisma.refreshToken.delete({ where: { id: record.id } });
+    throw new UnauthorizedError('Session expired due to inactivity');
+  }
+
   const user = await prisma.user.findUnique({ where: { id: payload.sub } });
   if (!user) throw new NotFoundError('User not found');
 
-  const tokens = issueTokens(user);
-  return tokens;
+  await prisma.refreshToken.update({
+    where: { id: record.id },
+    data: { lastUsedAt: new Date() },
+  });
+
+  return { accessToken: signAccessToken(buildTokenPayload(user)) };
+};
+
+export const logout = async ({ refreshToken }) => {
+  let payload;
+  try {
+    payload = verifyRefreshToken(refreshToken);
+  } catch {
+    return; // Already invalid — nothing to invalidate
+  }
+  if (payload?.jti) {
+    await prisma.refreshToken.deleteMany({ where: { jti: payload.jti } });
+  }
 };
 
 export const forgotPassword = async ({ email }) => {
@@ -201,4 +254,4 @@ export const resetPassword = async ({ token, password }) => {
   return { message: 'Password reset successfully' };
 };
 
-export default { register, login, verifyOtp, refresh, forgotPassword, resetPassword };
+export default { register, login, verifyOtp, refresh, logout, forgotPassword, resetPassword };
