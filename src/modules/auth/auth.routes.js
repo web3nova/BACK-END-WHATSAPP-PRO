@@ -3,7 +3,6 @@ import { Router } from 'express';
 import {
   registerHandler,
   loginHandler,
-  verifyOtpHandler,
   refreshHandler,
   logoutHandler,
   forgotPasswordHandler,
@@ -13,7 +12,6 @@ import { validate } from '../../middleware/validate.middleware.js';
 import {
   registerSchema,
   loginSchema,
-  verifyOtpSchema,
   refreshSchema,
   logoutSchema,
   forgotPasswordSchema,
@@ -27,7 +25,7 @@ const router = Router();
  * /auth/register:
  *   post:
  *     summary: Register a new tenant + first user
- *     description: Creates a tenant and owner account, then sends an OTP to the provided email. Call /auth/verify-otp to complete registration and receive tokens.
+ *     description: Creates a tenant and owner account. Returns access + refresh tokens immediately.
  *     tags: [Auth]
  *     security: []
  *     requestBody:
@@ -54,88 +52,7 @@ const router = Router();
  *                 example: Acme Corp
  *     responses:
  *       201:
- *         description: Registration successful — OTP sent to email
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean, example: true }
- *                 data:
- *                   type: object
- *                   properties:
- *                     message: { type: string, example: "Registration successful. Check your email for an OTP to complete setup." }
- *       400:
- *         description: Email already in use or invalid payload
- */
-router.post('/register', validate(registerSchema, 'body'), registerHandler);
-
-/**
- * @openapi
- * /auth/login:
- *   post:
- *     summary: Login with email + password — sends OTP to email
- *     tags: [Auth]
- *     security: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [email, password]
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *                 example: test@example.com
- *               password:
- *                 type: string
- *                 example: password123
- *     responses:
- *       200:
- *         description: OTP dispatched — proceed to /auth/verify-otp
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean, example: true }
- *                 data:
- *                   type: object
- *                   properties:
- *                     message: { type: string, example: "OTP sent to your email" }
- *       401:
- *         description: Invalid credentials or banned account
- */
-router.post('/login', validate(loginSchema, 'body'), loginHandler);
-
-/**
- * @openapi
- * /auth/verify-otp:
- *   post:
- *     summary: Verify OTP — returns access + refresh tokens
- *     description: Used after both /auth/login and /auth/register to complete authentication.
- *     tags: [Auth]
- *     security: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [email, otp]
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *                 example: test@example.com
- *               otp:
- *                 type: string
- *                 example: "123456"
- *     responses:
- *       200:
- *         description: OTP verified — tokens issued
+ *         description: Registration successful — tokens issued
  *         content:
  *           application/json:
  *             schema:
@@ -155,18 +72,64 @@ router.post('/login', validate(loginSchema, 'body'), loginHandler);
  *                         name: { type: string }
  *                         tenantId: { type: string }
  *       400:
- *         description: Invalid or expired OTP
+ *         description: Email already in use or invalid payload
+ */
+router.post('/register', validate(registerSchema, 'body'), registerHandler);
+
+/**
+ * @openapi
+ * /auth/login:
+ *   post:
+ *     summary: Login with email + password — returns tokens
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: test@example.com
+ *               password:
+ *                 type: string
+ *                 example: password123
+ *     responses:
+ *       200:
+ *         description: Login successful — tokens issued
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     accessToken: { type: string }
+ *                     refreshToken: { type: string }
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         id: { type: string }
+ *                         email: { type: string }
+ *                         name: { type: string }
+ *                         tenantId: { type: string }
  *       401:
  *         description: Invalid credentials or banned account
  */
-router.post('/verify-otp', validate(verifyOtpSchema, 'body'), verifyOtpHandler);
+router.post('/login', validate(loginSchema, 'body'), loginHandler);
 
 /**
  * @openapi
  * /auth/refresh:
  *   post:
  *     summary: Exchange a refresh token for a new access token
- *     description: Issues a new access token. Returns 401 if the session has been inactive for more than 10 minutes — the user must re-authenticate via /auth/login + /auth/verify-otp.
+ *     description: Issues a new access token. Returns 401 if the session has been inactive for more than 10 minutes — the user must re-authenticate via /auth/login.
  *     tags: [Auth]
  *     security: []
  *     requestBody:

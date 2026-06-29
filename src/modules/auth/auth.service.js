@@ -15,9 +15,7 @@ import {
 } from '../../common/errors/index.js';
 import { sendMail } from '../../config/mailer.js';
 import { startTrial } from '../billing/billing.service.js';
-import { logger } from '../../config/logger.js';
 
-// 10 minutes of inactivity → force OTP re-authentication
 const INACTIVITY_MS = 10 * 60 * 1000;
 
 const buildTokenPayload = (user) => ({
@@ -38,29 +36,9 @@ const issueTokens = async (user) => {
   return { accessToken, refreshToken };
 };
 
-const generateOtp = () =>
-  Math.floor(100000 + Math.random() * 900000).toString();
-
 const sanitizeUser = (user) => {
   const { passwordHash, ...safe } = user;
   return safe;
-};
-
-const sendOtp = async (user) => {
-  // Invalidate any existing unused OTPs for this user
-  await prisma.otpToken.updateMany({
-    where: { userId: user.id, used: false },
-    data: { used: true },
-  });
-
-  const code      = generateOtp();
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 5); // 5 minutes
-
-  await prisma.otpToken.create({
-    data: { userId: user.id, code, expiresAt },
-  });
-
-  return { code, email: user.email, name: user.name };
 };
 
 export const register = async ({ email, password, name, tenantName }) => {
@@ -96,26 +74,8 @@ export const register = async ({ email, password, name, tenantName }) => {
 
   await startTrial(tenant.id);
 
-  const { code } = await sendOtp(user);
-
-  try {
-    await sendMail({
-      to:      email,
-      subject: 'Complete your registration — verify your email',
-      html: `
-        <p>Hi${name ? ` ${name}` : ''},</p>
-        <p>Your account has been created. Enter the code below to complete setup:</p>
-        <h2 style="letter-spacing: 4px;">${code}</h2>
-        <p>This code expires in <strong>5 minutes</strong>.</p>
-        <p>If you did not create this account, please ignore this email.</p>
-      `,
-    });
-  } catch (err) {
-    logger.error({ err }, '[auth] Failed to send registration OTP email');
-    throw new BadRequestError('Account created but failed to send OTP email. Check your email config.');
-  }
-
-  return { message: 'Registration successful. Check your email for an OTP to complete setup.' };
+  const tokens = await issueTokens(user);
+  return { user: sanitizeUser(user), ...tokens };
 };
 
 export const login = async ({ email, password }) => {
@@ -126,47 +86,6 @@ export const login = async ({ email, password }) => {
 
   const valid = await comparePassword(password, user.passwordHash);
   if (!valid) throw new UnauthorizedError('Invalid credentials');
-
-  const { code } = await sendOtp(user);
-
-  try {
-    await sendMail({
-      to:      email,
-      subject: 'Your login OTP',
-      html: `
-        <p>Hi${user.name ? ` ${user.name}` : ''},</p>
-        <p>Your one-time login code is:</p>
-        <h2 style="letter-spacing: 4px;">${code}</h2>
-        <p>This code expires in <strong>5 minutes</strong>.</p>
-        <p>If you did not request this, please ignore this email.</p>
-      `,
-    });
-  } catch (err) {
-    logger.error({ err }, '[auth] Failed to send login OTP email');
-    throw new BadRequestError('Failed to send OTP email. Check your email configuration.');
-  }
-
-  return { message: 'OTP sent to your email' };
-};
-
-export const verifyOtp = async ({ email, otp }) => {
-  const user = await prisma.user.findFirst({ where: { email } });
-  if (!user) throw new UnauthorizedError('Invalid credentials');
-
-  if (user.isBanned) throw new UnauthorizedError('Your account has been banned');
-
-  const record = await prisma.otpToken.findFirst({
-    where: { userId: user.id, code: otp, used: false },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  if (!record)                       throw new BadRequestError('Invalid OTP');
-  if (record.expiresAt < new Date()) throw new BadRequestError('OTP has expired');
-
-  await prisma.otpToken.update({
-    where: { id: record.id },
-    data: { used: true },
-  });
 
   const tokens = await issueTokens(user);
   return { user: sanitizeUser(user), ...tokens };
@@ -274,4 +193,4 @@ export const resetPassword = async ({ token, password }) => {
   return { message: 'Password reset successfully' };
 };
 
-export default { register, login, verifyOtp, refresh, logout, forgotPassword, resetPassword };
+export default { register, login, refresh, logout, forgotPassword, resetPassword };

@@ -13,11 +13,6 @@ export const loginHandler = asyncHandler(async (req, res) => {
   return ok(res, result);
 });
 
-export const verifyOtpHandler = asyncHandler(async (req, res) => {
-  const result = await authService.verifyOtp(req.body);
-  return ok(res, result);
-});
-
 export const refreshHandler = asyncHandler(async (req, res) => {
   const result = await authService.refresh(req.body);
   return ok(res, result);
