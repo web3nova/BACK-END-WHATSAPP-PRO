@@ -14,26 +14,27 @@ datasource db {
 // DEV 1 — Platform & Tenancy
 // ─────────────────────────────────────────────
 model Tenant {
-  id           String   @id @default(uuid())
-  name         String
-  slug         String   @unique
-  domain       String?  @unique
-  status       TenantStatus @default(ACTIVE)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String       @id @default(uuid())
+  name      String
+  slug      String       @unique
+  domain    String?      @unique
+  status    TenantStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
-  users         User[]
-  subscription  Subscription?
-  business      Business?
-  products      Product[]
-  catalogs      Catalog[]
-  documents     Document[]
-  customers     Customer[]
-  conversations Conversation[]
-  orders        Order[]
-  quotes        Quote[]
+  users           User[]
+  subscription    Subscription?
+  business        Business?
+  products        Product[]
+  inventory       Inventory[]
+  catalogs        Catalog[]
+  documents       Document[]
+  customers       Customer[]
+  conversations   Conversation[]
+  orders          Order[]
+  quotes          Quote[]
   whatsappAccount WhatsappAccount?
-  payments      Payment[]
+  payments        Payment[]
 
   @@map("tenants")
 }
@@ -56,10 +57,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  tenant Tenant? @relation(fields: [tenantId], references: [id])
-  role   Role?   @relation(fields: [roleId], references: [id])
+  tenant              Tenant?              @relation(fields: [tenantId], references: [id])
+  role                Role?                @relation(fields: [roleId], references: [id])
   passwordResetTokens PasswordResetToken[]
-  otpTokens           OtpToken[]
+  otpTokens         OtpToken[]
 
   @@unique([tenantId, email])
   @@map("users")
@@ -67,9 +68,9 @@ model User {
 
 model Role {
   id          String   @id @default(uuid())
-  tenantId    String?
+  tenantId    String?  // null = platform-level role
   name        String
-  permissions Json     @default("[]")
+  permissions Json    @default("[]")
   users       User[]
 
   @@unique([tenantId, name])
@@ -93,17 +94,14 @@ model BillingPlan {
 }
 
 model Subscription {
-  id            String   @id @default(uuid())
-  tenantId      String   @unique
-  planId        String?
-  status        SubscriptionStatus @default(TRIAL)
-  trialStartsAt DateTime @default(now())
-  trialEndsAt   DateTime
-  renewsAt      DateTime?
-  monnifyRef    String?
-  meta          Json     @default("{}")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id        String   @id @default(uuid())
+  tenantId  String   @unique
+  plan      String   @default("free")
+  status    String   @default("active")
+  renewsAt  DateTime?
+  meta      Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   tenant Tenant       @relation(fields: [tenantId], references: [id])
   plan   BillingPlan? @relation(fields: [planId], references: [id])
@@ -126,7 +124,7 @@ model PasswordResetToken {
   used      Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])  // 👈 only this line
 
   @@map("password_reset_tokens")
 }
@@ -148,17 +146,33 @@ model OtpToken {
 // DEV 2 — Business, Products, Catalog, Website
 // ─────────────────────────────────────────────
 model Business {
-  id          String   @id @default(uuid())
-  tenantId    String   @unique
-  displayName String
-  description String?
-  logoUrl     String?
-  settings    Json     @default("{}")
-  website     WebsitePage[]
+  id              String           @id @default(uuid())
+  tenantId        String           @unique
+  displayName     String
+  description     String?
+  logoUrl         String?
+  settings        Json             @default("{}")
+  website         WebsitePage[]
+  websiteSettings WebsiteSettings?
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@map("businesses")
+}
+
+model WebsiteSettings {
+  id         String   @id @default(uuid())
+  businessId String   @unique
+  theme      Json     @default("{}")
+  navigation Json     @default("[]")
+  seo        Json     @default("{}")
+  social     Json     @default("{}")
+  published  Boolean  @default(false)
+  updatedAt  DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@map("website_settings")
 }
 
 model Product {
@@ -172,10 +186,27 @@ model Product {
   stock       Int      @default(0)
   createdAt   DateTime @default(now())
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  inventory Inventory?
 
   @@index([tenantId])
   @@map("products")
+}
+
+model Inventory {
+  id        String   @id @default(uuid())
+  tenantId  String
+  productId String   @unique
+  quantity  Int      @default(0)
+  reserved  Int      @default(0)
+  lowStock  Int?
+  updatedAt DateTime @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("inventory")
 }
 
 model Catalog {
@@ -193,12 +224,12 @@ model Catalog {
 }
 
 model WebsitePage {
-  id         String   @id @default(uuid())
+  id         String  @id @default(uuid())
   businessId String
   slug       String
   title      String
-  content    Json     @default("{}")
-  published  Boolean  @default(false)
+  content    Json    @default("{}")
+  published  Boolean @default(false)
 
   business Business @relation(fields: [businessId], references: [id])
 
@@ -225,11 +256,11 @@ model Document {
 }
 
 model DocumentChunk {
-  id         String   @id @default(uuid())
+  id         String  @id @default(uuid())
   documentId String
   tenantId   String
   content    String
-  vectorId   String?
+  vectorId   String?  // id in Qdrant
   position   Int
 
   document Document @relation(fields: [documentId], references: [id])
@@ -290,13 +321,13 @@ model Message {
   id             String   @id @default(uuid())
   externalId     String?  @unique
   conversationId String
-  role           String
+  role           String   // customer|ai|staff
   content        String
   meta           Json     @default("{}")
   createdAt      DateTime @default(now())
 
-  conversation   Conversation   @relation(fields: [conversationId], references: [id])
-  mediaAssets    MediaAsset[]
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  mediaAssets MediaAsset[]
   outboxMessages OutboxMessage[]
 
   @@index([conversationId])
@@ -307,7 +338,7 @@ model MediaAsset {
   id              String   @id @default(uuid())
   tenantId        String
   messageId       String?
-  provider        String
+  provider        String   // e.g. whatsapp
   providerMediaId String?
   mimeType        String?
   size            Int?
@@ -323,20 +354,20 @@ model MediaAsset {
 }
 
 model OutboxMessage {
-  id               String   @id @default(uuid())
+  id               String    @id @default(uuid())
   tenantId         String
-  channel          String   @default("whatsapp")
+  channel          String    @default("whatsapp")
   to               String
   payload          Json
   messageId        String?
   attempts         Int      @default(0)
-  status           String   @default("pending")
+  status           String   @default("pending") // pending|in_progress|sent|failed
   lastError        String?
   scheduledAt      DateTime?
   sentAt           DateTime?
   providerResponse Json?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   message Message? @relation(fields: [messageId], references: [id])
 
@@ -346,16 +377,16 @@ model OutboxMessage {
 }
 
 model Order {
-  id           String   @id @default(uuid())
-  tenantId     String
-  customerId   String?
-  status       String   @default("pending")
-  totalMinor   Int      @default(0)
-  currency     String   @default("NGN")
-  items        Json     @default("[]")
-  measurements Json     @default("{}")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String   @id @default(uuid())
+  tenantId    String
+  customerId  String?
+  status      String   @default("pending") // pending|confirmed|paid|fulfilled|cancelled
+  totalMinor  Int      @default(0)
+  currency    String   @default("NGN")
+  items       Json     @default("[]")
+  measurements Json    @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
   payments Payment[]
@@ -365,14 +396,14 @@ model Order {
 }
 
 model Quote {
-  id          String   @id @default(uuid())
-  tenantId    String
-  customerId  String?
-  status      String   @default("draft")
-  amountMinor Int      @default(0)
-  currency    String   @default("NGN")
-  details     Json     @default("{}")
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  tenantId   String
+  customerId String?
+  status     String   @default("draft") // draft|sent|accepted|rejected
+  amountMinor Int     @default(0)
+  currency   String   @default("NGN")
+  details    Json     @default("{}")
+  createdAt  DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -381,18 +412,18 @@ model Quote {
 }
 
 model Payment {
-  id                String   @id @default(uuid())
-  tenantId          String
-  orderId           String?
-  reference         String   @unique
-  provider          String   @default("monnify")
+  id               String   @id @default(uuid())
+  tenantId         String
+  orderId          String?
+  reference        String   @unique
+  provider         String   @default("paystack")
   providerReference String?  @unique
-  amountMinor       Int      @default(0)
-  currency          String   @default("NGN")
-  status            String   @default("pending")
-  meta              Json     @default("{}")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  amountMinor      Int      @default(0)
+  currency         String   @default("NGN")
+  status           String   @default("pending") // pending|success|failed|cancelled
+  meta             Json     @default("{}")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   tenant Tenant  @relation(fields: [tenantId], references: [id])
   order  Order?  @relation(fields: [orderId], references: [id])

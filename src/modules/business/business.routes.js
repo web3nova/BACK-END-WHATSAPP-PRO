@@ -1,5 +1,7 @@
 import { Router } from 'express';
+import { validate } from '../../middleware/validate.middleware.js';
 import * as businessController from './business.controller.js';
+import { createBusinessSchema, updateBusinessSchema } from './business.validation.js';
 
 const router = Router();
 
@@ -37,7 +39,7 @@ router.get('/', businessController.getProfile);
  *       201: { description: Business profile created }
  *       400: { description: Profile already exists }
  */
-router.post('/', businessController.createProfile);
+router.post('/', validate(createBusinessSchema, 'body'), businessController.createProfile);
 
 /**
  * @openapi
@@ -60,6 +62,6 @@ router.post('/', businessController.createProfile);
  *       200: { description: Updated business profile }
  *       404: { description: Profile not found }
  */
-router.put('/', businessController.updateProfile);
+router.put('/', validate(updateBusinessSchema, 'body'), businessController.updateProfile);
 
 export default router;

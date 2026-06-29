@@ -2,6 +2,13 @@ import { prisma } from '../../config/prisma.js';
 import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
 import { paginate, paginatedResponse } from '../../common/utils/pagination.js';
 
+function normalizeHost(host = '') {
+  const normalized = host.split(':')[0]?.toLowerCase();
+  return normalized && !['localhost', '127.0.0.1', '0.0.0.0'].includes(normalized)
+    ? normalized
+    : undefined;
+}
+
 async function requireBusiness(tenantId) {
   const business = await prisma.business.findUnique({ where: { tenantId } });
   if (!business) {
@@ -16,6 +23,35 @@ async function requirePage(businessId, slug) {
   });
   if (!page) throw new NotFoundError(`Page "${slug}" not found.`);
   return page;
+}
+
+const defaultSettings = {
+  theme: {},
+  navigation: [],
+  seo: {},
+  social: {},
+  published: false,
+};
+
+async function resolveStorefrontTenant(req) {
+  const tenantId = req.query.tenantId || req.headers['x-tenant-id'];
+  const slug = req.query.slug;
+  const domain =
+    req.query.domain || normalizeHost(req.headers['x-forwarded-host'] || req.headers.host);
+
+  const where = tenantId ? { id: tenantId } : slug ? { slug } : domain ? { domain } : null;
+
+  if (!where) {
+    throw new BadRequestError('Provide tenantId, slug, or domain to load a storefront.');
+  }
+
+  const tenant = await prisma.tenant.findFirst({
+    where: { ...where, status: 'ACTIVE' },
+    select: { id: true, name: true, slug: true, domain: true },
+  });
+
+  if (!tenant) throw new NotFoundError('Storefront not found.');
+  return tenant;
 }
 
 export async function listPages(tenantId, query) {
@@ -69,27 +105,59 @@ export async function setPublished(tenantId, slug, published) {
   });
 }
 
-// Public storefront: business info + published pages + in-stock products.
-export async function getStorefront(tenantId) {
+export async function getSettings(tenantId) {
   const business = await requireBusiness(tenantId);
-  const [pages, products] = await Promise.all([
+  return prisma.websiteSettings.upsert({
+    where: { businessId: business.id },
+    create: { businessId: business.id, ...defaultSettings },
+    update: {},
+  });
+}
+
+export async function updateSettings(tenantId, data) {
+  const business = await requireBusiness(tenantId);
+  return prisma.websiteSettings.upsert({
+    where: { businessId: business.id },
+    create: { businessId: business.id, ...defaultSettings, ...data },
+    update: data,
+  });
+}
+
+// Public storefront: tenant + business info + published pages + in-stock products.
+export async function getStorefront(req) {
+  const tenant = await resolveStorefrontTenant(req);
+  const business = await requireBusiness(tenant.id);
+  const [settings, pages, products] = await Promise.all([
+    prisma.websiteSettings.findUnique({
+      where: { businessId: business.id },
+      select: { theme: true, navigation: true, seo: true, social: true, published: true },
+    }),
     prisma.websitePage.findMany({
       where: { businessId: business.id, published: true },
       orderBy: { slug: 'asc' },
       select: { slug: true, title: true, content: true },
     }),
     prisma.product.findMany({
-      where: { tenantId, stock: { gt: 0 } },
+      where: { tenantId: tenant.id, stock: { gt: 0 } },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, name: true, description: true, priceMinor: true, currency: true, attributes: true },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        priceMinor: true,
+        currency: true,
+        attributes: true,
+      },
     }),
   ]);
   return {
+    tenant,
     business: {
       displayName: business.displayName,
       description: business.description,
       logoUrl: business.logoUrl,
     },
+    settings: settings ?? defaultSettings,
     pages,
     products,
   };

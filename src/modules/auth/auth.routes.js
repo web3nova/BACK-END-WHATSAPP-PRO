@@ -26,6 +26,7 @@ const router = Router();
  *   post:
  *     summary: Register a new tenant + first user
  *     tags: [Auth]
+ *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -57,6 +58,7 @@ router.post('/register', validate(registerSchema, 'body'), registerHandler);
  *   post:
  *     summary: Login with email + password — sends OTP to email
  *     tags: [Auth]
+ *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -105,6 +107,7 @@ router.post('/verify-otp', validate(verifyOtpSchema, 'body'), verifyOtpHandler);
  *   post:
  *     summary: Exchange a refresh token for a new access token
  *     tags: [Auth]
+ *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -124,6 +127,7 @@ router.post('/refresh', validate(refreshSchema, 'body'), refreshHandler);
  *   post:
  *     summary: Request a password reset email
  *     tags: [Auth]
+ *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -144,6 +148,7 @@ router.post('/forgot-password', validate(forgotPasswordSchema, 'body'), forgotPa
  *   post:
  *     summary: Reset password using a token from email
  *     tags: [Auth]
+ *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -157,7 +162,23 @@ router.post('/forgot-password', validate(forgotPasswordSchema, 'body'), forgotPa
  *               password:
  *                 type: string
  *                 minLength: 8
+ *                 example: newpassword123
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     message: { type: string }
+ *       400:
+ *         description: Invalid, expired, or already-used reset token
  */
-router.post('/reset-password', validate(resetPasswordSchema, 'body'), resetPasswordHandler);
+router.post('/reset-password', validate(resetPasswordSchema), resetPasswordHandler);
 
 export default router;

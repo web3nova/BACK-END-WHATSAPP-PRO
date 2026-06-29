@@ -25,12 +25,35 @@ export async function getById(id, tenantId) {
 }
 
 export async function create(tenantId, data) {
-  return prisma.product.create({ data: { tenantId, ...data } });
+  const { stock = 0, ...productData } = data;
+  return prisma.$transaction(async (tx) => {
+    const product = await tx.product.create({ data: { tenantId, ...productData, stock } });
+    await tx.inventory.create({
+      data: { tenantId, productId: product.id, quantity: stock },
+    });
+    return product;
+  });
 }
 
 export async function update(id, tenantId, data) {
   await findOwned(id, tenantId);
-  return prisma.product.update({ where: { id }, data });
+  const { stock, ...productData } = data;
+  return prisma.$transaction(async (tx) => {
+    const product = await tx.product.update({
+      where: { id },
+      data: stock === undefined ? productData : { ...productData, stock },
+    });
+
+    if (stock !== undefined) {
+      await tx.inventory.upsert({
+        where: { productId: id },
+        create: { tenantId, productId: id, quantity: stock },
+        update: { quantity: stock },
+      });
+    }
+
+    return product;
+  });
 }
 
 export async function remove(id, tenantId) {

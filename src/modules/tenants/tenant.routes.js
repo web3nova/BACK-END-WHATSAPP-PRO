@@ -1,6 +1,4 @@
 import { Router } from 'express';
-import { authMiddleware } from '../../middleware/auth.middleware.js';
-import { tenantMiddleware } from '../../middleware/tenant.middleware.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import * as controller from './tenant.controller.js';
 import {
@@ -12,14 +10,143 @@ import {
 
 const router = Router();
 
-// ── Tenant self-service routes ──
-router.get('/me',   authMiddleware, tenantMiddleware, controller.getOwn);
-router.patch('/me', authMiddleware, tenantMiddleware, validate(updateTenantSchema, 'body'), controller.updateOwn);
+// authMiddleware + tenantMiddleware are applied globally in routes/index.js
 
-// ── Super admin only routes ──
-router.get('/',     authMiddleware, validate(listTenantsSchema, 'query'), controller.list);
-router.get('/:id',  authMiddleware, validate(getTenantSchema, 'params'),  controller.getOne);
-router.patch('/:id',  authMiddleware, validate(updateTenantSchema, 'body'),   controller.update);
-router.delete('/:id', authMiddleware, validate(deleteTenantSchema, 'params'), controller.remove);
+/**
+ * @openapi
+ * /tenant/me:
+ *   get:
+ *     summary: Get the authenticated user's own tenant profile
+ *     tags: [Tenants]
+ *     responses:
+ *       200:
+ *         description: Tenant profile
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/me', controller.getOwn);
+
+/**
+ * @openapi
+ * /tenant/me:
+ *   patch:
+ *     summary: Update the authenticated user's own tenant profile
+ *     tags: [Tenants]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string }
+ *               slug: { type: string }
+ *               status: { type: string }
+ *     responses:
+ *       200:
+ *         description: Tenant updated
+ *       400:
+ *         description: Validation error
+ */
+router.patch('/me', validate(updateTenantSchema, 'body'), controller.updateOwn);
+
+/**
+ * @openapi
+ * /tenant:
+ *   get:
+ *     summary: List all tenants (super admin only)
+ *     tags: [Tenants]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Paginated list of tenants
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden — super admin only
+ */
+router.get('/', validate(listTenantsSchema, 'query'), controller.list);
+
+/**
+ * @openapi
+ * /tenant/{id}:
+ *   get:
+ *     summary: Get any tenant by ID (super admin only)
+ *     tags: [Tenants]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Tenant details
+ *       404:
+ *         description: Tenant not found
+ */
+router.get('/:id', validate(getTenantSchema, 'params'), controller.getOne);
+
+/**
+ * @openapi
+ * /tenant/{id}:
+ *   patch:
+ *     summary: Update any tenant (super admin only)
+ *     tags: [Tenants]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string }
+ *               slug: { type: string }
+ *               status: { type: string }
+ *     responses:
+ *       200:
+ *         description: Tenant updated
+ *       404:
+ *         description: Tenant not found
+ */
+router.patch('/:id', validate(updateTenantSchema, 'body'), controller.update);
+
+/**
+ * @openapi
+ * /tenant/{id}:
+ *   delete:
+ *     summary: Delete a tenant (super admin only)
+ *     tags: [Tenants]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       204:
+ *         description: Tenant deleted
+ *       404:
+ *         description: Tenant not found
+ */
+router.delete('/:id', validate(deleteTenantSchema, 'params'), controller.remove);
 
 export default router;

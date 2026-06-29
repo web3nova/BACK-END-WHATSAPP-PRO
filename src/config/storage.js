@@ -1,28 +1,38 @@
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { config } from './index.js';
-import fs from 'fs';
-import path from 'path';
-import { promisify } from 'util';
 
-const mkdir = promisify(fs.mkdir);
-const writeFile = promisify(fs.writeFile);
+const client = new S3Client({
+  endpoint: config.storage.endpoint,
+  region: config.storage.region,
+  credentials: {
+    accessKeyId: config.storage.accessKey,
+    secretAccessKey: config.storage.secretKey,
+  },
+  // Required for path-style access on non-AWS S3 providers (Cloudflare R2, MinIO, etc.)
+  forcePathStyle: false,
+});
 
-const storageDir = path.resolve(process.cwd(), 'storage');
-
-// Local filesystem-backed storage adapter for development.
-// In production swap this implementation for an S3-compatible client.
 export const storage = {
-  async put(key, body, _contentType) {
-    const fullPath = path.join(storageDir, key);
-    await mkdir(path.dirname(fullPath), { recursive: true });
+  async put(key, body, contentType = 'application/octet-stream') {
     const buf = Buffer.isBuffer(body) ? body : Buffer.from(body);
-    await writeFile(fullPath, buf);
+    await client.send(new PutObjectCommand({
+      Bucket: config.storage.bucket,
+      Key: key,
+      Body: buf,
+      ContentType: contentType,
+    }));
     return key;
   },
-  async getSignedUrl(key) {
-    // No signing for local storage — return an app URL that serves static files.
-    const base = config.appUrl || `http://localhost:${process.env.PORT || 4000}`;
-    return `${base.replace(/\/$/, '')}/storage/${encodeURIComponent(key)}`;
+
+  async getSignedUrl(key, expiresIn = 3600) {
+    const command = new GetObjectCommand({
+      Bucket: config.storage.bucket,
+      Key: key,
+    });
+    return getSignedUrl(client, command, { expiresIn });
   },
+
   bucket: config.storage.bucket,
 };
 

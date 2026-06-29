@@ -109,7 +109,7 @@ export const geminiProvider = {
 
       return {
         text: text || null,
-        toolCalls: toolCalls.length ? toolCalls : undefined,
+        toolCalls,
         stopReason: candidate.finishReason
       };
     } catch (err) {

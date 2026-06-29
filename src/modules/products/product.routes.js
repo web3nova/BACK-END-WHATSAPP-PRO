@@ -1,7 +1,19 @@
 import { Router } from 'express';
+import { validate } from '../../middleware/validate.middleware.js';
+import { requireFeature } from '../../middleware/subscription.middleware.js';
+import { prisma } from '../../config/prisma.js';
 import * as productController from './product.controller.js';
+import {
+  createProductSchema,
+  listProductsSchema,
+  productParamsSchema,
+  updateProductSchema,
+} from './product.validation.js';
 
 const router = Router();
+const enforceProductLimit = requireFeature('maxProducts', (tenantId) =>
+  prisma.product.count({ where: { tenantId } }),
+);
 
 /**
  * @openapi
@@ -23,7 +35,7 @@ const router = Router();
  *     responses:
  *       200: { description: Paginated product list }
  */
-router.get('/', productController.list);
+router.get('/', validate(listProductsSchema, 'query'), productController.list);
 
 /**
  * @openapi
@@ -48,7 +60,12 @@ router.get('/', productController.list);
  *     responses:
  *       201: { description: Product created }
  */
-router.post('/', productController.create);
+router.post(
+  '/',
+  enforceProductLimit,
+  validate(createProductSchema, 'body'),
+  productController.create,
+);
 
 /**
  * @openapi
@@ -65,7 +82,7 @@ router.post('/', productController.create);
  *       200: { description: Product }
  *       404: { description: Not found }
  */
-router.get('/:id', productController.getById);
+router.get('/:id', validate(productParamsSchema, 'params'), productController.getById);
 
 /**
  * @openapi
@@ -81,7 +98,12 @@ router.get('/:id', productController.getById);
  *     responses:
  *       200: { description: Updated product }
  */
-router.put('/:id', productController.update);
+router.put(
+  '/:id',
+  validate(productParamsSchema, 'params'),
+  validate(updateProductSchema, 'body'),
+  productController.update,
+);
 
 /**
  * @openapi
@@ -97,6 +119,6 @@ router.put('/:id', productController.update);
  *     responses:
  *       204: { description: Deleted }
  */
-router.delete('/:id', productController.remove);
+router.delete('/:id', validate(productParamsSchema, 'params'), productController.remove);
 
 export default router;
