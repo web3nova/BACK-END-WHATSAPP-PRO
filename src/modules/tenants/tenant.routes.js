@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireSuperAdmin } from '../../middleware/superadmin.middleware.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import * as controller from './tenant.controller.js';
 import {
@@ -21,6 +22,20 @@ const router = Router();
  *     responses:
  *       200:
  *         description: Tenant profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string }
+ *                     name: { type: string }
+ *                     slug: { type: string }
+ *                     domain: { type: string, nullable: true }
+ *                     status: { type: string, enum: [ACTIVE, SUSPENDED, CANCELLED] }
  *       401:
  *         description: Unauthorized
  */
@@ -39,14 +54,13 @@ router.get('/me', controller.getOwn);
  *           schema:
  *             type: object
  *             properties:
- *               name: { type: string }
- *               slug: { type: string }
- *               status: { type: string }
+ *               name: { type: string, minLength: 2 }
+ *               domain: { type: string, nullable: true }
  *     responses:
  *       200:
  *         description: Tenant updated
  *       400:
- *         description: Validation error
+ *         description: Validation error or domain already in use
  */
 router.patch('/me', validate(updateTenantSchema, 'body'), controller.updateOwn);
 
@@ -65,7 +79,7 @@ router.patch('/me', validate(updateTenantSchema, 'body'), controller.updateOwn);
  *         schema: { type: integer, default: 20 }
  *       - in: query
  *         name: status
- *         schema: { type: string }
+ *         schema: { type: string, enum: [ACTIVE, SUSPENDED, CANCELLED] }
  *     responses:
  *       200:
  *         description: Paginated list of tenants
@@ -74,7 +88,7 @@ router.patch('/me', validate(updateTenantSchema, 'body'), controller.updateOwn);
  *       403:
  *         description: Forbidden — super admin only
  */
-router.get('/', validate(listTenantsSchema, 'query'), controller.list);
+router.get('/', requireSuperAdmin, validate(listTenantsSchema, 'query'), controller.list);
 
 /**
  * @openapi
@@ -92,10 +106,12 @@ router.get('/', validate(listTenantsSchema, 'query'), controller.list);
  *     responses:
  *       200:
  *         description: Tenant details
+ *       403:
+ *         description: Forbidden — super admin only
  *       404:
  *         description: Tenant not found
  */
-router.get('/:id', validate(getTenantSchema, 'params'), controller.getOne);
+router.get('/:id', requireSuperAdmin, validate(getTenantSchema, 'params'), controller.getOne);
 
 /**
  * @openapi
@@ -118,21 +134,23 @@ router.get('/:id', validate(getTenantSchema, 'params'), controller.getOne);
  *             type: object
  *             properties:
  *               name: { type: string }
- *               slug: { type: string }
- *               status: { type: string }
+ *               domain: { type: string, nullable: true }
+ *               status: { type: string, enum: [ACTIVE, SUSPENDED, CANCELLED] }
  *     responses:
  *       200:
  *         description: Tenant updated
+ *       403:
+ *         description: Forbidden — super admin only
  *       404:
  *         description: Tenant not found
  */
-router.patch('/:id', validate(updateTenantSchema, 'body'), controller.update);
+router.patch('/:id', requireSuperAdmin, validate(updateTenantSchema, 'body'), controller.update);
 
 /**
  * @openapi
  * /tenant/{id}:
  *   delete:
- *     summary: Delete a tenant (super admin only)
+ *     summary: Delete a tenant and all its data (super admin only)
  *     tags: [Tenants]
  *     parameters:
  *       - in: path
@@ -144,9 +162,11 @@ router.patch('/:id', validate(updateTenantSchema, 'body'), controller.update);
  *     responses:
  *       204:
  *         description: Tenant deleted
+ *       403:
+ *         description: Forbidden — super admin only
  *       404:
  *         description: Tenant not found
  */
-router.delete('/:id', validate(deleteTenantSchema, 'params'), controller.remove);
+router.delete('/:id', requireSuperAdmin, validate(deleteTenantSchema, 'params'), controller.remove);
 
 export default router;

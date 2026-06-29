@@ -56,8 +56,38 @@ export const deleteTenant = async (id) => {
   const tenant = await prisma.tenant.findUnique({ where: { id } });
   if (!tenant) throw new NotFoundError('Tenant not found');
 
-  // Cascade: delete users, roles, subscription first to avoid FK violations
+  // Delete in FK dependency order so no constraint is violated.
+  // Each step must precede the table it references.
   await prisma.$transaction([
+    // Leaf nodes that reference Message
+    prisma.outboxMessage.deleteMany({ where: { tenantId: id } }),
+    prisma.mediaAsset.deleteMany({ where: { tenantId: id } }),
+    // Messages reference Conversations
+    prisma.message.deleteMany({ where: { conversation: { tenantId: id } } }),
+    // Conversations reference Customers
+    prisma.conversation.deleteMany({ where: { tenantId: id } }),
+    prisma.customer.deleteMany({ where: { tenantId: id } }),
+    // Document chunks reference Documents
+    prisma.documentChunk.deleteMany({ where: { tenantId: id } }),
+    prisma.document.deleteMany({ where: { tenantId: id } }),
+    // Inventory references Products
+    prisma.inventory.deleteMany({ where: { tenantId: id } }),
+    // Payments reference Orders (orderId nullable but safer to delete first)
+    prisma.payment.deleteMany({ where: { tenantId: id } }),
+    prisma.order.deleteMany({ where: { tenantId: id } }),
+    prisma.quote.deleteMany({ where: { tenantId: id } }),
+    prisma.catalog.deleteMany({ where: { tenantId: id } }),
+    // WebsitePage and WebsiteSettings reference Business
+    prisma.websitePage.deleteMany({ where: { business: { tenantId: id } } }),
+    prisma.websiteSettings.deleteMany({ where: { business: { tenantId: id } } }),
+    prisma.business.deleteMany({ where: { tenantId: id } }),
+    prisma.product.deleteMany({ where: { tenantId: id } }),
+    prisma.whatsappAccount.deleteMany({ where: { tenantId: id } }),
+    // OtpToken and PasswordResetToken reference User (no onDelete cascade)
+    prisma.otpToken.deleteMany({ where: { user: { tenantId: id } } }),
+    prisma.passwordResetToken.deleteMany({ where: { user: { tenantId: id } } }),
+    // RefreshToken has onDelete: Cascade on User, but delete explicitly to be safe
+    prisma.refreshToken.deleteMany({ where: { user: { tenantId: id } } }),
     prisma.user.deleteMany({ where: { tenantId: id } }),
     prisma.role.deleteMany({ where: { tenantId: id } }),
     prisma.subscription.deleteMany({ where: { tenantId: id } }),
