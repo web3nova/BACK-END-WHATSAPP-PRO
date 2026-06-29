@@ -3,6 +3,13 @@ import { ok, created, noContent } from '../../common/utils/apiResponse.js';
 import { getTenantId } from '../../common/utils/tenantContext.js';
 import * as websiteService from './website.service.js';
 
+function normalizeHost(host = '') {
+  const normalized = host.split(':')[0]?.toLowerCase();
+  return normalized && !['localhost', '127.0.0.1', '0.0.0.0'].includes(normalized)
+    ? normalized
+    : undefined;
+}
+
 export const listPages = asyncHandler(async (req, res) => {
   const result = await websiteService.listPages(getTenantId(req), req.query);
   return ok(res, result.items, result.meta);
@@ -48,6 +55,10 @@ export const updateSettings = asyncHandler(async (req, res) => {
 });
 
 export const getStorefront = asyncHandler(async (req, res) => {
-  const data = await websiteService.getStorefront(req);
+  const tenantId = req.query.tenantId || req.headers['x-tenant-id'];
+  const slug = req.query.slug;
+  const domain =
+    req.query.domain || normalizeHost(req.headers['x-forwarded-host'] || req.headers.host);
+  const data = await websiteService.getStorefront({ tenantId, slug, domain });
   return ok(res, data);
 });
