@@ -9,15 +9,12 @@ const TRIAL_DAYS = 5;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const monnifyBaseUrl = () =>
-  config.monnify.live ? 'https://api.monnify.com' : 'https://sandbox.monnify.com';
-
 const getMonnifyToken = async () => {
   const credentials = Buffer.from(
     `${config.monnify.apiKey}:${config.monnify.secretKey}`
   ).toString('base64');
 
-  const res = await fetch(`${monnifyBaseUrl()}/api/v1/auth/login`, {
+  const res = await fetch(`${config.monnify.baseUrl}/api/v1/auth/login`, {
     method: 'POST',
     headers: {
       Authorization: `Basic ${credentials}`,
@@ -78,7 +75,7 @@ export const initializePayment = async (tenantId, planId) => {
   const reference = `SUB-${tenantId}-${Date.now()}`;
   const token     = await getMonnifyToken();
 
-  const res = await fetch(`${monnifyBaseUrl()}/api/v1/merchant/transactions/init-transaction`, {
+  const res = await fetch(`${config.monnify.baseUrl}/api/v1/merchant/transactions/init-transaction`, {
     method: 'POST',
     headers: {
       Authorization:  `Bearer ${token}`,

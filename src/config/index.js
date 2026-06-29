@@ -107,7 +107,7 @@ export const config = {
     apiKey: process.env.MONNIFY_API_KEY,
     secretKey: process.env.MONNIFY_SECRET_KEY,
     contractCode: process.env.MONNIFY_CONTRACT_CODE,
-    live: process.env.MONNIFY_ENV === 'live',
+    baseUrl: process.env.MONNIFY_BASE_URL || 'https://api.monnify.com',
   },
 
   payment: {
