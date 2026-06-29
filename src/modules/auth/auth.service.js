@@ -15,6 +15,7 @@ import {
 } from '../../common/errors/index.js';
 import { sendMail } from '../../config/mailer.js';
 import { startTrial } from '../billing/billing.service.js';
+import { logger } from '../../config/logger.js';
 
 // 10 minutes of inactivity → force OTP re-authentication
 const INACTIVITY_MS = 10 * 60 * 1000;
@@ -97,17 +98,22 @@ export const register = async ({ email, password, name, tenantName }) => {
 
   const { code } = await sendOtp(user);
 
-  await sendMail({
-    to:      email,
-    subject: 'Complete your registration — verify your email',
-    html: `
-      <p>Hi${name ? ` ${name}` : ''},</p>
-      <p>Your account has been created. Enter the code below to complete setup:</p>
-      <h2 style="letter-spacing: 4px;">${code}</h2>
-      <p>This code expires in <strong>5 minutes</strong>.</p>
-      <p>If you did not create this account, please ignore this email.</p>
-    `,
-  });
+  try {
+    await sendMail({
+      to:      email,
+      subject: 'Complete your registration — verify your email',
+      html: `
+        <p>Hi${name ? ` ${name}` : ''},</p>
+        <p>Your account has been created. Enter the code below to complete setup:</p>
+        <h2 style="letter-spacing: 4px;">${code}</h2>
+        <p>This code expires in <strong>5 minutes</strong>.</p>
+        <p>If you did not create this account, please ignore this email.</p>
+      `,
+    });
+  } catch (err) {
+    logger.error({ err }, '[auth] Failed to send registration OTP email');
+    throw new BadRequestError('Account created but failed to send OTP email. Check your email config.');
+  }
 
   return { message: 'Registration successful. Check your email for an OTP to complete setup.' };
 };
@@ -123,17 +129,22 @@ export const login = async ({ email, password }) => {
 
   const { code } = await sendOtp(user);
 
-  await sendMail({
-    to:      email,
-    subject: 'Your login OTP',
-    html: `
-      <p>Hi${user.name ? ` ${user.name}` : ''},</p>
-      <p>Your one-time login code is:</p>
-      <h2 style="letter-spacing: 4px;">${code}</h2>
-      <p>This code expires in <strong>5 minutes</strong>.</p>
-      <p>If you did not request this, please ignore this email.</p>
-    `,
-  });
+  try {
+    await sendMail({
+      to:      email,
+      subject: 'Your login OTP',
+      html: `
+        <p>Hi${user.name ? ` ${user.name}` : ''},</p>
+        <p>Your one-time login code is:</p>
+        <h2 style="letter-spacing: 4px;">${code}</h2>
+        <p>This code expires in <strong>5 minutes</strong>.</p>
+        <p>If you did not request this, please ignore this email.</p>
+      `,
+    });
+  } catch (err) {
+    logger.error({ err }, '[auth] Failed to send login OTP email');
+    throw new BadRequestError('Failed to send OTP email. Check your email configuration.');
+  }
 
   return { message: 'OTP sent to your email' };
 };
