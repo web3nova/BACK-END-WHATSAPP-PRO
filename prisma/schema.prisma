@@ -67,8 +67,8 @@ model User {
 }
 
 model Role {
-  id          String   @id @default(uuid())
-  tenantId    String?  // null = platform-level role
+  id          String  @id @default(uuid())
+  tenantId    String? // null = platform-level role
   name        String
   permissions Json    @default("[]")
   users       User[]
@@ -94,14 +94,17 @@ model BillingPlan {
 }
 
 model Subscription {
-  id        String   @id @default(uuid())
-  tenantId  String   @unique
-  plan      String   @default("free")
-  status    String   @default("active")
-  renewsAt  DateTime?
-  meta      Json     @default("{}")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String    @id @default(uuid())
+  tenantId      String    @unique
+  planId        String?
+  status        SubscriptionStatus  @default(TRIAL)
+  trialStartsAt DateTime  @default(now())
+  trialEndsAt   DateTime
+  renewsAt      DateTime?
+  monnifyRef    String?
+  meta          Json      @default("{}")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   tenant Tenant       @relation(fields: [tenantId], references: [id])
   plan   BillingPlan? @relation(fields: [planId], references: [id])
@@ -124,7 +127,7 @@ model PasswordResetToken {
   used      Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])  // 👈 only this line
+  user User @relation(fields: [userId], references: [id]) // 👈 only this line
 
   @@map("password_reset_tokens")
 }
@@ -260,7 +263,7 @@ model DocumentChunk {
   documentId String
   tenantId   String
   content    String
-  vectorId   String?  // id in Qdrant
+  vectorId   String? // id in Qdrant
   position   Int
 
   document Document @relation(fields: [documentId], references: [id])
@@ -321,13 +324,13 @@ model Message {
   id             String   @id @default(uuid())
   externalId     String?  @unique
   conversationId String
-  role           String   // customer|ai|staff
+  role           String // customer|ai|staff
   content        String
   meta           Json     @default("{}")
   createdAt      DateTime @default(now())
 
-  conversation Conversation @relation(fields: [conversationId], references: [id])
-  mediaAssets MediaAsset[]
+  conversation   Conversation    @relation(fields: [conversationId], references: [id])
+  mediaAssets    MediaAsset[]
   outboxMessages OutboxMessage[]
 
   @@index([conversationId])
@@ -338,7 +341,7 @@ model MediaAsset {
   id              String   @id @default(uuid())
   tenantId        String
   messageId       String?
-  provider        String   // e.g. whatsapp
+  provider        String // e.g. whatsapp
   providerMediaId String?
   mimeType        String?
   size            Int?
@@ -360,8 +363,8 @@ model OutboxMessage {
   to               String
   payload          Json
   messageId        String?
-  attempts         Int      @default(0)
-  status           String   @default("pending") // pending|in_progress|sent|failed
+  attempts         Int       @default(0)
+  status           String    @default("pending")
   lastError        String?
   scheduledAt      DateTime?
   sentAt           DateTime?
@@ -377,16 +380,16 @@ model OutboxMessage {
 }
 
 model Order {
-  id          String   @id @default(uuid())
-  tenantId    String
-  customerId  String?
-  status      String   @default("pending") // pending|confirmed|paid|fulfilled|cancelled
-  totalMinor  Int      @default(0)
-  currency    String   @default("NGN")
-  items       Json     @default("[]")
-  measurements Json    @default("{}")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(uuid())
+  tenantId      String
+  customerId    String?
+  status        String   @default("pending")
+  totalMinor    Int      @default(0)
+  currency      String   @default("NGN")
+  items         Json     @default("[]")
+  measurements Json      @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
   payments Payment[]
@@ -396,14 +399,14 @@ model Order {
 }
 
 model Quote {
-  id         String   @id @default(uuid())
-  tenantId   String
-  customerId String?
-  status     String   @default("draft") // draft|sent|accepted|rejected
-  amountMinor Int     @default(0)
-  currency   String   @default("NGN")
-  details    Json     @default("{}")
-  createdAt  DateTime @default(now())
+  id           String   @id @default(uuid())
+  tenantId     String
+  customerId   String?
+  status       String   @default("draft")
+  amountMinor Int       @default(0)
+  currency     String   @default("NGN")
+  details      Json     @default("{}")
+  createdAt    DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -412,18 +415,18 @@ model Quote {
 }
 
 model Payment {
-  id               String   @id @default(uuid())
-  tenantId         String
-  orderId          String?
-  reference        String   @unique
-  provider         String   @default("paystack")
+  id                 String   @id @default(uuid())
+  tenantId           String
+  orderId            String?
+  reference          String   @unique
+  provider           String   @default("monnify")
   providerReference String?  @unique
-  amountMinor      Int      @default(0)
-  currency         String   @default("NGN")
-  status           String   @default("pending") // pending|success|failed|cancelled
-  meta             Json     @default("{}")
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  amountMinor        Int      @default(0)
+  currency           String   @default("NGN")
+  status             String   @default("pending")
+  meta               Json     @default("{}")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   tenant Tenant  @relation(fields: [tenantId], references: [id])
   order  Order?  @relation(fields: [orderId], references: [id])
