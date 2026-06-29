@@ -1,6 +1,7 @@
 // src/modules/auth/auth.service.js
 import crypto from 'crypto';
 import prisma from '../../config/prisma.js';
+import { config } from '../../config/index.js';
 import { hashPassword, comparePassword } from '../../common/utils/hash.js';
 import {
   signAccessToken,
@@ -13,7 +14,7 @@ import {
   NotFoundError,
 } from '../../common/errors/index.js';
 import { sendMail } from '../../config/mailer.js';
-import { config } from '../../config/index.js';
+import { startTrial } from '../billing/billing.service.js';
 
 const buildTokenPayload = (user) => ({
   sub: user.id,
@@ -26,6 +27,14 @@ const issueTokens = (user) => ({
   accessToken: signAccessToken(buildTokenPayload(user)),
   refreshToken: signRefreshToken({ sub: user.id }),
 });
+
+const generateOtp = () =>
+  Math.floor(100000 + Math.random() * 900000).toString();
+
+const sanitizeUser = (user) => {
+  const { passwordHash, ...safe } = user;
+  return safe;
+};
 
 export const register = async ({ email, password, name, tenantName }) => {
   const existing = await prisma.user.findFirst({ where: { email } });
@@ -52,6 +61,8 @@ export const register = async ({ email, password, name, tenantName }) => {
     return { tenant, user };
   });
 
+  await startTrial(tenant.id);
+
   const tokens = issueTokens(user);
   return { tenant, user: sanitizeUser(user), ...tokens };
 };
@@ -60,8 +71,60 @@ export const login = async ({ email, password }) => {
   const user = await prisma.user.findFirst({ where: { email } });
   if (!user) throw new UnauthorizedError('Invalid credentials');
 
+  if (user.isBanned) throw new UnauthorizedError('Your account has been banned');
+
   const valid = await comparePassword(password, user.passwordHash);
   if (!valid) throw new UnauthorizedError('Invalid credentials');
+
+  // Invalidate any existing unused OTPs for this user
+  await prisma.otpToken.updateMany({
+    where: { userId: user.id, used: false },
+    data: { used: true },
+  });
+
+  // Generate and store new OTP
+  const code      = generateOtp();
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 5); // 5 minutes
+
+  await prisma.otpToken.create({
+    data: { userId: user.id, code, expiresAt },
+  });
+
+  // Send OTP via email
+  await sendMail({
+    to:      email,
+    subject: 'Your login OTP',
+    html: `
+      <p>Hi${user.name ? ` ${user.name}` : ''},</p>
+      <p>Your one-time login code is:</p>
+      <h2 style="letter-spacing: 4px;">${code}</h2>
+      <p>This code expires in <strong>5 minutes</strong>.</p>
+      <p>If you did not request this, please ignore this email.</p>
+    `,
+  });
+
+  return { message: 'OTP sent to your email' };
+};
+
+export const verifyOtp = async ({ email, otp }) => {
+  const user = await prisma.user.findFirst({ where: { email } });
+  if (!user) throw new UnauthorizedError('Invalid credentials');
+
+  if (user.isBanned) throw new UnauthorizedError('Your account has been banned');
+
+  const record = await prisma.otpToken.findFirst({
+    where: { userId: user.id, code: otp, used: false },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!record)                       throw new BadRequestError('Invalid OTP');
+  if (record.expiresAt < new Date()) throw new BadRequestError('OTP has expired');
+
+  // Mark OTP as used
+  await prisma.otpToken.update({
+    where: { id: record.id },
+    data: { used: true },
+  });
 
   const tokens = issueTokens(user);
   return { user: sanitizeUser(user), ...tokens };
@@ -82,14 +145,8 @@ export const refresh = async ({ refreshToken }) => {
   return tokens;
 };
 
-const sanitizeUser = (user) => {
-  const { passwordHash, ...safe } = user;
-  return safe;
-};
-
 export const forgotPassword = async ({ email }) => {
   const user = await prisma.user.findFirst({ where: { email } });
-
   if (!user) return;
 
   await prisma.passwordResetToken.updateMany({
@@ -144,4 +201,4 @@ export const resetPassword = async ({ token, password }) => {
   return { message: 'Password reset successfully' };
 };
 
-export default { register, login, refresh, forgotPassword, resetPassword };
+export default { register, login, verifyOtp, refresh, forgotPassword, resetPassword };

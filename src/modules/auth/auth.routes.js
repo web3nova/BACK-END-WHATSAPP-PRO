@@ -3,6 +3,7 @@ import { Router } from 'express';
 import {
   registerHandler,
   loginHandler,
+  verifyOtpHandler,
   refreshHandler,
   forgotPasswordHandler,
   resetPasswordHandler,
@@ -11,6 +12,7 @@ import { validate } from '../../middleware/validate.middleware.js';
 import {
   registerSchema,
   loginSchema,
+  verifyOtpSchema,
   refreshSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
@@ -47,32 +49,14 @@ const router = Router();
  *               tenantName:
  *                 type: string
  *                 example: Acme Corp
- *     responses:
- *       201:
- *         description: Tenant and user created
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean, example: true }
- *                 data:
- *                   type: object
- *                   properties:
- *                     accessToken: { type: string }
- *                     refreshToken: { type: string }
- *                     user: { type: object }
- *                     tenant: { type: object }
- *       400:
- *         description: Validation error or email already in use
  */
-router.post('/register', validate(registerSchema), registerHandler);
+router.post('/register', validate(registerSchema, 'body'), registerHandler);
 
 /**
  * @openapi
  * /auth/login:
  *   post:
- *     summary: Login with email + password
+ *     summary: Login with email + password — sends OTP to email
  *     tags: [Auth]
  *     security: []
  *     requestBody:
@@ -90,27 +74,32 @@ router.post('/register', validate(registerSchema), registerHandler);
  *               password:
  *                 type: string
  *                 example: password123
- *     responses:
- *       200:
- *         description: Login successful
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean, example: true }
- *                 data:
- *                   type: object
- *                   properties:
- *                     accessToken: { type: string }
- *                     refreshToken: { type: string }
- *                     user: { type: object }
- *       400:
- *         description: Validation error (missing/invalid fields)
- *       401:
- *         description: Invalid credentials
  */
-router.post('/login', validate(loginSchema), loginHandler);
+router.post('/login', validate(loginSchema, 'body'), loginHandler);
+
+/**
+ * @openapi
+ * /auth/verify-otp:
+ *   post:
+ *     summary: Verify OTP after login — returns access + refresh tokens
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, otp]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: test@example.com
+ *               otp:
+ *                 type: string
+ *                 example: "123456"
+ */
+router.post('/verify-otp', validate(verifyOtpSchema, 'body'), verifyOtpHandler);
 
 /**
  * @openapi
@@ -129,26 +118,8 @@ router.post('/login', validate(loginSchema), loginHandler);
  *             properties:
  *               refreshToken:
  *                 type: string
- *     responses:
- *       200:
- *         description: New token pair issued
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean, example: true }
- *                 data:
- *                   type: object
- *                   properties:
- *                     accessToken: { type: string }
- *                     refreshToken: { type: string }
- *       400:
- *         description: Validation error
- *       401:
- *         description: Invalid or expired refresh token
  */
-router.post('/refresh', validate(refreshSchema), refreshHandler);
+router.post('/refresh', validate(refreshSchema, 'body'), refreshHandler);
 
 /**
  * @openapi
@@ -168,24 +139,8 @@ router.post('/refresh', validate(refreshSchema), refreshHandler);
  *               email:
  *                 type: string
  *                 format: email
- *                 example: test@example.com
- *     responses:
- *       200:
- *         description: Reset link sent (always 200 to avoid email enumeration)
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean, example: true }
- *                 data:
- *                   type: object
- *                   properties:
- *                     message: { type: string }
- *       400:
- *         description: Validation error
  */
-router.post('/forgot-password', validate(forgotPasswordSchema), forgotPasswordHandler);
+router.post('/forgot-password', validate(forgotPasswordSchema, 'body'), forgotPasswordHandler);
 
 /**
  * @openapi

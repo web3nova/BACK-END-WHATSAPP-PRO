@@ -53,12 +53,14 @@ model User {
   name         String?
   roleId       String?
   isSuperAdmin Boolean  @default(false)
+  isBanned     Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   tenant              Tenant?              @relation(fields: [tenantId], references: [id])
   role                Role?                @relation(fields: [roleId], references: [id])
-  passwordResetTokens PasswordResetToken[] // 👈 add this here
+  passwordResetTokens PasswordResetToken[]
+  otpTokens         OtpToken[]
 
   @@unique([tenantId, email])
   @@map("users")
@@ -75,19 +77,46 @@ model Role {
   @@map("roles")
 }
 
-model Subscription {
-  id        String    @id @default(uuid())
-  tenantId  String    @unique
-  plan      String    @default("free")
-  status    String    @default("active")
-  renewsAt  DateTime?
-  meta      Json      @default("{}")
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+model BillingPlan {
+  id          String   @id @default(uuid())
+  name        String   @unique  // e.g. "monthly", "yearly"
+  label       String            // e.g. "Monthly Plan", "Yearly Plan"
+  priceMinor  Int               // price in kobo (NGN minor units)
+  currency    String   @default("NGN")
+  intervalDays Int              // 30 for monthly, 365 for yearly
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  subscriptions Subscription[]
+
+  @@map("billing_plans")
+}
+
+model Subscription {
+  id            String    @id @default(uuid())
+  tenantId      String    @unique
+  planId        String?
+  status        SubscriptionStatus  @default(TRIAL)
+  trialStartsAt DateTime  @default(now())
+  trialEndsAt   DateTime
+  renewsAt      DateTime?
+  monnifyRef    String?
+  meta          Json      @default("{}")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id])
+  plan   BillingPlan? @relation(fields: [planId], references: [id])
 
   @@map("subscriptions")
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  EXPIRED
+  CANCELLED
 }
 
 model PasswordResetToken {
@@ -101,6 +130,19 @@ model PasswordResetToken {
   user User @relation(fields: [userId], references: [id]) // 👈 only this line
 
   @@map("password_reset_tokens")
+}
+
+model OtpToken {
+  id        String   @id @default(uuid())
+  userId    String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("otp_tokens")
 }
 
 // ─────────────────────────────────────────────
@@ -141,7 +183,7 @@ model Product {
   tenantId    String
   name        String
   description String?
-  priceMinor  Int      @default(0) // store money in minor units
+  priceMinor  Int      @default(0)
   currency    String   @default("NGN")
   attributes  Json     @default("{}")
   stock       Int      @default(0)
@@ -170,12 +212,11 @@ model Inventory {
   @@map("inventory")
 }
 
-// JSONB catalog (diagram: "JSONB Catalogs"), AI fetches via tool-calling
 model Catalog {
   id        String   @id @default(uuid())
   tenantId  String
   name      String
-  data      Json     @default("{}") // normalized catalog payload (CSV/Form -> JSONB)
+  data      Json     @default("{}")
   version   Int      @default(1)
   createdAt DateTime @default(now())
 
@@ -207,7 +248,7 @@ model Document {
   tenantId  String
   filename  String
   mimeType  String
-  status    String   @default("pending") // pending|processing|ready|failed
+  status    String   @default("pending")
   createdAt DateTime @default(now())
 
   tenant Tenant          @relation(fields: [tenantId], references: [id])
@@ -237,9 +278,9 @@ model DocumentChunk {
 model WhatsappAccount {
   id            String  @id @default(uuid())
   tenantId      String  @unique
-  wabaId        String? // from Meta Embedded Signup
+  wabaId        String?
   phoneNumberId String?
-  accessToken   String? // encrypted at rest
+  accessToken   String?
   verified      Boolean @default(false)
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
@@ -267,7 +308,7 @@ model Conversation {
   tenantId   String
   customerId String
   channel    String   @default("whatsapp")
-  status     String   @default("open") // open|escalated|closed
+  status     String   @default("open")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -323,7 +364,7 @@ model OutboxMessage {
   payload          Json
   messageId        String?
   attempts         Int       @default(0)
-  status           String    @default("pending") // pending|in_progress|sent|failed
+  status           String    @default("pending")
   lastError        String?
   scheduledAt      DateTime?
   sentAt           DateTime?
@@ -339,16 +380,16 @@ model OutboxMessage {
 }
 
 model Order {
-  id           String   @id @default(uuid())
-  tenantId     String
-  customerId   String?
-  status       String   @default("pending") // pending|confirmed|paid|fulfilled|cancelled
-  totalMinor   Int      @default(0)
-  currency     String   @default("NGN")
-  items        Json     @default("[]")
-  measurements Json     @default("{}")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String   @id @default(uuid())
+  tenantId      String
+  customerId    String?
+  status        String   @default("pending")
+  totalMinor    Int      @default(0)
+  currency      String   @default("NGN")
+  items         Json     @default("[]")
+  measurements Json      @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
   payments Payment[]
@@ -358,14 +399,14 @@ model Order {
 }
 
 model Quote {
-  id          String   @id @default(uuid())
-  tenantId    String
-  customerId  String?
-  status      String   @default("draft") // draft|sent|accepted|rejected
-  amountMinor Int      @default(0)
-  currency    String   @default("NGN")
-  details     Json     @default("{}")
-  createdAt   DateTime @default(now())
+  id           String   @id @default(uuid())
+  tenantId     String
+  customerId   String?
+  status       String   @default("draft")
+  amountMinor Int       @default(0)
+  currency     String   @default("NGN")
+  details      Json     @default("{}")
+  createdAt    DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -374,21 +415,21 @@ model Quote {
 }
 
 model Payment {
-  id                String   @id @default(uuid())
-  tenantId          String
-  orderId           String?
-  reference         String   @unique
-  provider          String   @default("paystack")
+  id                 String   @id @default(uuid())
+  tenantId           String
+  orderId            String?
+  reference          String   @unique
+  provider           String   @default("monnify")
   providerReference String?  @unique
-  amountMinor       Int      @default(0)
-  currency          String   @default("NGN")
-  status            String   @default("pending") // pending|success|failed|cancelled
-  meta              Json     @default("{}")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  amountMinor        Int      @default(0)
+  currency           String   @default("NGN")
+  status             String   @default("pending")
+  meta               Json     @default("{}")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-  order  Order? @relation(fields: [orderId], references: [id])
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  order  Order?  @relation(fields: [orderId], references: [id])
 
   @@index([tenantId])
   @@index([orderId])

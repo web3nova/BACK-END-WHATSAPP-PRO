@@ -48,15 +48,56 @@ router.patch(
   '/tenants/:id/plan',
   validate(
     z.object({
-      params: z.object({ id: z.string().uuid() }),
-      body: z.object({
-        plan:     z.string().optional(),
-        status:   z.string().optional(),
-        renewsAt: z.coerce.date().optional(),
-      }),
-    })
+      plan:     z.string().optional(),
+      status:   z.string().optional(),
+      renewsAt: z.coerce.date().optional(),
+    }),
+    'body'
   ),
   controller.setPlan
+);
+
+/**
+ * @openapi
+ * /admin/tenants/{tenantId}/users:
+ *   get:
+ *     summary: List all users in a tenant
+ *     tags: [SuperAdmin]
+ */
+router.get('/tenants/:tenantId/users', controller.listTenantUsers);
+
+/**
+ * @openapi
+ * /admin/users/{userId}/ban:
+ *   patch:
+ *     summary: Ban a user
+ *     tags: [SuperAdmin]
+ */
+router.patch('/users/:userId/ban', controller.banUser);
+
+/**
+ * @openapi
+ * /admin/users/{userId}/unban:
+ *   patch:
+ *     summary: Unban a user
+ *     tags: [SuperAdmin]
+ */
+router.patch('/users/:userId/unban', controller.unbanUser);
+
+/**
+ * @openapi
+ * /admin/users/{userId}/role:
+ *   patch:
+ *     summary: Assign a role to a user
+ *     tags: [SuperAdmin]
+ */
+router.patch(
+  '/users/:userId/role',
+  validate(
+    z.object({ roleId: z.string().uuid() }),
+    'body'
+  ),
+  controller.assignRole
 );
 
 /**
@@ -79,12 +120,11 @@ router.post(
   '/admins',
   validate(
     z.object({
-      body: z.object({
-        email:    z.string().email(),
-        password: z.string().min(8),
-        name:     z.string().optional(),
-      }),
-    })
+      email:    z.string().email(),
+      password: z.string().min(8),
+      name:     z.string().optional(),
+    }),
+    'body'
   ),
   controller.createAdmin
 );
@@ -98,7 +138,7 @@ router.post(
  */
 router.delete(
   '/admins/:id',
-  validate(z.object({ params: z.object({ id: z.string().uuid() }) })),
+  validate(z.object({ id: z.string().uuid() }), 'params'),
   controller.deleteAdmin
 );
 

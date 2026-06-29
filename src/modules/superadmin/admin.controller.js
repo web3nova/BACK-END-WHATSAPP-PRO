@@ -36,3 +36,23 @@ export const setPlan = asyncHandler(async (req, res) => {
   const subscription = await adminService.setTenantPlan(req.params.id, req.body);
   return ok(res, subscription);
 });
+
+export const listTenantUsers = asyncHandler(async (req, res) => {
+  const users = await adminService.listTenantUsers(req.params.tenantId);
+  return ok(res, users);
+});
+
+export const banUser = asyncHandler(async (req, res) => {
+  const user = await adminService.banUser(req.params.userId);
+  return ok(res, user);
+});
+
+export const unbanUser = asyncHandler(async (req, res) => {
+  const user = await adminService.unbanUser(req.params.userId);
+  return ok(res, user);
+});
+
+export const assignRole = asyncHandler(async (req, res) => {
+  const user = await adminService.assignRole(req.params.userId, req.body.roleId);
+  return ok(res, user);
+});
