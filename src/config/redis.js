@@ -9,7 +9,7 @@ const url = config.redisUrl;
 // which makes misconfigured deployments very hard to diagnose.
 if (!url || (!url.startsWith('redis://') && !url.startsWith('rediss://'))) {
   throw new Error(
-    `[redis] REDIS_URL must start with redis:// or rediss://. Got: "${url}". ` +
+    `[redis] REDIS_URL must start with redis:// or rediss://. ` +
     `Check your Render environment variables — copy the full Upstash connection string (rediss://...).`
   );
 }
@@ -39,10 +39,7 @@ export const redis = new IORedis(url, {
 
 redis.on('connect', () => logger.info(`[redis] Connected to ${maskedUrl}`));
 redis.on('error', (err) => {
-  // Only log unique error messages to avoid log spam on repeated ECONNREFUSED
-  if (err.code === 'ECONNREFUSED') {
-    logger.error(`[redis] Connection refused at ${maskedUrl} — is the Redis server reachable?`);
-  }
+  logger.error(`[redis] Error (${err.code || err.name}) at ${maskedUrl} — ${err.message?.replace(url, maskedUrl)}`);
 });
 
 export default redis;
