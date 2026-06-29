@@ -150,18 +150,20 @@ export const deleteSuperAdmin = async (id, requestingUserId) => {
 };
 
 // ── Subscription override (manual plan changes) ──
-export const setTenantPlan = async (tenantId, { plan, status, renewsAt }) => {
+export const setTenantPlan = async (tenantId, { planId, status, renewsAt }) => {
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
   if (!tenant) throw new NotFoundError('Tenant not found');
 
+  const trialEndsAt = new Date(); // required field — set to now when overriding manually
+
   return prisma.subscription.upsert({
-    where: { tenantId },
+    where:  { tenantId },
     update: {
-      ...(plan     !== undefined ? { plan }     : {}),
+      ...(planId   !== undefined ? { planId }   : {}),
       ...(status   !== undefined ? { status }   : {}),
       ...(renewsAt !== undefined ? { renewsAt } : {}),
     },
-    create: { tenantId, plan: plan || 'free', status: status || 'active', renewsAt },
+    create: { tenantId, planId: planId || null, status: status || 'ACTIVE', renewsAt, trialEndsAt },
   });
 };
 

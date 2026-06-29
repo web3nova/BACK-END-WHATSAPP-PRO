@@ -83,6 +83,7 @@ router.post('/login', validate(loginSchema, 'body'), loginHandler);
  *   post:
  *     summary: Verify OTP after login — returns access + refresh tokens
  *     tags: [Auth]
+ *     security: []
  *     requestBody:
  *       required: true
  *       content:

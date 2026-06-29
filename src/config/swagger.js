@@ -45,6 +45,7 @@ const options = {
     join(__dirname, '../modules/rbac/rbac.routes.js'),
     join(__dirname, '../modules/tenants/tenant.routes.js'),
     join(__dirname, '../modules/billing/billing.routes.js'),
+    join(__dirname, '../modules/billing/billing.public.routes.js'),
     join(__dirname, '../modules/superadmin/admin.routes.js'),
     join(__dirname, '../modules/ai/ai.routes.js'),
     join(__dirname, '../modules/knowledge/knowledge.routes.js'),

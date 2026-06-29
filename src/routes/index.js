@@ -14,6 +14,7 @@ import userRoutes from '../modules/users/user.routes.js';
 import rbacRoutes from '../modules/rbac/rbac.routes.js';
 import tenantRoutes from '../modules/tenants/tenant.routes.js';
 import billingRoutes from '../modules/billing/billing.routes.js';
+import billingPublicRoutes from '../modules/billing/billing.public.routes.js';
 import adminRoutes from '../modules/superadmin/admin.routes.js';
 
 // ── DEV 2 — Business, Catalog, Website ─────────────────
@@ -53,6 +54,9 @@ router.use('/webhook', whatsappRoutes);
 
 // Public storefront endpoints resolve tenant by query/header/domain instead of JWT.
 router.use('/website', publicWebsiteRoutes);
+
+// Billing: plans list + Monnify webhook are public (no JWT).
+router.use('/billing', billingPublicRoutes);
 
 // ── Protected (JWT + tenant) ───────────────────────────
 // All routes below require a valid access token and an active tenant.

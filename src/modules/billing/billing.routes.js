@@ -1,21 +1,12 @@
 // src/modules/billing/billing.routes.js
 import { Router } from 'express';
-import { authMiddleware }    from '../../middleware/auth.middleware.js';
 import { requireSuperAdmin } from '../../middleware/superadmin.middleware.js';
 import { validate }          from '../../middleware/validate.middleware.js';
 import * as controller       from './billing.controller.js';
 import { initPaymentSchema, upsertPlanSchema } from './billing.validation.js';
 
+// authMiddleware + tenantMiddleware already applied globally in routes/index.js
 const router = Router();
-
-/**
- * @openapi
- * /billing/plans:
- *   get:
- *     summary: Get all active billing plans
- *     tags: [Billing]
- */
-router.get('/plans', controller.getPlans);
 
 /**
  * @openapi
@@ -23,7 +14,6 @@ router.get('/plans', controller.getPlans);
  *   post:
  *     summary: Initialize a Monnify checkout for a subscription plan
  *     tags: [Billing]
- *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
  *       content:
@@ -35,32 +25,22 @@ router.get('/plans', controller.getPlans);
  *               planId:
  *                 type: string
  *                 format: uuid
+ *     responses:
+ *       200: { description: Checkout URL and reference }
+ *       400: { description: Invalid plan or Monnify error }
  */
-router.post('/initialize', authMiddleware, validate(initPaymentSchema, 'body'), controller.initializePayment);
-
-/**
- * @openapi
- * /billing/webhook:
- *   post:
- *     summary: Monnify webhook — payment confirmation
- *     tags: [Billing]
- */
-router.post('/webhook', controller.webhook);
+router.post('/initialize', validate(initPaymentSchema, 'body'), controller.initializePayment);
 
 /**
  * @openapi
  * /billing/plans/upsert:
  *   post:
- *     summary: Admin — create or update a billing plan
+ *     summary: Super admin — create or update a billing plan
  *     tags: [Billing]
- *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201: { description: Plan created or updated }
+ *       403: { description: Super admin only }
  */
-router.post(
-  '/plans/upsert',
-  authMiddleware,
-  requireSuperAdmin,
-  validate(upsertPlanSchema, 'body'),
-  controller.upsertPlan
-);
+router.post('/plans/upsert', requireSuperAdmin, validate(upsertPlanSchema, 'body'), controller.upsertPlan);
 
 export default router;
