@@ -128,6 +128,11 @@ export const config = {
   },
 
   frontendUrl: process.env.FRONTEND_URL,
+
+  superAdmin: {
+    email:    process.env.SUPERADMIN_EMAIL,
+    password: process.env.SUPERADMIN_PASSWORD,
+  },
 };
 
 export default config;
