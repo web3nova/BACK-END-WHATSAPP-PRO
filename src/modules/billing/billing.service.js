@@ -10,13 +10,11 @@ const TRIAL_DAYS = 5;
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const monnifyBaseUrl = () =>
-  process.env.MONNIFY_ENV === 'live'
-    ? 'https://api.monnify.com'
-    : 'https://sandbox.monnify.com';
+  config.monnify.live ? 'https://api.monnify.com' : 'https://sandbox.monnify.com';
 
 const getMonnifyToken = async () => {
   const credentials = Buffer.from(
-    `${process.env.MONNIFY_API_KEY}:${process.env.MONNIFY_SECRET_KEY}`
+    `${config.monnify.apiKey}:${config.monnify.secretKey}`
   ).toString('base64');
 
   const res = await fetch(`${monnifyBaseUrl()}/api/v1/auth/login`, {
@@ -93,7 +91,7 @@ export const initializePayment = async (tenantId, planId) => {
       paymentReference:      reference,
       paymentDescription:    `${plan.label} subscription - ${tenant.name}`,
       currencyCode:          plan.currency,
-      contractCode:          process.env.MONNIFY_CONTRACT_CODE,
+      contractCode:          config.monnify.contractCode,
       redirectUrl:           `${config.frontendUrl}/billing/callback`,
       paymentMethods:        ['CARD', 'ACCOUNT_TRANSFER'],
     }),
@@ -128,7 +126,7 @@ export const initializePayment = async (tenantId, planId) => {
 export const handleWebhook = async (payload, signature) => {
   // Verify webhook signature
   const hash = crypto
-    .createHmac('sha512', process.env.MONNIFY_SECRET_KEY)
+    .createHmac('sha512', config.monnify.secretKey)
     .update(JSON.stringify(payload))
     .digest('hex');
 

@@ -28,6 +28,11 @@ const required = [
   // Payment gateway (Paystack)
   'PAYMENT_SECRET_KEY',
 
+  // Monnify (subscription billing)
+  'MONNIFY_API_KEY',
+  'MONNIFY_SECRET_KEY',
+  'MONNIFY_CONTRACT_CODE',
+
   // Email (Nodemailer)
   'EMAIL_USER',
   'EMAIL_PASSWORD',
@@ -96,6 +101,13 @@ export const config = {
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN,
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
     apiVersion: process.env.WHATSAPP_API_VERSION || 'v20.0',
+  },
+
+  monnify: {
+    apiKey: process.env.MONNIFY_API_KEY,
+    secretKey: process.env.MONNIFY_SECRET_KEY,
+    contractCode: process.env.MONNIFY_CONTRACT_CODE,
+    live: process.env.MONNIFY_ENV === 'live',
   },
 
   payment: {
