@@ -17,3 +17,9 @@ export const updateProfile = asyncHandler(async (req, res) => {
   const data = await businessService.updateProfile(getTenantId(req), req.body);
   return ok(res, data);
 });
+
+export const uploadLogo = asyncHandler(async (req, res) => {
+  if (!req.file) throw new Error('No file uploaded');
+  const data = await businessService.uploadLogo(getTenantId(req), req.file);
+  return ok(res, data);
+});
