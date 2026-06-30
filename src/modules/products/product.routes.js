@@ -1,4 +1,7 @@
 import { Router } from 'express';
+import multer from 'multer';
+import { BadRequestError } from '../../common/errors/index.js';
+import { IMAGE_MIME_TYPES } from '../../common/constants/businessProfile.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import { requireFeature } from '../../middleware/subscription.middleware.js';
 import { prisma } from '../../config/prisma.js';
@@ -14,6 +17,28 @@ const router = Router();
 const enforceProductLimit = requireFeature('maxProducts', (tenantId) =>
   prisma.product.count({ where: { tenantId } }),
 );
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (IMAGE_MIME_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new BadRequestError('Only JPG and PNG images are accepted.'));
+    }
+  },
+});
+
+/**
+ * @openapi
+ * /products/categories:
+ *   get:
+ *     tags: [Products]
+ *     summary: List supported product categories
+ *     responses:
+ *       200: { description: Product category options }
+ */
+router.get('/categories', productController.listCategories);
 
 /**
  * @openapi
@@ -26,6 +51,10 @@ const enforceProductLimit = requireFeature('maxProducts', (tenantId) =>
  *         name: q
  *         schema: { type: string }
  *         description: Search by name
+ *       - in: query
+ *         name: category
+ *         schema: { type: string, enum: [best-selling, new-arrival, featured, discount, regular, others] }
+ *         description: Filter by product category
  *       - in: query
  *         name: page
  *         schema: { type: integer, default: 1 }
@@ -49,10 +78,14 @@ router.get('/', validate(listProductsSchema, 'query'), productController.list);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [name, priceMinor]
+ *             required: [name]
  *             properties:
  *               name: { type: string }
+ *               category: { type: string, enum: [best-selling, new-arrival, featured, discount, regular, others] }
  *               description: { type: string }
+ *               review: { type: string }
+ *               imageUrl: { type: string, format: uri }
+ *               price: { type: number, description: Decimal price; converted to minor units when priceMinor is omitted }
  *               priceMinor: { type: integer, description: Price in minor currency units (kobo/cents) }
  *               currency: { type: string, default: NGN }
  *               attributes: { type: object }
@@ -103,6 +136,41 @@ router.put(
   validate(productParamsSchema, 'params'),
   validate(updateProductSchema, 'body'),
   productController.update,
+);
+
+/**
+ * @openapi
+ * /products/{id}/image:
+ *   post:
+ *     tags: [Products]
+ *     summary: Upload or replace a product image
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [image]
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *                 description: JPG or PNG image, max 5 MB
+ *     responses:
+ *       200: { description: Updated product }
+ *       400: { description: Invalid or missing image }
+ *       404: { description: Product not found }
+ */
+router.post(
+  '/:id/image',
+  validate(productParamsSchema, 'params'),
+  upload.single('image'),
+  productController.uploadImage,
 );
 
 /**

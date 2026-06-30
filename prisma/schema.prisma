@@ -110,8 +110,14 @@ model Business {
   id              String           @id @default(uuid())
   tenantId        String           @unique
   displayName     String
+  category        String?
+  categoryOther   String?
+  tagline         String?
   description     String?
+  email           String?
+  whatsappNumber  String?
   logoUrl         String?
+  logoStorageKey  String?
   settings        Json             @default("{}")
   website         WebsitePage[]
   websiteSettings WebsiteSettings?
@@ -137,15 +143,19 @@ model WebsiteSettings {
 }
 
 model Product {
-  id          String   @id @default(uuid())
-  tenantId    String
-  name        String
-  description String?
-  priceMinor  Int      @default(0) // store money in minor units
-  currency    String   @default("NGN")
-  attributes  Json     @default("{}")
-  stock       Int      @default(0)
-  createdAt   DateTime @default(now())
+  id              String   @id @default(uuid())
+  tenantId        String
+  name            String
+  category        String?
+  description     String?
+  review          String?
+  imageUrl        String?
+  imageStorageKey String?
+  priceMinor      Int      @default(0) // store money in minor units
+  currency        String   @default("NGN")
+  attributes      Json     @default("{}")
+  stock           Int      @default(0)
+  createdAt       DateTime @default(now())
 
   tenant    Tenant     @relation(fields: [tenantId], references: [id])
   inventory Inventory?

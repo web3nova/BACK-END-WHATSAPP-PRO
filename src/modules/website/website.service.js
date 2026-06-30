@@ -1,6 +1,7 @@
 import { prisma } from '../../config/prisma.js';
 import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
 import { paginate, paginatedResponse } from '../../common/utils/pagination.js';
+import { getAssetUrl } from '../../common/utils/uploadAsset.js';
 
 function normalizeHost(host = '') {
   const normalized = host.split(':')[0]?.toLowerCase();
@@ -143,7 +144,11 @@ export async function getStorefront(req) {
       select: {
         id: true,
         name: true,
+        category: true,
         description: true,
+        review: true,
+        imageUrl: true,
+        imageStorageKey: true,
         priceMinor: true,
         currency: true,
         attributes: true,
@@ -154,11 +159,25 @@ export async function getStorefront(req) {
     tenant,
     business: {
       displayName: business.displayName,
+      category: business.category,
+      categoryOther: business.categoryOther,
+      tagline: business.tagline,
       description: business.description,
-      logoUrl: business.logoUrl,
+      email: business.email,
+      whatsappNumber: business.whatsappNumber,
+      logoUrl: business.logoStorageKey
+        ? await getAssetUrl(business.logoStorageKey, business.logoUrl)
+        : business.logoUrl,
     },
     settings: settings ?? defaultSettings,
     pages,
-    products,
+    products: await Promise.all(
+      products.map(async ({ imageStorageKey, ...product }) => ({
+        ...product,
+        imageUrl: imageStorageKey
+          ? await getAssetUrl(imageStorageKey, product.imageUrl)
+          : product.imageUrl,
+      })),
+    ),
   };
 }
