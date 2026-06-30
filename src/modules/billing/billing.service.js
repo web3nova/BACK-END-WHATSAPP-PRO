@@ -59,6 +59,8 @@ export const getPlans = async () => {
 // ── Initialize Monnify Checkout ───────────────────────────────────────────────
 
 export const initializePayment = async (tenantId, planId) => {
+  if (!tenantId) throw new BadRequestError('Super admin accounts cannot initialize payments');
+
   const tenant = await prisma.tenant.findUnique({
     where:   { id: tenantId },
     include: { subscription: true, users: { take: 1, orderBy: { createdAt: 'asc' } } },
