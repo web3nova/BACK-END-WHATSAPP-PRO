@@ -14,7 +14,11 @@ import userRoutes from '../modules/users/user.routes.js';
 import rbacRoutes from '../modules/rbac/rbac.routes.js';
 import tenantRoutes from '../modules/tenants/tenant.routes.js';
 import billingRoutes from '../modules/billing/billing.routes.js';
+import billingPublicRoutes from '../modules/billing/billing.public.routes.js';
 import adminRoutes from '../modules/superadmin/admin.routes.js';
+
+// ── Onboarding ─────────────────────────────────────────
+import onboardingRoutes from '../modules/onboarding/onboarding.routes.js';
 
 // ── DEV 2 — Business, Catalog, Website ─────────────────
 import businessRoutes from '../modules/business/business.routes.js';
@@ -24,7 +28,7 @@ import catalogRoutes from '../modules/catalog/catalog.routes.js';
 import websiteRoutes, { publicWebsiteRoutes } from '../modules/website/website.routes.js';
 
 // ── DEV 4 — Conversation, Orders, Payments ─────────────
-import whatsappRoutes from '../modules/whatsapp/whatsapp.routes.js';
+import whatsappRoutes, { setupRouter as whatsappSetupRoutes } from '../modules/whatsapp/whatsapp.routes.js';
 import conversationRoutes from '../modules/conversations/conversation.routes.js';
 import customerRoutes from '../modules/customers/customer.routes.js';
 import orderRoutes from '../modules/orders/order.routes.js';
@@ -54,6 +58,9 @@ router.use('/webhook', whatsappRoutes);
 // Public storefront endpoints resolve tenant by query/header/domain instead of JWT.
 router.use('/website', publicWebsiteRoutes);
 
+// Billing: plans list + Monnify webhook are public (no JWT).
+router.use('/billing', billingPublicRoutes);
+
 // ── Protected (JWT + tenant) ───────────────────────────
 // All routes below require a valid access token and an active tenant.
 router.use(authMiddleware, tenantMiddleware);
@@ -69,6 +76,9 @@ router.use('/tenant', tenantRoutes);
 router.use('/billing', billingRoutes);
 router.use('/admin', adminRoutes);
 
+// Onboarding
+router.use('/onboarding', onboardingRoutes);
+
 // Dev 2
 router.use('/business', businessRoutes);
 router.use('/products', productRoutes);
@@ -77,6 +87,7 @@ router.use('/catalog', catalogRoutes);
 router.use('/website', websiteRoutes);
 
 // Dev 4
+router.use('/whatsapp', whatsappSetupRoutes);
 router.use('/conversations', conversationRoutes);
 router.use('/customers', customerRoutes);
 router.use('/orders', orderRoutes);

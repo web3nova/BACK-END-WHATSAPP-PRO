@@ -2,7 +2,7 @@ import { Worker } from 'bullmq';
 import { redis } from '../config/redis.js';
 import processAiReply from './processors/aiReply.job.js';
 import processOutbox from './processors/outbox.job.js';
-// other processors like embedding.job.js could be imported here
+import processNotification from './processors/notification.job.js';
 
 let workerInstance = null;
 
@@ -19,7 +19,9 @@ export const startWorker = () => {
       case 'sendOutbox':
         await processOutbox(job);
         break;
-      // Add other cases here
+      case 'sendNotification':
+        await processNotification(job);
+        break;
       default:
         console.warn(`[Worker] Unknown job name: ${job.name}`);
     }

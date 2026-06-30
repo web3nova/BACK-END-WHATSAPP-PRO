@@ -21,7 +21,7 @@ export const updateProfile = asyncHandler(async (req, res) => {
 
 export const uploadLogo = asyncHandler(async (req, res) => {
   if (!req.file) {
-    throw new BadRequestError('No logo uploaded. Send multipart/form-data with field "logo".');
+    throw new BadRequestError('No logo uploaded. Send multipart/form-data with field "image".');
   }
   const data = await businessService.uploadLogo(getTenantId(req), req.file);
   return ok(res, data);

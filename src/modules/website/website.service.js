@@ -3,12 +3,6 @@ import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
 import { paginate, paginatedResponse } from '../../common/utils/pagination.js';
 import { getAssetUrl } from '../../common/utils/uploadAsset.js';
 
-function normalizeHost(host = '') {
-  const normalized = host.split(':')[0]?.toLowerCase();
-  return normalized && !['localhost', '127.0.0.1', '0.0.0.0'].includes(normalized)
-    ? normalized
-    : undefined;
-}
 
 async function requireBusiness(tenantId) {
   const business = await prisma.business.findUnique({ where: { tenantId } });
@@ -34,12 +28,7 @@ const defaultSettings = {
   published: false,
 };
 
-async function resolveStorefrontTenant(req) {
-  const tenantId = req.query.tenantId || req.headers['x-tenant-id'];
-  const slug = req.query.slug;
-  const domain =
-    req.query.domain || normalizeHost(req.headers['x-forwarded-host'] || req.headers.host);
-
+async function resolveStorefrontTenant({ tenantId, slug, domain }) {
   const where = tenantId ? { id: tenantId } : slug ? { slug } : domain ? { domain } : null;
 
   if (!where) {
@@ -125,8 +114,9 @@ export async function updateSettings(tenantId, data) {
 }
 
 // Public storefront: tenant + business info + published pages + in-stock products.
-export async function getStorefront(req) {
-  const tenant = await resolveStorefrontTenant(req);
+// Accepts a plain { tenantId, slug, domain } object — no req dependency.
+export async function getStorefront({ tenantId, slug, domain }) {
+  const tenant = await resolveStorefrontTenant({ tenantId, slug, domain });
   const business = await requireBusiness(tenant.id);
   const [settings, pages, products] = await Promise.all([
     prisma.websiteSettings.findUnique({

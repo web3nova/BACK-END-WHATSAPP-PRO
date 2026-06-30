@@ -16,16 +16,12 @@ const options = {
     },
     servers: [
       {
-        url: `${config.appUrl}${config.apiPrefix}`,
-        description: 'Current server',
-      },
-      {
         url: `https://back-end-whatsapp-pro.onrender.com${config.apiPrefix}`,
-        description: 'Production server (Render)',
+        description: 'Production (Render)',
       },
       {
         url: `http://localhost:4000${config.apiPrefix}`,
-        description: 'Local development server',
+        description: 'Local',
       },
     ],
     components: {
@@ -45,6 +41,7 @@ const options = {
     join(__dirname, '../modules/rbac/rbac.routes.js'),
     join(__dirname, '../modules/tenants/tenant.routes.js'),
     join(__dirname, '../modules/billing/billing.routes.js'),
+    join(__dirname, '../modules/billing/billing.public.routes.js'),
     join(__dirname, '../modules/superadmin/admin.routes.js'),
     join(__dirname, '../modules/ai/ai.routes.js'),
     join(__dirname, '../modules/knowledge/knowledge.routes.js'),
@@ -60,6 +57,7 @@ const options = {
     join(__dirname, '../modules/quotes/quote.routes.js'),
     join(__dirname, '../modules/payments/payment.routes.js'),
     join(__dirname, '../modules/notifications/notification.routes.js'),
+    join(__dirname, '../modules/onboarding/onboarding.routes.js'),
   ],
 };
 

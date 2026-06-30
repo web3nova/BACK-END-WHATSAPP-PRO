@@ -18,9 +18,13 @@ export const refreshHandler = asyncHandler(async (req, res) => {
   return ok(res, result);
 });
 
+export const logoutHandler = asyncHandler(async (req, res) => {
+  await authService.logout(req.body);
+  return ok(res, { message: 'Logged out successfully' });
+});
+
 export const forgotPasswordHandler = asyncHandler(async (req, res) => {
   await authService.forgotPassword(req.body);
-  // Always return success to avoid email enumeration
   return ok(res, { message: 'If that email exists, a reset link has been sent' });
 });
 

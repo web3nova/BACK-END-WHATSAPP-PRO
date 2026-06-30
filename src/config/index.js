@@ -6,6 +6,7 @@ const required = [
   // Core
   'DATABASE_URL',
   'JWT_SECRET',
+  'JWT_REFRESH_SECRET',
   'FRONTEND_URL',
 
   // Redis / BullMQ (Upstash)
@@ -27,6 +28,11 @@ const required = [
 
   // Payment gateway (Paystack)
   'PAYMENT_SECRET_KEY',
+
+  // Monnify (subscription billing)
+  'MONNIFY_API_KEY',
+  'MONNIFY_SECRET_KEY',
+  'MONNIFY_CONTRACT_CODE',
 
   // Email (Nodemailer)
   'EMAIL_USER',
@@ -53,8 +59,8 @@ export const config = {
 
   jwt: {
     secret: process.env.JWT_SECRET,
-    expiresIn: process.env.JWT_EXPIRES_IN || '15m',
-    refreshSecret: process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+    expiresIn: process.env.JWT_EXPIRES_IN || '10m',
+    refreshSecret: process.env.JWT_REFRESH_SECRET,
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   },
 
@@ -98,6 +104,13 @@ export const config = {
     apiVersion: process.env.WHATSAPP_API_VERSION || 'v20.0',
   },
 
+  monnify: {
+    apiKey: process.env.MONNIFY_API_KEY,
+    secretKey: process.env.MONNIFY_SECRET_KEY,
+    contractCode: process.env.MONNIFY_CONTRACT_CODE,
+    baseUrl: process.env.MONNIFY_BASE_URL || 'https://api.monnify.com',
+  },
+
   payment: {
     provider: process.env.PAYMENT_PROVIDER || 'paystack',
     secretKey: process.env.PAYMENT_SECRET_KEY,
@@ -115,6 +128,11 @@ export const config = {
   },
 
   frontendUrl: process.env.FRONTEND_URL,
+
+  superAdmin: {
+    email:    process.env.SUPERADMIN_EMAIL,
+    password: process.env.SUPERADMIN_PASSWORD,
+  },
 };
 
 export default config;

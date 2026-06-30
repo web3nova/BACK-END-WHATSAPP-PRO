@@ -1,23 +1,10 @@
 import { Router } from 'express';
-import multer from 'multer';
-import { BadRequestError } from '../../common/errors/index.js';
-import { IMAGE_MIME_TYPES } from '../../common/constants/businessProfile.js';
 import { validate } from '../../middleware/validate.middleware.js';
+import { uploadImage } from '../../middleware/upload.middleware.js';
 import * as businessController from './business.controller.js';
 import { createBusinessSchema, updateBusinessSchema } from './business.validation.js';
 
 const router = Router();
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 2 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    if (IMAGE_MIME_TYPES.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new BadRequestError('Only JPG and PNG images are accepted.'));
-    }
-  },
-});
 
 /**
  * @openapi
@@ -105,23 +92,27 @@ router.put('/', validate(updateBusinessSchema, 'body'), businessController.updat
  *   post:
  *     tags: [Business]
  *     summary: Upload or replace the business logo
+ *     description: Upload a logo image (jpeg/png/webp/gif, max 5MB). Returns the updated business profile.
  *     requestBody:
  *       required: true
  *       content:
  *         multipart/form-data:
  *           schema:
  *             type: object
- *             required: [logo]
+ *             required: [image]
  *             properties:
- *               logo:
+ *               image:
  *                 type: string
  *                 format: binary
- *                 description: JPG or PNG image, max 2 MB
+ *                 description: Logo image
  *     responses:
- *       200: { description: Updated business profile }
- *       400: { description: Invalid or missing image }
- *       404: { description: Business profile not found }
+ *       200:
+ *         description: Updated business profile
+ *       400:
+ *         description: No file or unsupported file type
+ *       404:
+ *         description: Business profile not found
  */
-router.post('/logo', upload.single('logo'), businessController.uploadLogo);
+router.post('/logo', uploadImage, businessController.uploadLogo);
 
 export default router;

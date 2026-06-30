@@ -20,8 +20,8 @@ export const requireFeature = (feature, getCurrentCount = null) =>
       const plan   = subscription?.plan ?? 'free';
       const status = subscription?.status ?? 'active';
 
-      if (status === 'cancelled' || status === 'past_due') {
-        return next(new ForbiddenError(`Subscription is ${status}. Please renew to continue.`));
+      if (status === 'CANCELLED' || status === 'EXPIRED') {
+        return next(new ForbiddenError(`Subscription is ${status.toLowerCase()}. Please renew to continue.`));
       }
 
       const limits = getPlanLimits(plan);

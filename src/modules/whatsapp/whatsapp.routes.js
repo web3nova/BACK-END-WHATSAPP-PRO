@@ -1,16 +1,9 @@
 import { Router } from 'express';
-
-// ============================================================
-// WhatsApp Webhook — Owner: Dev 4
-// 👉 START HERE. This stub is already mounted in src/routes/index.js.
-// Build the matching *.controller.js + *.service.js in this folder,
-// then declare routes below.
-// Pattern + conventions: docs/architecture.md  (worked example: src/modules/knowledge)
-// ============================================================
-const router = Router();
-
 import * as controller from './whatsapp.controller.js';
 import { verifySignature } from './whatsapp.middleware.js';
+
+// ── Public: Meta webhook (no JWT — verified by signature) ──────────────
+const router = Router();
 
 /**
  * @openapi
@@ -55,5 +48,41 @@ router.get('/', controller.verifyWebhook);
  *         description: Message received
  */
 router.post('/', verifySignature, controller.receiveWebhook);
+
+// ── Protected: WhatsApp business setup (JWT + tenant required) ──────────
+export const setupRouter = Router();
+
+/**
+ * @openapi
+ * /whatsapp/connect:
+ *   post:
+ *     summary: Connect WhatsApp via Meta Embedded Signup
+ *     tags: [WhatsApp]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [code, wabaId, phoneNumberId]
+ *             properties:
+ *               code:
+ *                 type: string
+ *                 description: OAuth code from Meta Embedded Signup popup
+ *               redirectUri:
+ *                 type: string
+ *               wabaId:
+ *                 type: string
+ *                 description: WhatsApp Business Account ID from Meta
+ *               phoneNumberId:
+ *                 type: string
+ *                 description: Phone Number ID from Meta
+ *     responses:
+ *       200:
+ *         description: WhatsApp account connected
+ */
+setupRouter.post('/connect', controller.connect);
 
 export default router;

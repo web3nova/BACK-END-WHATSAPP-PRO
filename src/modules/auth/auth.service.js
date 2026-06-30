@@ -1,6 +1,7 @@
 // src/modules/auth/auth.service.js
 import crypto from 'crypto';
 import prisma from '../../config/prisma.js';
+import { config } from '../../config/index.js';
 import { hashPassword, comparePassword } from '../../common/utils/hash.js';
 import {
   signAccessToken,
@@ -13,7 +14,9 @@ import {
   NotFoundError,
 } from '../../common/errors/index.js';
 import { sendMail } from '../../config/mailer.js';
-import { config } from '../../config/index.js';
+import { startTrial } from '../billing/billing.service.js';
+
+const INACTIVITY_MS = 10 * 60 * 1000;
 
 const buildTokenPayload = (user) => ({
   sub: user.id,
@@ -22,17 +25,34 @@ const buildTokenPayload = (user) => ({
   roleId: user.roleId,
 });
 
-const issueTokens = (user) => ({
-  accessToken: signAccessToken(buildTokenPayload(user)),
-  refreshToken: signRefreshToken({ sub: user.id }),
-});
+const issueTokens = async (user) => {
+  const accessToken = signAccessToken(buildTokenPayload(user));
+  const { token: refreshToken, jti, expiresAt } = signRefreshToken({ sub: user.id });
+
+  await prisma.refreshToken.create({
+    data: { userId: user.id, jti, expiresAt },
+  });
+
+  return { accessToken, refreshToken };
+};
+
+const sanitizeUser = (user) => {
+  const { passwordHash, ...safe } = user;
+  return safe;
+};
 
 export const register = async ({ email, password, name, tenantName }) => {
   const existing = await prisma.user.findFirst({ where: { email } });
   if (existing) throw new BadRequestError('Email already in use');
 
   const passwordHash = await hashPassword(password);
-  const slug = tenantName.toLowerCase().trim().replace(/\s+/g, '-');
+  const baseSlug = tenantName.toLowerCase().trim().replace(/\s+/g, '-');
+
+  // Ensure the slug is unique — append a short hex suffix when taken
+  const slugTaken = await prisma.tenant.findUnique({ where: { slug: baseSlug } });
+  const slug = slugTaken
+    ? `${baseSlug}-${crypto.randomBytes(3).toString('hex')}`
+    : baseSlug;
 
   const { tenant, user } = await prisma.$transaction(async (tx) => {
     const tenant = await tx.tenant.create({
@@ -52,18 +72,22 @@ export const register = async ({ email, password, name, tenantName }) => {
     return { tenant, user };
   });
 
-  const tokens = issueTokens(user);
-  return { tenant, user: sanitizeUser(user), ...tokens };
+  await startTrial(tenant.id);
+
+  const tokens = await issueTokens(user);
+  return { user: sanitizeUser(user), ...tokens };
 };
 
 export const login = async ({ email, password }) => {
   const user = await prisma.user.findFirst({ where: { email } });
   if (!user) throw new UnauthorizedError('Invalid credentials');
 
+  if (user.isBanned) throw new UnauthorizedError('Your account has been banned');
+
   const valid = await comparePassword(password, user.passwordHash);
   if (!valid) throw new UnauthorizedError('Invalid credentials');
 
-  const tokens = issueTokens(user);
+  const tokens = await issueTokens(user);
   return { user: sanitizeUser(user), ...tokens };
 };
 
@@ -75,21 +99,46 @@ export const refresh = async ({ refreshToken }) => {
     throw new UnauthorizedError('Invalid or expired refresh token');
   }
 
+  // Tokens issued before the jti field was introduced have no jti claim
+  if (!payload.jti) throw new UnauthorizedError('Invalid or expired refresh token');
+
+  const record = await prisma.refreshToken.findUnique({
+    where: { jti: payload.jti },
+  });
+
+  if (!record) throw new UnauthorizedError('Session not found, please log in again');
+
+  // Enforce 10-minute inactivity timeout
+  if (Date.now() - record.lastUsedAt.getTime() > INACTIVITY_MS) {
+    await prisma.refreshToken.delete({ where: { id: record.id } });
+    throw new UnauthorizedError('Session expired due to inactivity');
+  }
+
   const user = await prisma.user.findUnique({ where: { id: payload.sub } });
   if (!user) throw new NotFoundError('User not found');
 
-  const tokens = issueTokens(user);
-  return tokens;
+  await prisma.refreshToken.update({
+    where: { id: record.id },
+    data: { lastUsedAt: new Date() },
+  });
+
+  return { accessToken: signAccessToken(buildTokenPayload(user)) };
 };
 
-const sanitizeUser = (user) => {
-  const { passwordHash, ...safe } = user;
-  return safe;
+export const logout = async ({ refreshToken }) => {
+  let payload;
+  try {
+    payload = verifyRefreshToken(refreshToken);
+  } catch {
+    return; // Already invalid — nothing to invalidate
+  }
+  if (payload?.jti) {
+    await prisma.refreshToken.deleteMany({ where: { jti: payload.jti } });
+  }
 };
 
 export const forgotPassword = async ({ email }) => {
   const user = await prisma.user.findFirst({ where: { email } });
-
   if (!user) return;
 
   await prisma.passwordResetToken.updateMany({
@@ -144,4 +193,4 @@ export const resetPassword = async ({ token, password }) => {
   return { message: 'Password reset successfully' };
 };
 
-export default { register, login, refresh, forgotPassword, resetPassword };
+export default { register, login, refresh, logout, forgotPassword, resetPassword };

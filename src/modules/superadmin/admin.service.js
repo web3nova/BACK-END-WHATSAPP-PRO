@@ -54,6 +54,66 @@ export const activateTenant = async (id) => {
   });
 };
 
+// ── User management ──
+export const listTenantUsers = async (tenantId) => {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant) throw new NotFoundError('Tenant not found');
+
+  return prisma.user.findMany({
+    where: { tenantId, isSuperAdmin: false },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      isBanned: true,
+      roleId: true,
+      role: { select: { id: true, name: true } },
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+};
+
+export const banUser = async (userId) => {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new NotFoundError('User not found');
+  if (user.isSuperAdmin) throw new BadRequestError('Cannot ban a super admin');
+  if (user.isBanned) throw new BadRequestError('User is already banned');
+
+  return prisma.user.update({
+    where: { id: userId },
+    data: { isBanned: true },
+    select: { id: true, email: true, name: true, isBanned: true },
+  });
+};
+
+export const unbanUser = async (userId) => {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new NotFoundError('User not found');
+  if (!user.isBanned) throw new BadRequestError('User is not banned');
+
+  return prisma.user.update({
+    where: { id: userId },
+    data: { isBanned: false },
+    select: { id: true, email: true, name: true, isBanned: true },
+  });
+};
+
+export const assignRole = async (userId, roleId) => {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new NotFoundError('User not found');
+  if (user.isSuperAdmin) throw new BadRequestError('Cannot assign roles to a super admin');
+
+  const role = await prisma.role.findUnique({ where: { id: roleId } });
+  if (!role) throw new NotFoundError('Role not found');
+
+  return prisma.user.update({
+    where: { id: userId },
+    data: { roleId },
+    select: { id: true, email: true, name: true, roleId: true, role: { select: { id: true, name: true } } },
+  });
+};
+
 // ── Super admin user management ──
 export const listSuperAdmins = async () => {
   return prisma.user.findMany({
@@ -90,18 +150,20 @@ export const deleteSuperAdmin = async (id, requestingUserId) => {
 };
 
 // ── Subscription override (manual plan changes) ──
-export const setTenantPlan = async (tenantId, { plan, status, renewsAt }) => {
+export const setTenantPlan = async (tenantId, { planId, status, renewsAt }) => {
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
   if (!tenant) throw new NotFoundError('Tenant not found');
 
+  const trialEndsAt = new Date(); // required field — set to now when overriding manually
+
   return prisma.subscription.upsert({
-    where: { tenantId },
+    where:  { tenantId },
     update: {
-      ...(plan     !== undefined ? { plan }     : {}),
+      ...(planId   !== undefined ? { planId }   : {}),
       ...(status   !== undefined ? { status }   : {}),
       ...(renewsAt !== undefined ? { renewsAt } : {}),
     },
-    create: { tenantId, plan: plan || 'free', status: status || 'active', renewsAt },
+    create: { tenantId, planId: planId || null, status: status || 'ACTIVE', renewsAt, trialEndsAt },
   });
 };
 
@@ -109,6 +171,10 @@ export default {
   getPlatformStats,
   suspendTenant,
   activateTenant,
+  listTenantUsers,
+  banUser,
+  unbanUser,
+  assignRole,
   listSuperAdmins,
   createSuperAdmin,
   deleteSuperAdmin,

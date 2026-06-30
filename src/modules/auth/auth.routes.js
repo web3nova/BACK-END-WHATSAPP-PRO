@@ -4,6 +4,7 @@ import {
   registerHandler,
   loginHandler,
   refreshHandler,
+  logoutHandler,
   forgotPasswordHandler,
   resetPasswordHandler,
 } from './auth.controller.js';
@@ -12,6 +13,7 @@ import {
   registerSchema,
   loginSchema,
   refreshSchema,
+  logoutSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
 } from './auth.validation.js';
@@ -23,6 +25,7 @@ const router = Router();
  * /auth/register:
  *   post:
  *     summary: Register a new tenant + first user
+ *     description: Creates a tenant and owner account. Returns access + refresh tokens immediately.
  *     tags: [Auth]
  *     security: []
  *     requestBody:
@@ -49,7 +52,7 @@ const router = Router();
  *                 example: Acme Corp
  *     responses:
  *       201:
- *         description: Tenant and user created
+ *         description: Registration successful — tokens issued
  *         content:
  *           application/json:
  *             schema:
@@ -61,18 +64,23 @@ const router = Router();
  *                   properties:
  *                     accessToken: { type: string }
  *                     refreshToken: { type: string }
- *                     user: { type: object }
- *                     tenant: { type: object }
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         id: { type: string }
+ *                         email: { type: string }
+ *                         name: { type: string }
+ *                         tenantId: { type: string }
  *       400:
- *         description: Validation error or email already in use
+ *         description: Email already in use or invalid payload
  */
-router.post('/register', validate(registerSchema), registerHandler);
+router.post('/register', validate(registerSchema, 'body'), registerHandler);
 
 /**
  * @openapi
  * /auth/login:
  *   post:
- *     summary: Login with email + password
+ *     summary: Login with email + password — returns tokens
  *     tags: [Auth]
  *     security: []
  *     requestBody:
@@ -92,7 +100,7 @@ router.post('/register', validate(registerSchema), registerHandler);
  *                 example: password123
  *     responses:
  *       200:
- *         description: Login successful
+ *         description: Login successful — tokens issued
  *         content:
  *           application/json:
  *             schema:
@@ -104,19 +112,24 @@ router.post('/register', validate(registerSchema), registerHandler);
  *                   properties:
  *                     accessToken: { type: string }
  *                     refreshToken: { type: string }
- *                     user: { type: object }
- *       400:
- *         description: Validation error (missing/invalid fields)
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         id: { type: string }
+ *                         email: { type: string }
+ *                         name: { type: string }
+ *                         tenantId: { type: string }
  *       401:
- *         description: Invalid credentials
+ *         description: Invalid credentials or banned account
  */
-router.post('/login', validate(loginSchema), loginHandler);
+router.post('/login', validate(loginSchema, 'body'), loginHandler);
 
 /**
  * @openapi
  * /auth/refresh:
  *   post:
  *     summary: Exchange a refresh token for a new access token
+ *     description: Issues a new access token. Returns 401 if the session has been inactive for more than 10 minutes — the user must re-authenticate via /auth/login.
  *     tags: [Auth]
  *     security: []
  *     requestBody:
@@ -129,9 +142,10 @@ router.post('/login', validate(loginSchema), loginHandler);
  *             properties:
  *               refreshToken:
  *                 type: string
+ *                 example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
  *     responses:
  *       200:
- *         description: New token pair issued
+ *         description: New access token issued
  *         content:
  *           application/json:
  *             schema:
@@ -142,13 +156,44 @@ router.post('/login', validate(loginSchema), loginHandler);
  *                   type: object
  *                   properties:
  *                     accessToken: { type: string }
- *                     refreshToken: { type: string }
- *       400:
- *         description: Validation error
  *       401:
- *         description: Invalid or expired refresh token
+ *         description: Invalid/expired refresh token or session expired due to inactivity
  */
-router.post('/refresh', validate(refreshSchema), refreshHandler);
+router.post('/refresh', validate(refreshSchema, 'body'), refreshHandler);
+
+/**
+ * @openapi
+ * /auth/logout:
+ *   post:
+ *     summary: Logout — invalidates the refresh token
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [refreshToken]
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *                 example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *     responses:
+ *       200:
+ *         description: Logged out successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     message: { type: string, example: "Logged out successfully" }
+ */
+router.post('/logout', validate(logoutSchema, 'body'), logoutHandler);
 
 /**
  * @openapi
@@ -168,10 +213,9 @@ router.post('/refresh', validate(refreshSchema), refreshHandler);
  *               email:
  *                 type: string
  *                 format: email
- *                 example: test@example.com
  *     responses:
  *       200:
- *         description: Reset link sent (always 200 to avoid email enumeration)
+ *         description: Reset email dispatched (response is identical whether the email exists or not)
  *         content:
  *           application/json:
  *             schema:
@@ -181,11 +225,9 @@ router.post('/refresh', validate(refreshSchema), refreshHandler);
  *                 data:
  *                   type: object
  *                   properties:
- *                     message: { type: string }
- *       400:
- *         description: Validation error
+ *                     message: { type: string, example: "If that email exists, a reset link has been sent" }
  */
-router.post('/forgot-password', validate(forgotPasswordSchema), forgotPasswordHandler);
+router.post('/forgot-password', validate(forgotPasswordSchema, 'body'), forgotPasswordHandler);
 
 /**
  * @openapi
@@ -224,6 +266,6 @@ router.post('/forgot-password', validate(forgotPasswordSchema), forgotPasswordHa
  *       400:
  *         description: Invalid, expired, or already-used reset token
  */
-router.post('/reset-password', validate(resetPasswordSchema), resetPasswordHandler);
+router.post('/reset-password', validate(resetPasswordSchema, 'body'), resetPasswordHandler);
 
 export default router;
