@@ -17,6 +17,9 @@ import billingRoutes from '../modules/billing/billing.routes.js';
 import billingPublicRoutes from '../modules/billing/billing.public.routes.js';
 import adminRoutes from '../modules/superadmin/admin.routes.js';
 
+// ── Onboarding ─────────────────────────────────────────
+import onboardingRoutes from '../modules/onboarding/onboarding.routes.js';
+
 // ── DEV 2 — Business, Catalog, Website ─────────────────
 import businessRoutes from '../modules/business/business.routes.js';
 import productRoutes from '../modules/products/product.routes.js';
@@ -72,6 +75,9 @@ router.use('/rbac', rbacRoutes);
 router.use('/tenant', tenantRoutes);
 router.use('/billing', billingRoutes);
 router.use('/admin', adminRoutes);
+
+// Onboarding
+router.use('/onboarding', onboardingRoutes);
 
 // Dev 2
 router.use('/business', businessRoutes);
