@@ -31,6 +31,7 @@ export const verifyWebhook = (req, res) => {
  * Body: { code, redirectUri, wabaId, phoneNumberId }
  */
 export const connect = asyncHandler(async (req, res) => {
+  if (!req.tenant) throw new BadRequestError('This endpoint requires a tenant account');
   const { code, redirectUri, wabaId, phoneNumberId } = req.body;
   const result = await exchangeCodeForAccount({
     tenantId: req.tenant.id,
