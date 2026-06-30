@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { validate } from '../../middleware/validate.middleware.js';
 import * as businessController from './business.controller.js';
 import { createBusinessSchema, updateBusinessSchema } from './business.validation.js';
+import { uploadImage } from '../../middleware/upload.middleware.js';
 
 const router = Router();
 
@@ -63,5 +64,43 @@ router.post('/', validate(createBusinessSchema, 'body'), businessController.crea
  *       404: { description: Profile not found }
  */
 router.put('/', validate(updateBusinessSchema, 'body'), businessController.updateProfile);
+
+/**
+ * @openapi
+ * /business/logo:
+ *   post:
+ *     tags: [Business]
+ *     summary: Upload business logo
+ *     description: Upload a logo image (jpeg/png/webp/gif, max 5MB). Returns a signed URL stored on the business profile.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [image]
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Logo uploaded — signed URL returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     logoUrl: { type: string, format: uri }
+ *       400:
+ *         description: No file or unsupported file type
+ *       404:
+ *         description: Business profile not found
+ */
+router.post('/logo', uploadImage, businessController.uploadLogo);
 
 export default router;
