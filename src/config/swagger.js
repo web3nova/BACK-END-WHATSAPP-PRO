@@ -57,6 +57,7 @@ const options = {
     join(__dirname, '../modules/quotes/quote.routes.js'),
     join(__dirname, '../modules/payments/payment.routes.js'),
     join(__dirname, '../modules/notifications/notification.routes.js'),
+    join(__dirname, '../modules/onboarding/onboarding.routes.js'),
   ],
 };
 
