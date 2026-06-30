@@ -25,7 +25,7 @@ import catalogRoutes from '../modules/catalog/catalog.routes.js';
 import websiteRoutes, { publicWebsiteRoutes } from '../modules/website/website.routes.js';
 
 // ── DEV 4 — Conversation, Orders, Payments ─────────────
-import whatsappRoutes from '../modules/whatsapp/whatsapp.routes.js';
+import whatsappRoutes, { setupRouter as whatsappSetupRoutes } from '../modules/whatsapp/whatsapp.routes.js';
 import conversationRoutes from '../modules/conversations/conversation.routes.js';
 import customerRoutes from '../modules/customers/customer.routes.js';
 import orderRoutes from '../modules/orders/order.routes.js';
@@ -81,6 +81,7 @@ router.use('/catalog', catalogRoutes);
 router.use('/website', websiteRoutes);
 
 // Dev 4
+router.use('/whatsapp', whatsappSetupRoutes);
 router.use('/conversations', conversationRoutes);
 router.use('/customers', customerRoutes);
 router.use('/orders', orderRoutes);

@@ -1,5 +1,8 @@
 import { BadRequestError } from '../../common/errors/index.js';
+import { asyncHandler } from '../../common/utils/asyncHandler.js';
+import { ok } from '../../common/utils/apiResponse.js';
 import * as whatsappService from './whatsapp.service.js';
+import { exchangeCodeForAccount } from './embeddedSignup.service.js';
 
 /**
  * Handle Meta's webhook verification request
@@ -21,6 +24,23 @@ export const verifyWebhook = (req, res) => {
 
   throw new BadRequestError('Missing parameters');
 };
+
+/**
+ * POST /whatsapp/connect — Meta Embedded Signup
+ * Called by the frontend after the Meta OAuth popup completes.
+ * Body: { code, redirectUri, wabaId, phoneNumberId }
+ */
+export const connect = asyncHandler(async (req, res) => {
+  const { code, redirectUri, wabaId, phoneNumberId } = req.body;
+  const result = await exchangeCodeForAccount({
+    tenantId: req.tenant.id,
+    code,
+    redirectUri,
+    wabaId,
+    phoneNumberId,
+  });
+  return ok(res, result);
+});
 
 /**
  * Receive incoming messages from WhatsApp
