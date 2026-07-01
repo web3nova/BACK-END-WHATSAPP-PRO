@@ -1,6 +1,7 @@
 import IORedis from 'ioredis';
 import { config } from './index.js';
 import { logger } from './logger.js';
+import { setInterval } from 'node:timers';
 
 const url = config.redisUrl;
 
