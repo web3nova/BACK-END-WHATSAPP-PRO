@@ -23,8 +23,11 @@ router.get('/categories', businessController.listCategories);
  *   get:
  *     tags: [Business]
  *     summary: Get the business profile for the current tenant
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200: { description: Business profile }
+ *       401: { description: Unauthorized }
  *       404: { description: Not found }
  */
 router.get('/', businessController.getProfile);
@@ -35,6 +38,8 @@ router.get('/', businessController.getProfile);
  *   post:
  *     tags: [Business]
  *     summary: Create business profile (one per tenant)
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -55,6 +60,7 @@ router.get('/', businessController.getProfile);
  *     responses:
  *       201: { description: Business profile created }
  *       400: { description: Profile already exists }
+ *       401: { description: Unauthorized }
  */
 router.post('/', validate(createBusinessSchema, 'body'), businessController.createProfile);
 
@@ -64,6 +70,8 @@ router.post('/', validate(createBusinessSchema, 'body'), businessController.crea
  *   put:
  *     tags: [Business]
  *     summary: Update business profile
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -82,6 +90,7 @@ router.post('/', validate(createBusinessSchema, 'body'), businessController.crea
  *               settings: { type: object }
  *     responses:
  *       200: { description: Updated business profile }
+ *       401: { description: Unauthorized }
  *       404: { description: Profile not found }
  */
 router.put('/', validate(updateBusinessSchema, 'body'), businessController.updateProfile);
@@ -93,6 +102,8 @@ router.put('/', validate(updateBusinessSchema, 'body'), businessController.updat
  *     tags: [Business]
  *     summary: Upload or replace the business logo
  *     description: Upload a logo image (jpeg/png/webp/gif, max 5MB). Returns the updated business profile.
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -110,6 +121,8 @@ router.put('/', validate(updateBusinessSchema, 'body'), businessController.updat
  *         description: Updated business profile
  *       400:
  *         description: No file or unsupported file type
+ *       401:
+ *         description: Unauthorized
  *       404:
  *         description: Business profile not found
  */
