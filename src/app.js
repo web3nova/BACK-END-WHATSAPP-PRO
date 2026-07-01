@@ -40,7 +40,15 @@ export function createApp() {
   app.use('/storage', express.static(path.join(process.cwd(), 'storage')));
 
   // Swagger UI
-  app.use(`${config.apiPrefix}/docs`, swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  app.use(
+  `${config.apiPrefix}/docs`,
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerSpec, {
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+  }),
+);
 
   // Mount the API gateway under the configured prefix.
   app.use(config.apiPrefix, routes);
