@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { authMiddleware } from '../../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../../middleware/tenant.middleware.js';
 import { getStatus, markStepComplete } from './onboarding.controller.js';
-import { requirePermission } from '../../middleware/rbac.middleware.js';
 
 const router = Router();
 
@@ -56,9 +55,9 @@ router.get('/status', getStatus);
  *     description: >
  *       Forces a specific onboarding step to a completed state for the current
  *       tenant, regardless of the underlying data (e.g. support waiving WhatsApp
- *       verification). Requires the 'onboarding:override' permission (super admins
- *       bypass this automatically). The 'account' step cannot be overridden since
- *       it is trivially always true.
+ *       verification). Requires super admin status or the 'onboarding:override'
+ *       permission. The 'account' step cannot be overridden since it is trivially
+ *       always true.
  *     tags: [Onboarding]
  *     security:
  *       - bearerAuth: []
@@ -103,8 +102,8 @@ router.get('/status', getStatus);
  *       400:
  *         description: Invalid or non-overridable step
  *       403:
- *         description: Caller lacks the 'onboarding:override' permission
+ *         description: Caller is not a super admin or lacks the 'onboarding:override' permission
  */
-router.post('/steps/:step/complete', requirePermission('onboarding:override'), markStepComplete);
+router.post('/steps/:step/complete', markStepComplete);
 
 export default router;
