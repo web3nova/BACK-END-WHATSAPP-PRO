@@ -55,6 +55,17 @@ export async function getStepData(tenantId, step) {
  * Save (upsert) the form data for a step, and bump the tenant's overall
  * onboarding progress pointer (currentStep, lastActiveAt) for drop-off tracking.
  * Pass { complete: true } once the step's data is final, not just a draft save.
+ *
+ * IMPORTANT: `data` is merged (shallow) into whatever was previously saved for
+ * this step, not overwritten. The "business" step in particular is fed by a
+ * multi-panel wizard (identity -> compliance -> operations -> presence/hours)
+ * that calls this once per panel with only that panel's fields. A plain
+ * overwrite would wipe out earlier panels' data on every subsequent save.
+ * Shallow merge is sufficient here because each panel contributes a disjoint
+ * set of top-level field names (e.g. businessName vs cacRegistrationNumber vs
+ * numberOfActiveClients) — none of them share or nest into the same key.
+ * If a future panel introduces nested/array fields that need deep merging,
+ * swap the spread below for a deep-merge helper (e.g. lodash.merge).
  */
 export async function saveStepData(tenantId, step, data, { complete = false } = {}) {
   if (!OVERRIDABLE_STEPS.includes(step)) {
@@ -71,16 +82,23 @@ export async function saveStepData(tenantId, step, data, { complete = false } = 
     create: { tenantId, currentStep: step },
   });
 
+  const existing = await prisma.onboardingStepData.findUnique({
+    where: { tenantId_step: { tenantId, step } },
+    select: { data: true },
+  });
+
+  const mergedData = { ...(existing?.data ?? {}), ...data };
+
   return prisma.onboardingStepData.upsert({
     where: { tenantId_step: { tenantId, step } },
     update: {
-      data,
+      data: mergedData,
       ...(complete ? { completedAt: new Date() } : {}),
     },
     create: {
       tenantId,
       step,
-      data,
+      data: mergedData,
       completedAt: complete ? new Date() : null,
     },
   });

@@ -16,12 +16,12 @@ const options = {
     },
     servers: [
       {
-        url: `https://back-end-whatsapp-pro.onrender.com${config.apiPrefix}`,
-        description: 'Production (Render)',
-      },
-      {
         url: `http://localhost:4000${config.apiPrefix}`,
         description: 'Local',
+      },
+      {
+        url: `https://back-end-whatsapp-pro.onrender.com${config.apiPrefix}`,
+        description: 'Production (Render)',
       },
     ],
     components: {

@@ -1,4 +1,6 @@
 BACK-END-WHATSAPP-PRO/
+├── .agents/
+├── .env
 ├── .env.example
 ├── .eslintrc.json
 ├── .gitignore
@@ -6,7 +8,9 @@ BACK-END-WHATSAPP-PRO/
 ├── Dockerfile
 ├── README.md
 ├── docker-compose.yml
+├── eslint.config.js
 ├── package.json
+├── package-lock.json
 ├── docs/
 │   ├── api/
 │   │   └── openapi.yaml
@@ -36,7 +40,9 @@ BACK-END-WHATSAPP-PRO/
 │   │       ├── hash.js
 │   │       ├── pagination.js
 │   │       ├── slugify.js
-│   │       └── token.js
+│   │       ├── tenantContext.js
+│   │       ├── token.js
+│   │       └── uploadAsset.js
 │   ├── config/
 │   │   ├── index.js
 │   │   ├── logger.js
@@ -65,7 +71,9 @@ BACK-END-WHATSAPP-PRO/
 │   │   ├── rateLimiter.middleware.js
 │   │   ├── rbac.middleware.js
 │   │   ├── subscription.middleware.js
+│   │   ├── superadmin.middleware.js
 │   │   ├── tenant.middleware.js
+│   │   ├── upload.middleware.js
 │   │   └── validate.middleware.js
 │   ├── modules/
 │   │   ├── ai/
@@ -93,8 +101,10 @@ BACK-END-WHATSAPP-PRO/
 │   │   │   └── auth.validation.js
 │   │   ├── billing/
 │   │   │   ├── billing.controller.js
+│   │   │   ├── billing.public.routes.js
 │   │   │   ├── billing.routes.js
 │   │   │   ├── billing.service.js
+│   │   │   ├── billing.validation.js
 │   │   │   └── webhooks/
 │   │   │       └── payment.webhook.js
 │   │   ├── business/
@@ -105,7 +115,8 @@ BACK-END-WHATSAPP-PRO/
 │   │   ├── catalog/
 │   │   │   ├── catalog.controller.js
 │   │   │   ├── catalog.routes.js
-│   │   │   └── catalog.service.js
+│   │   │   ├── catalog.service.js
+│   │   │   └── catalog.validation.js
 │   │   ├── conversations/
 │   │   │   ├── conversation.controller.js
 │   │   │   ├── conversation.routes.js
@@ -117,7 +128,8 @@ BACK-END-WHATSAPP-PRO/
 │   │   ├── inventory/
 │   │   │   ├── inventory.controller.js
 │   │   │   ├── inventory.routes.js
-│   │   │   └── inventory.service.js
+│   │   │   ├── inventory.service.js
+│   │   │   └── inventory.validation.js
 │   │   ├── knowledge/
 │   │   │   ├── knowledge.controller.js
 │   │   │   ├── knowledge.routes.js
@@ -127,6 +139,12 @@ BACK-END-WHATSAPP-PRO/
 │   │   │       ├── embedder.js
 │   │   │       ├── extractor.js
 │   │   │       └── retriever.js
+│   │   ├── onboarding/
+│   │   │   ├── onboarding.admin.routes.js
+│   │   │   ├── onboarding.controller.js
+│   │   │   ├── onboarding.routes.js
+│   │   │   ├── onboarding.service.js
+│   │   │   └── onboarding.validation.js
 │   │   ├── notifications/
 │   │   │   ├── notification.controller.js
 │   │   │   ├── notification.routes.js
@@ -174,10 +192,13 @@ BACK-END-WHATSAPP-PRO/
 │   │   ├── website/
 │   │   │   ├── website.controller.js
 │   │   │   ├── website.routes.js
-│   │   │   └── website.service.js
+│   │   │   ├── website.service.js
+│   │   │   └── website.validation.js
 │   │   └── whatsapp/
 │   │       ├── embeddedSignup.service.js
+│   │       ├── media.service.js
 │   │       ├── whatsapp.controller.js
+│   │       ├── whatsapp.middleware.js
 │   │       ├── whatsapp.parser.js
 │   │       ├── whatsapp.routes.js
 │   │       └── whatsapp.service.js
