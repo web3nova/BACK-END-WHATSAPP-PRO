@@ -35,6 +35,7 @@ model Tenant {
   quotes          Quote[]
   whatsappAccount WhatsappAccount?
   payments        Payment[]
+  onboardingOverrides OnboardingOverride[]
 
   @@map("tenants")
 }
@@ -459,4 +460,18 @@ model Payment {
   @@index([tenantId])
   @@index([orderId])
   @@map("payments")
+}
+
+model OnboardingOverride {
+  id          String   @id @default(uuid())
+  tenantId    String
+  step        String   // 'business' | 'whatsapp' | 'subscription'
+  completedBy String   // userId of the admin who applied the override
+  createdAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, step])
+  @@index([tenantId])
+  @@map("onboarding_overrides")
 }
