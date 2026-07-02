@@ -1,4 +1,4 @@
-import prisma from '../../config/prisma.js';
+import { prisma } from '../../config/prisma.js';
 
 // Steps that reflect real, verifiable state and can't be forced.
 // 'account' is always true if you've reached this endpoint at all.
