@@ -6,9 +6,9 @@ const normalizeCategory = (value) =>
 
 const categorySchema = z.preprocess(normalizeCategory, z.enum(BUSINESS_CATEGORIES));
 
-const DELIVERY_STRUCTURES = ['self', 'third-party', 'pickup', 'mixed'];
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
+export const DELIVERY_STRUCTURES = ['self', 'third-party', 'pickup', 'mixed'];
+export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+export const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const businessShape = {
   // Core

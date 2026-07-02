@@ -2,7 +2,15 @@ import { asyncHandler } from '../../common/utils/asyncHandler.js';
 import { ok } from '../../common/utils/apiResponse.js';
 import { getTenantId } from '../../common/utils/tenantContext.js';
 import * as onboardingService from './onboarding.service.js';
-import { stepParamSchema, stepDataBodySchema, tenantIdParamSchema } from './onboarding.validation.js';
+import {
+  stepParamSchema,
+  stepDataBodySchema,
+  tenantIdParamSchema,
+  businessIdentitySchema,
+  businessComplianceSchema,
+  businessOperationsSchema,
+  businessPresenceSchema,
+} from './onboarding.validation.js';
 
 export const getStatus = asyncHandler(async (req, res) => {
   const data = await onboardingService.getStatus(getTenantId(req));
@@ -27,6 +35,41 @@ export const saveStepData = asyncHandler(async (req, res) => {
 
 export const getProgress = asyncHandler(async (req, res) => {
   const data = await onboardingService.getProgress(getTenantId(req));
+  return ok(res, data);
+});
+
+// ---------------------------------------------------------------------------
+// Business wizard panels — one endpoint per screen (identity, compliance,
+// operations, presence & hours). Same trust level as saveStepData: the
+// caller is reading/writing their own tenant's business record.
+// ---------------------------------------------------------------------------
+
+export const saveBusinessIdentity = asyncHandler(async (req, res) => {
+  const dbFields = businessIdentitySchema.parse(req.body);
+  const data = await onboardingService.saveBusinessPanel(getTenantId(req), 'identity', dbFields, req.body);
+  return ok(res, data);
+});
+
+export const saveBusinessCompliance = asyncHandler(async (req, res) => {
+  const dbFields = businessComplianceSchema.parse(req.body);
+  const data = await onboardingService.saveBusinessPanel(getTenantId(req), 'compliance', dbFields, req.body);
+  return ok(res, data);
+});
+
+export const saveBusinessOperations = asyncHandler(async (req, res) => {
+  const dbFields = businessOperationsSchema.parse(req.body);
+  const data = await onboardingService.saveBusinessPanel(getTenantId(req), 'operations', dbFields, req.body);
+  return ok(res, data);
+});
+
+export const saveBusinessPresence = asyncHandler(async (req, res) => {
+  const dbFields = businessPresenceSchema.parse(req.body);
+  const data = await onboardingService.saveBusinessPanel(getTenantId(req), 'presence', dbFields, req.body);
+  return ok(res, data);
+});
+
+export const getBusinessOnboarding = asyncHandler(async (req, res) => {
+  const data = await onboardingService.getBusinessOnboarding(getTenantId(req));
   return ok(res, data);
 });
 
@@ -67,5 +110,11 @@ export const getStepDataAdmin = asyncHandler(async (req, res) => {
 export const getProgressAdmin = asyncHandler(async (req, res) => {
   const { tenantId } = req.params;
   const data = await onboardingService.getProgress(tenantId);
+  return ok(res, data);
+});
+
+export const getBusinessOnboardingAdmin = asyncHandler(async (req, res) => {
+  const { tenantId } = tenantIdParamSchema.parse(req.params);
+  const data = await onboardingService.getBusinessOnboarding(tenantId);
   return ok(res, data);
 });

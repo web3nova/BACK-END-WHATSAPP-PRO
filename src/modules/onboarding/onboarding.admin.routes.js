@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getStepDataAdmin, getProgressAdmin } from './onboarding.controller.js';
+import { getStepDataAdmin, getProgressAdmin, getBusinessOnboardingAdmin } from './onboarding.controller.js';
 import { requirePermission } from '../../middleware/rbac.middleware.js';
 
 // Mount this router at something like: app.use('/admin/tenants', onboardingAdminRoutes)
@@ -65,5 +65,45 @@ router.get('/:tenantId/onboarding/steps/:step', requirePermission('onboarding:vi
  *         description: Caller lacks the 'onboarding:view' permission
  */
 router.get('/:tenantId/onboarding/progress', requirePermission('onboarding:view'), getProgressAdmin);
+
+/**
+ * @openapi
+ * /admin/tenants/{tenantId}/onboarding/business:
+ *   get:
+ *     summary: (Admin) View a tenant's business wizard record
+ *     description: >
+ *       Returns the live Business row for the given tenant plus which of the
+ *       4 wizard panels (identity, compliance, operations, presence) have
+ *       been submitted. Requires the 'onboarding:view' permission (super
+ *       admins bypass this automatically).
+ *     tags: [Onboarding Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: tenantId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Business wizard state for the given tenant
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     business: { type: object, nullable: true }
+ *                     panelsCompleted:
+ *                       type: array
+ *                       items: { type: string, enum: [identity, compliance, operations, presence] }
+ *                     allPanelsDone: { type: boolean }
+ *       403:
+ *         description: Caller lacks the 'onboarding:view' permission
+ */
+router.get('/:tenantId/onboarding/business', requirePermission('onboarding:view'), getBusinessOnboardingAdmin);
 
 export default router;
