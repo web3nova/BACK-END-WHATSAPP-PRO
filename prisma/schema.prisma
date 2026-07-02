@@ -36,6 +36,7 @@ model Tenant {
   whatsappAccount WhatsappAccount?
   payments        Payment[]
   onboardingOverrides OnboardingOverride[]
+  onboardingProgress  OnboardingProgress?
 
   @@map("tenants")
 }
@@ -474,4 +475,34 @@ model OnboardingOverride {
   @@unique([tenantId, step])
   @@index([tenantId])
   @@map("onboarding_overrides")
+}
+
+model OnboardingProgress {
+  id           String    @id @default(uuid())
+  tenantId     String    @unique
+  currentStep  String    @default("business")
+  startedAt    DateTime  @default(now())
+  lastActiveAt DateTime  @updatedAt
+  completedAt  DateTime?
+
+  tenant   Tenant               @relation(fields: [tenantId], references: [id])
+  stepData OnboardingStepData[]
+
+  @@map("onboarding_progress")
+}
+
+model OnboardingStepData {
+  id          String    @id @default(uuid())
+  tenantId    String
+  step        String    // 'business' | 'whatsapp' | 'subscription'
+  data        Json
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  updatedAt   DateTime  @updatedAt
+
+  progress OnboardingProgress @relation(fields: [tenantId], references: [tenantId])
+
+  @@unique([tenantId, step])
+  @@index([tenantId])
+  @@map("onboarding_step_data")
 }
