@@ -12,8 +12,21 @@ const router = Router();
  *   get:
  *     tags: [Business]
  *     summary: List supported business categories
+ *     security:
+ *       - bearerAuth: []
  *     responses:
- *       200: { description: Business category options }
+ *       200:
+ *         description: Business category options
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: array
+ *                   items: { type: string, enum: [fashion, beauty, food, electronics, home, health, services, others] }
+ *       401: { description: Unauthorized }
  */
 router.get('/categories', businessController.listCategories);
 
@@ -26,7 +39,16 @@ router.get('/categories', businessController.listCategories);
  *     security:
  *       - bearerAuth: []
  *     responses:
- *       200: { description: Business profile }
+ *       200:
+ *         description: Business profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   $ref: '#/components/schemas/Business'
  *       401: { description: Unauthorized }
  *       404: { description: Not found }
  */
@@ -45,21 +67,19 @@ router.get('/', businessController.getProfile);
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required: [displayName]
- *             properties:
- *               displayName: { type: string }
- *               category: { type: string, enum: [fashion, beauty, food, electronics, home, health, services, others] }
- *               categoryOther: { type: string }
- *               tagline: { type: string }
- *               description: { type: string }
- *               email: { type: string, format: email }
- *               whatsappNumber: { type: string }
- *               logoUrl: { type: string, format: uri }
- *               settings: { type: object }
+ *             $ref: '#/components/schemas/BusinessCreateInput'
  *     responses:
- *       201: { description: Business profile created }
- *       400: { description: Profile already exists }
+ *       201:
+ *         description: Business profile created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   $ref: '#/components/schemas/Business'
+ *       400: { description: Profile already exists, or a field failed validation }
  *       401: { description: Unauthorized }
  */
 router.post('/', validate(createBusinessSchema, 'body'), businessController.createProfile);
@@ -77,19 +97,18 @@ router.post('/', validate(createBusinessSchema, 'body'), businessController.crea
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               displayName: { type: string }
- *               category: { type: string, enum: [fashion, beauty, food, electronics, home, health, services, others] }
- *               categoryOther: { type: string }
- *               tagline: { type: string }
- *               description: { type: string }
- *               email: { type: string, format: email }
- *               whatsappNumber: { type: string }
- *               logoUrl: { type: string, format: uri }
- *               settings: { type: object }
+ *             $ref: '#/components/schemas/BusinessUpdateInput'
  *     responses:
- *       200: { description: Updated business profile }
+ *       200:
+ *         description: Updated business profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   $ref: '#/components/schemas/Business'
  *       401: { description: Unauthorized }
  *       404: { description: Profile not found }
  */
@@ -119,6 +138,14 @@ router.put('/', validate(updateBusinessSchema, 'body'), businessController.updat
  *     responses:
  *       200:
  *         description: Updated business profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   $ref: '#/components/schemas/Business'
  *       400:
  *         description: No file or unsupported file type
  *       401:
