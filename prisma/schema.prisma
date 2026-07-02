@@ -174,14 +174,35 @@ model Business {
   tagline         String?
   description     String?
   email           String?
+  phone           String?          // ← new (Step 1)
+  location        String?          // ← new (Step 1)
   whatsappNumber  String?
   logoUrl         String?
   logoStorageKey  String?
   settings        Json             @default("{}")
+
+  // Compliance (Step 2)
+  cacNumber       String?          // ← new
+  tin             String?          // ← new
+
+  // Operations (Step 3)
+  activeClients   Int?             // ← new
+  staffCount      Int?             // ← new
+  monthlyRevenue  Int?             // ← new (stored in kobo/minor units)
+  deliveryStructure String?        // ← new
+
+  // Presence & hours (Step 4)
+  instagram       String?          // ← new
+  twitter         String?          // ← new
+  facebook        String?          // ← new
+  tiktok          String?          // ← new
+  availableDays   String[]         // ← new (Postgres array)
+  openingTime     String?          // ← new (e.g. "08:00")
+  closingTime     String?          // ← new (e.g. "18:00")
+
   website         WebsitePage[]
   websiteSettings WebsiteSettings?
-
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant          Tenant @relation(fields: [tenantId], references: [id])
 
   @@map("businesses")
 }
