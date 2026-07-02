@@ -1,8 +1,12 @@
 import { Router } from 'express';
+import { authMiddleware } from '../../middleware/auth.middleware.js';
+import { tenantMiddleware } from '../../middleware/tenant.middleware.js';
 import { getStatus, markStepComplete } from './onboarding.controller.js';
 import { requirePermission } from '../../middleware/rbac.middleware.js';
 
 const router = Router();
+
+router.use(authMiddleware, tenantMiddleware);
 
 /**
  * @openapi

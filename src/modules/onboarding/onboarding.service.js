@@ -1,4 +1,5 @@
 import prisma from '../../config/prisma.js';
+import { AppError } from '../../common/errors/AppError.js';
 
 // Steps that reflect real, verifiable state and can't be forced.
 // 'account' is always true if you've reached this endpoint at all.
@@ -41,9 +42,7 @@ export async function getStatus(tenantId) {
  */
 export async function markStepComplete(tenantId, step, adminUserId) {
   if (!OVERRIDABLE_STEPS.includes(step)) {
-    const err = new Error(`Step "${step}" cannot be manually overridden. Allowed: ${OVERRIDABLE_STEPS.join(', ')}`);
-    err.statusCode = 400;
-    throw err;
+    throw new AppError(`Step "${step}" cannot be manually overridden. Allowed: ${OVERRIDABLE_STEPS.join(', ')}`, 400);
   }
 
   await prisma.onboardingOverride.upsert({
