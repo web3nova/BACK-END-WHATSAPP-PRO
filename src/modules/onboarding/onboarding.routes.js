@@ -5,10 +5,7 @@ import {
   saveStepData,
   getProgress,
   markStepComplete,
-  saveBusinessIdentity,
-  saveBusinessCompliance,
-  saveBusinessOperations,
-  saveBusinessPresence,
+  saveBusinessProfile,
   getBusinessOnboarding,
 } from './onboarding.controller.js';
 import { requirePermission } from '../../middleware/rbac.middleware.js';
@@ -152,14 +149,14 @@ router.get('/progress', getProgress);
  * @openapi
  * /onboarding/business:
  *   get:
- *     summary: Read the business wizard's current state
- *     description: Returns the live Business row (or null if the identity panel hasn't been submitted yet) plus which of the 4 wizard panels have been completed, so the frontend can render step checkmarks without re-deriving them.
+ *     summary: Read the business profile's current state
+ *     description: Returns the live Business row (or null if it hasn't been created yet) plus which of the 4 sections (identity, compliance, operations, presence) currently satisfy their required fields, so the frontend can render section checkmarks without re-deriving them.
  *     tags: [Onboarding]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Business wizard state
+ *         description: Business profile state
  *         content:
  *           application/json:
  *             schema:
@@ -174,15 +171,19 @@ router.get('/progress', getProgress);
  *                       type: array
  *                       items: { type: string, enum: [identity, compliance, operations, presence] }
  *                     allPanelsDone: { type: boolean }
- */
-router.get('/business', getBusinessOnboarding);
-
-/**
- * @openapi
- * /onboarding/business/identity:
  *   put:
- *     summary: "Business wizard — panel 1: Business identity"
- *     description: Creates the tenant's Business row if it doesn't exist yet, or updates it. Required for every later panel.
+ *     summary: Update the business profile — any section, any subset of fields, in one call
+ *     description: >
+ *       A single dynamic endpoint covering every field across all 4 onboarding
+ *       screens (identity, compliance, operations, presence & hours). Send
+ *       just the field(s) you want to change — e.g. `{ "tin": "..." }` to
+ *       edit only the TIN — and only those columns are touched.
+ *
+ *       The very first call for a tenant must include `businessName`,
+ *       `phoneNumber`, and `businessLocation` together, since those are the
+ *       only fields required to create the Business row. Every call after
+ *       that can touch any combination of fields from any section, in any
+ *       order, as many or as few at a time as the caller wants.
  *     tags: [Onboarding]
  *     security:
  *       - bearerAuth: []
@@ -192,92 +193,17 @@ router.get('/business', getBusinessOnboarding);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [businessName, phoneNumber, businessLocation]
+ *             description: At least one field is required. All fields are optional individually.
  *             properties:
  *               businessName: { type: string, example: "Ada's Fashion House" }
  *               phoneNumber: { type: string, example: '+2348012345678' }
  *               businessLocation: { type: string, example: 'Ikeja, Lagos' }
- *     responses:
- *       200:
- *         description: Saved
- *       400:
- *         description: Validation error
- */
-router.put('/business/identity', saveBusinessIdentity);
-
-/**
- * @openapi
- * /onboarding/business/compliance:
- *   put:
- *     summary: "Business wizard — panel 2: Compliance details"
- *     description: Requires the identity panel to have been submitted first.
- *     tags: [Onboarding]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [cacRegistrationNumber]
- *             properties:
  *               cacRegistrationNumber: { type: string, example: 'RC 1124322' }
  *               tin: { type: string, example: '1234567-0001' }
- *     responses:
- *       200:
- *         description: Saved
- *       400:
- *         description: Validation error, or identity panel not yet completed
- */
-router.put('/business/compliance', saveBusinessCompliance);
-
-/**
- * @openapi
- * /onboarding/business/operations:
- *   put:
- *     summary: "Business wizard — panel 3: Operations"
- *     description: Requires the identity panel to have been submitted first.
- *     tags: [Onboarding]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [numberOfActiveClients, numberOfStaff, averageMonthlyRevenue, deliveryStructure]
- *             properties:
  *               numberOfActiveClients: { type: integer, example: 244 }
  *               numberOfStaff: { type: integer, example: 22 }
  *               averageMonthlyRevenue: { type: integer, example: 2524555, description: 'Naira' }
  *               deliveryStructure: { type: string, enum: [self, third-party, pickup, mixed] }
- *     responses:
- *       200:
- *         description: Saved
- *       400:
- *         description: Validation error, or identity panel not yet completed
- */
-router.put('/business/operations', saveBusinessOperations);
-
-/**
- * @openapi
- * /onboarding/business/presence:
- *   put:
- *     summary: "Business wizard — panel 4: Presence & hours"
- *     description: Requires the identity panel to have been submitted first. Completing this panel (alongside the other three) marks the 'business' onboarding step as done.
- *     tags: [Onboarding]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [daysAvailable]
- *             properties:
  *               instagram: { type: string, example: '@yourbusiness' }
  *               twitter: { type: string, example: '@yourbusiness' }
  *               facebookPage: { type: string, example: 'facebook.com/yourbusiness' }
@@ -290,10 +216,25 @@ router.put('/business/operations', saveBusinessOperations);
  *     responses:
  *       200:
  *         description: Saved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     business: { type: object }
+ *                     panelsCompleted:
+ *                       type: array
+ *                       items: { type: string, enum: [identity, compliance, operations, presence] }
+ *                     allPanelsDone: { type: boolean }
  *       400:
- *         description: Validation error, or identity panel not yet completed
+ *         description: Validation error, empty body, or the profile doesn't exist yet and identity fields weren't provided
  */
-router.put('/business/presence', saveBusinessPresence);
+router.get('/business', getBusinessOnboarding);
+router.put('/business', saveBusinessProfile);
 
 /**
  * @openapi

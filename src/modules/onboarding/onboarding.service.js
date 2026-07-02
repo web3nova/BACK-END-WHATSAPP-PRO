@@ -4,26 +4,53 @@ import { prisma } from '../../config/prisma.js';
 // 'account' is always true if you've reached this endpoint at all.
 export const OVERRIDABLE_STEPS = ['business', 'whatsapp', 'subscription'];
 
-// The 'business' onboarding step is itself a 4-panel wizard (see
-// saveBusinessPanel below). It only counts as complete once every panel has
-// been submitted at least once, not merely once a Business row exists.
+// The 'business' onboarding step is itself a multi-section profile (see
+// saveBusinessProfile below): identity, compliance, operations, presence.
+// Each section's completeness is derived live from the Business row's own
+// columns (see computeBusinessPanelStatus) rather than a separate tracked
+// flag, so it can never drift out of sync with what's actually saved.
 export const BUSINESS_PANELS = ['identity', 'compliance', 'operations', 'presence'];
 
+const BUSINESS_PANEL_SELECT = {
+  id: true,
+  displayName: true,
+  phone: true,
+  location: true,
+  cacNumber: true,
+  activeClients: true,
+  staffCount: true,
+  monthlyRevenue: true,
+  deliveryStructure: true,
+  availableDays: true,
+};
+
+function computeBusinessPanelStatus(business) {
+  if (!business) {
+    return { identity: false, compliance: false, operations: false, presence: false };
+  }
+  return {
+    identity: !!(business.displayName && business.phone && business.location),
+    compliance: !!business.cacNumber,
+    operations:
+      business.activeClients != null &&
+      business.staffCount != null &&
+      business.monthlyRevenue != null &&
+      !!business.deliveryStructure,
+    presence: Array.isArray(business.availableDays) && business.availableDays.length > 0,
+  };
+}
+
 export async function getStatus(tenantId) {
-  const [business, whatsapp, subscription, overrides, businessStep] = await Promise.all([
-    prisma.business.findUnique({ where: { tenantId }, select: { id: true } }),
+  const [business, whatsapp, subscription, overrides] = await Promise.all([
+    prisma.business.findUnique({ where: { tenantId }, select: BUSINESS_PANEL_SELECT }),
     prisma.whatsappAccount.findUnique({ where: { tenantId }, select: { verified: true } }),
     prisma.subscription.findUnique({ where: { tenantId }, select: { status: true, trialEndsAt: true, renewsAt: true } }),
     prisma.onboardingOverride.findMany({ where: { tenantId }, select: { step: true } }),
-    prisma.onboardingStepData.findUnique({
-      where: { tenantId_step: { tenantId, step: 'business' } },
-      select: { data: true },
-    }),
   ]);
 
   const overriddenSteps = new Set(overrides.map((o) => o.step));
-  const completedPanels = new Set(businessStep?.data?.completedPanels ?? []);
-  const businessPanelsComplete = BUSINESS_PANELS.every((p) => completedPanels.has(p));
+  const panelStatus = computeBusinessPanelStatus(business);
+  const businessPanelsComplete = BUSINESS_PANELS.every((p) => panelStatus[p]);
 
   const steps = {
     account:      true, // reaching this endpoint means tenant + user exist
@@ -116,34 +143,34 @@ export async function saveStepData(tenantId, step, data, { complete = false } = 
 }
 
 /**
- * Persist one panel of the business onboarding wizard (identity, compliance,
- * operations, presence). Unlike saveStepData, this writes straight into the
- * real Business row (via dbFields, already mapped from UI field names to
- * Prisma columns by the panel's zod schema) so the record is usable
- * everywhere else in the app immediately, not just parked in a JSON draft.
+ * Persist any subset of the business profile's fields (identity, compliance,
+ * operations, presence all live on one dynamic form) in a single call. Only
+ * the fields present in dbFields are touched — Prisma ignores undefined keys
+ * on update, so a caller can send just `{ tin: '...' }` to edit one field
+ * without resubmitting the rest of the profile.
  *
- * The 'identity' panel is the only one allowed to create the Business row,
- * since it carries the fields Business requires at creation (displayName,
- * phone, location). Later panels assume identity has already run.
+ * The very first call for a tenant must include the identity fields
+ * (displayName, phone, location) since those are the only Business columns
+ * that are required (non-nullable) at creation time. Every call after that
+ * can touch any combination of fields from any section.
  *
- * rawInput (the pre-transform request body, UI field names) is additionally
- * kept in OnboardingStepData under the panel's own key so the wizard can be
- * resumed with the exact values the user typed, and so admins can see the
- * raw submission history per panel, not just the current Business row state.
+ * rawInput (the pre-transform request body, UI field names) is kept in
+ * OnboardingStepData purely as a debugging/audit trail — completion is
+ * derived live from the Business row itself (see computeBusinessPanelStatus),
+ * not from anything tracked here.
  */
-export async function saveBusinessPanel(tenantId, panel, dbFields, rawInput) {
-  if (!BUSINESS_PANELS.includes(panel)) {
-    const err = new Error(`Unknown business panel "${panel}". Allowed: ${BUSINESS_PANELS.join(', ')}`);
-    err.statusCode = 400;
-    throw err;
-  }
-
+export async function saveBusinessProfile(tenantId, dbFields, rawInput) {
   const existingBusiness = await prisma.business.findUnique({ where: { tenantId } });
 
-  if (panel !== 'identity' && !existingBusiness) {
-    const err = new Error('Complete the business identity panel first.');
-    err.statusCode = 400;
-    throw err;
+  if (!existingBusiness) {
+    const missing = ['displayName', 'phone', 'location'].filter((f) => dbFields[f] === undefined);
+    if (missing.length) {
+      const err = new Error(
+        'Provide businessName, phoneNumber, and businessLocation to create your business profile before editing other sections.',
+      );
+      err.statusCode = 400;
+      throw err;
+    }
   }
 
   const business = existingBusiness
@@ -161,16 +188,10 @@ export async function saveBusinessPanel(tenantId, panel, dbFields, rawInput) {
     select: { data: true },
   });
 
-  const prevData = existingStepData?.data ?? {};
-  const completedPanels = new Set(prevData.completedPanels ?? []);
-  completedPanels.add(panel);
-  const allPanelsDone = BUSINESS_PANELS.every((p) => completedPanels.has(p));
-
-  const mergedData = {
-    ...prevData,
-    [panel]: rawInput,
-    completedPanels: [...completedPanels],
-  };
+  const mergedData = { ...(existingStepData?.data ?? {}), ...rawInput };
+  const panelStatus = computeBusinessPanelStatus(business);
+  const panelsCompleted = BUSINESS_PANELS.filter((p) => panelStatus[p]);
+  const allPanelsDone = panelsCompleted.length === BUSINESS_PANELS.length;
 
   await prisma.onboardingStepData.upsert({
     where: { tenantId_step: { tenantId, step: 'business' } },
@@ -186,29 +207,23 @@ export async function saveBusinessPanel(tenantId, panel, dbFields, rawInput) {
     },
   });
 
-  return { business, panelsCompleted: [...completedPanels], allPanelsDone };
+  return { business, panelsCompleted, allPanelsDone };
 }
 
 /**
- * Read-model for the business wizard: the live Business row plus which
- * panels have been submitted, so the frontend can render step checkmarks
- * without re-deriving completion from raw field presence.
+ * Read-model for the business profile: the live Business row plus which
+ * sections currently satisfy their required fields, so the frontend can
+ * render section checkmarks without re-deriving completion itself.
  */
 export async function getBusinessOnboarding(tenantId) {
-  const [business, stepData] = await Promise.all([
-    prisma.business.findUnique({ where: { tenantId } }),
-    prisma.onboardingStepData.findUnique({
-      where: { tenantId_step: { tenantId, step: 'business' } },
-      select: { data: true },
-    }),
-  ]);
-
-  const completedPanels = stepData?.data?.completedPanels ?? [];
+  const business = await prisma.business.findUnique({ where: { tenantId } });
+  const panelStatus = computeBusinessPanelStatus(business);
+  const panelsCompleted = BUSINESS_PANELS.filter((p) => panelStatus[p]);
 
   return {
     business: business ?? null,
-    panelsCompleted: completedPanels,
-    allPanelsDone: BUSINESS_PANELS.every((p) => completedPanels.includes(p)),
+    panelsCompleted,
+    allPanelsDone: panelsCompleted.length === BUSINESS_PANELS.length,
   };
 }
 
