@@ -228,6 +228,28 @@ export async function getBusinessOnboarding(tenantId) {
 }
 
 /**
+ * Submit the full onboarding business profile from the frontend wizard.
+ * Wraps saveBusinessProfile while also persisting frontend-only fields
+ * (countryIso2, locationState, locationCity) into the Business.settings JSON.
+ */
+export async function submitOnboarding(tenantId, dbFields, rawInput) {
+  const extra = {};
+  if (rawInput.countryIso2) extra.countryIso2 = rawInput.countryIso2;
+  if (rawInput.locationState) extra.locationState = rawInput.locationState;
+  if (rawInput.locationCity) extra.locationCity = rawInput.locationCity;
+
+  if (Object.keys(extra).length > 0) {
+    const existing = await prisma.business.findUnique({
+      where: { tenantId },
+      select: { settings: true },
+    });
+    dbFields.settings = { ...(existing?.settings ?? {}), ...extra };
+  }
+
+  return saveBusinessProfile(tenantId, dbFields, rawInput);
+}
+
+/**
  * The full onboarding picture for a tenant: derived completion status
  * (same as getStatus), plus progress-tracking metadata and every step's
  * saved form data. Useful for a single dashboard call or for analytics.

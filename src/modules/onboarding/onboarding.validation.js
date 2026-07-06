@@ -2,6 +2,57 @@ import { z } from 'zod';
 import { OVERRIDABLE_STEPS } from './onboarding.service.js';
 import { DELIVERY_STRUCTURES, DAYS, TIME_REGEX } from '../business/business.validation.js';
 
+function mapFrontendToDb(v) {
+  const result = {};
+  if (v.businessName !== undefined) result.displayName = v.businessName;
+  if (v.phone !== undefined) result.phone = v.phone;
+  if (v.location !== undefined) result.location = v.location;
+  if (v.cacRegNo !== undefined) result.cacNumber = v.cacRegNo;
+  if (v.taxId !== undefined) result.tin = v.taxId;
+  if (v.numClients !== undefined) result.activeClients = v.numClients;
+  if (v.numStaff !== undefined) result.staffCount = v.numStaff;
+  if (v.avgMonthlyIncome !== undefined) result.monthlyRevenue = v.avgMonthlyIncome;
+  if (v.deliveryStructure !== undefined) result.deliveryStructure = v.deliveryStructure;
+  if (v.instagram !== undefined) result.instagram = v.instagram;
+  if (v.twitter !== undefined) result.twitter = v.twitter;
+  if (v.facebook !== undefined) result.facebook = v.facebook;
+  if (v.tiktok !== undefined) result.tiktok = v.tiktok;
+  if (v.availableDays !== undefined) result.availableDays = v.availableDays;
+  if (v.openTime !== undefined) result.openingTime = v.openTime;
+  if (v.closeTime !== undefined) result.closingTime = v.closeTime;
+  return result;
+}
+
+const frontendBase = {
+  businessName: z.string().trim().min(1, 'Business name is required').max(100),
+  phone: z.string().trim().min(7, 'Enter a valid phone number').max(30),
+  locationState: z.string().trim().min(1, 'State is required').max(100),
+  locationCity: z.string().trim().min(1, 'City is required').max(100),
+  location: z.string().trim().min(1, 'Location is required').max(200),
+  countryIso2: z.string().trim().length(2).optional(),
+  cacRegNo: z.string().trim().max(50).optional(),
+  taxId: z.string().trim().max(50).optional(),
+  numClients: z.coerce.number().int().min(0).optional(),
+  numStaff: z.coerce.number().int().min(0).optional(),
+  avgMonthlyIncome: z.coerce.number().int().min(0).optional(),
+  deliveryStructure: z.enum(DELIVERY_STRUCTURES).optional(),
+  instagram: z.string().trim().max(60).optional(),
+  twitter: z.string().trim().max(60).optional(),
+  facebook: z.string().trim().max(100).optional(),
+  tiktok: z.string().trim().max(60).optional(),
+  availableDays: z.array(z.enum(DAYS)).min(1).optional(),
+  openTime: z.string().regex(TIME_REGEX, 'Use HH:MM 24-hour format').optional(),
+  closeTime: z.string().regex(TIME_REGEX, 'Use HH:MM 24-hour format').optional(),
+};
+
+export const createFrontendBusinessSchema = z.object(frontendBase).transform(mapFrontendToDb);
+
+export const updateFrontendBusinessSchema = z
+  .object(frontendBase)
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: 'Provide at least one field to update' })
+  .transform(mapFrontendToDb);
+
 export const stepParamSchema = z.object({
   step: z.enum(OVERRIDABLE_STEPS),
 });

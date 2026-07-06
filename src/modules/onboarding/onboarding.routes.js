@@ -7,6 +7,9 @@ import {
   markStepComplete,
   saveBusinessProfile,
   getBusinessOnboarding,
+  createOnboarding,
+  getOnboarding,
+  updateOnboarding,
 } from './onboarding.controller.js';
 import { requirePermission } from '../../middleware/rbac.middleware.js';
 
@@ -294,5 +297,125 @@ router.put('/business', saveBusinessProfile);
  *         description: Caller lacks the 'onboarding:override' permission
  */
 router.post('/steps/:step/complete', requirePermission('onboarding:override'), markStepComplete);
+
+// ---------------------------------------------------------------------------
+// Frontend-friendly onboarding endpoints — these accept the exact field names
+// the React wizard sends (businessName, cacRegNo, taxId, numClients, etc.)
+// and map them to DB columns. CAC and TIN are both optional.
+// ---------------------------------------------------------------------------
+
+/**
+ * @openapi
+ * /onboarding:
+ *   get:
+ *     summary: Get the current business onboarding profile
+ *     description: Returns the live Business row plus which of the 4 wizard sections (identity, compliance, operations, presence) are complete.
+ *     tags: [Onboarding]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Business onboarding profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     business: { type: object, nullable: true }
+ *                     panelsCompleted:
+ *                       type: array
+ *                       items: { type: string, enum: [identity, compliance, operations, presence] }
+ *                     allPanelsDone: { type: boolean }
+ *   post:
+ *     summary: Create the business onboarding profile
+ *     description: >
+ *       Creates a new business profile from the frontend wizard fields.
+ *       businessName, phone, and location are required. CAC and TIN are optional.
+ *     tags: [Onboarding]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [businessName, phone, locationState, locationCity, location]
+ *             properties:
+ *               businessName: { type: string, example: "Ada's Fashion House" }
+ *               phone: { type: string, example: '+234 801 234 5678' }
+ *               locationState: { type: string, example: 'Lagos' }
+ *               locationCity: { type: string, example: 'Ikeja' }
+ *               location: { type: string, example: 'Ikeja, Lagos' }
+ *               countryIso2: { type: string, example: 'NG' }
+ *               cacRegNo: { type: string, example: 'RC 1234567' }
+ *               taxId: { type: string, example: '1234567-0001' }
+ *               numClients: { type: integer, example: 244 }
+ *               numStaff: { type: integer, example: 22 }
+ *               avgMonthlyIncome: { type: integer, example: 2524555 }
+ *               deliveryStructure: { type: string, enum: [self, third-party, pickup, mixed] }
+ *               instagram: { type: string, example: '@yourbusiness' }
+ *               twitter: { type: string, example: '@yourbusiness' }
+ *               facebook: { type: string, example: 'facebook.com/yourbusiness' }
+ *               tiktok: { type: string, example: '@yourbusiness' }
+ *               availableDays:
+ *                 type: array
+ *                 items: { type: string, enum: [Mon, Tue, Wed, Thu, Fri, Sat, Sun] }
+ *               openTime: { type: string, example: '08:00' }
+ *               closeTime: { type: string, example: '18:00' }
+ *     responses:
+ *       201:
+ *         description: Business profile created
+ *       400:
+ *         description: Validation error
+ *   put:
+ *     summary: Update the business onboarding profile
+ *     description: >
+ *       Update any subset of the business onboarding fields. All fields are
+ *       individually optional for PUT. CAC and TIN are optional.
+ *     tags: [Onboarding]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               businessName: { type: string }
+ *               phone: { type: string }
+ *               locationState: { type: string }
+ *               locationCity: { type: string }
+ *               location: { type: string }
+ *               countryIso2: { type: string }
+ *               cacRegNo: { type: string }
+ *               taxId: { type: string }
+ *               numClients: { type: integer }
+ *               numStaff: { type: integer }
+ *               avgMonthlyIncome: { type: integer }
+ *               deliveryStructure: { type: string, enum: [self, third-party, pickup, mixed] }
+ *               instagram: { type: string }
+ *               twitter: { type: string }
+ *               facebook: { type: string }
+ *               tiktok: { type: string }
+ *               availableDays:
+ *                 type: array
+ *                 items: { type: string, enum: [Mon, Tue, Wed, Thu, Fri, Sat, Sun] }
+ *               openTime: { type: string }
+ *               closeTime: { type: string }
+ *     responses:
+ *       200:
+ *         description: Business profile updated
+ *       400:
+ *         description: Validation error
+ */
+router.get('/', getOnboarding);
+router.post('/', createOnboarding);
+router.put('/', updateOnboarding);
 
 export default router;

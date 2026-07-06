@@ -1,5 +1,5 @@
 import { asyncHandler } from '../../common/utils/asyncHandler.js';
-import { ok } from '../../common/utils/apiResponse.js';
+import { ok, created } from '../../common/utils/apiResponse.js';
 import { getTenantId } from '../../common/utils/tenantContext.js';
 import * as onboardingService from './onboarding.service.js';
 import {
@@ -7,6 +7,8 @@ import {
   stepDataBodySchema,
   tenantIdParamSchema,
   businessProfileSchema,
+  createFrontendBusinessSchema,
+  updateFrontendBusinessSchema,
 } from './onboarding.validation.js';
 
 export const getStatus = asyncHandler(async (req, res) => {
@@ -98,5 +100,30 @@ export const getProgressAdmin = asyncHandler(async (req, res) => {
 export const getBusinessOnboardingAdmin = asyncHandler(async (req, res) => {
   const { tenantId } = tenantIdParamSchema.parse(req.params);
   const data = await onboardingService.getBusinessOnboarding(tenantId);
+  return ok(res, data);
+});
+
+// ---------------------------------------------------------------------------
+// Frontend-facing onboarding endpoints — accept the exact field names the
+// React wizard sends (businessName, cacRegNo, taxId, numClients, etc.) and
+// map them to DB column names. CAC and TIN are optional.
+// ---------------------------------------------------------------------------
+
+export const createOnboarding = asyncHandler(async (req, res) => {
+  const raw = req.body;
+  const dbFields = createFrontendBusinessSchema.parse(raw);
+  const data = await onboardingService.submitOnboarding(getTenantId(req), dbFields, raw);
+  return created(res, data);
+});
+
+export const getOnboarding = asyncHandler(async (req, res) => {
+  const data = await onboardingService.getBusinessOnboarding(getTenantId(req));
+  return ok(res, data);
+});
+
+export const updateOnboarding = asyncHandler(async (req, res) => {
+  const raw = req.body;
+  const dbFields = updateFrontendBusinessSchema.parse(raw);
+  const data = await onboardingService.submitOnboarding(getTenantId(req), dbFields, raw);
   return ok(res, data);
 });
