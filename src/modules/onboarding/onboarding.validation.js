@@ -5,21 +5,21 @@ import { DELIVERY_STRUCTURES, DAYS, TIME_REGEX } from '../business/business.vali
 function mapFrontendToDb(v) {
   const result = {};
   if (v.businessName !== undefined) result.displayName = v.businessName;
-  if (v.phone !== undefined) result.phone = v.phone;
-  if (v.location !== undefined) result.location = v.location;
-  if (v.cacRegNo !== undefined) result.cacNumber = v.cacRegNo;
-  if (v.taxId !== undefined) result.tin = v.taxId;
-  if (v.numClients !== undefined) result.activeClients = v.numClients;
-  if (v.numStaff !== undefined) result.staffCount = v.numStaff;
+  if (v.phone        !== undefined) result.phone       = v.phone;
+  if (v.location     !== undefined) result.location    = v.location;
+  if (v.cacRegNo     !== undefined) result.cacNumber   = v.cacRegNo;
+  if (v.taxId        !== undefined) result.tin         = v.taxId;
+  if (v.numClients   !== undefined) result.activeClients = v.numClients;
+  if (v.numStaff     !== undefined) result.staffCount  = v.numStaff;
   if (v.avgMonthlyIncome !== undefined) result.monthlyRevenue = v.avgMonthlyIncome;
   if (v.deliveryStructure !== undefined) result.deliveryStructure = v.deliveryStructure;
-  if (v.instagram !== undefined) result.instagram = v.instagram;
-  if (v.twitter !== undefined) result.twitter = v.twitter;
-  if (v.facebook !== undefined) result.facebook = v.facebook;
-  if (v.tiktok !== undefined) result.tiktok = v.tiktok;
+  if (v.instagram    !== undefined) result.instagram   = v.instagram;
+  if (v.twitter      !== undefined) result.twitter     = v.twitter;
+  if (v.facebook     !== undefined) result.facebook    = v.facebook;
+  if (v.tiktok       !== undefined) result.tiktok      = v.tiktok;
   if (v.availableDays !== undefined) result.availableDays = v.availableDays;
-  if (v.openTime !== undefined) result.openingTime = v.openTime;
-  if (v.closeTime !== undefined) result.closingTime = v.closeTime;
+  if (v.openTime     !== undefined) result.openingTime = v.openTime;
+  if (v.closeTime    !== undefined) result.closingTime = v.closingTime;
   return result;
 }
 

@@ -1,5 +1,5 @@
 import { prisma } from '../../config/prisma.js';
-import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
+import { NotFoundError } from '../../common/errors/index.js';
 import { getAssetUrl, uploadAsset } from '../../common/utils/uploadAsset.js';
 import { BUSINESS_CATEGORIES } from '../../common/constants/businessProfile.js';
 
@@ -19,8 +19,9 @@ export async function getProfile(tenantId) {
 
 export async function createProfile(tenantId, data) {
   const existing = await prisma.business.findUnique({ where: { tenantId } });
-  if (existing)
-    throw new BadRequestError('Business profile already exists. Use PUT /business to update it.');
+  if (existing) {
+    return prisma.business.update({ where: { tenantId }, data });
+  }
   return prisma.business.create({ data: { tenantId, ...data } });
 }
 

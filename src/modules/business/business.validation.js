@@ -58,12 +58,20 @@ function requireOtherCategoryLabel(data, ctx) {
 
 export const createBusinessSchema = z.object({
   ...businessShape,
-  displayName: z.string().trim().min(1).max(100), // required on create
-  phone: z.string().trim().min(7).max(30),         // required on create (Step 1)
-  location: z.string().trim().min(1).max(200),     // required on create (Step 1)
+  displayName: z.string().trim().min(1).max(100),
 }).superRefine(requireOtherCategoryLabel);
 
 export const updateBusinessSchema = z
   .object(businessShape)
   .partial()
   .superRefine(requireOtherCategoryLabel);
+
+export const businessProfileSchema = z.object({
+  displayName: z.string().trim().min(1).max(100),
+  category: categorySchema.optional(),
+  categoryOther: z.string().trim().min(1).max(100).optional(),
+  tagline: z.string().trim().min(1).max(160).optional(),
+  description: z.string().trim().min(1).max(2000).optional(),
+  email: z.string().trim().email().optional(),
+  whatsappNumber: z.string().trim().min(7).max(30).optional(),
+}).superRefine(requireOtherCategoryLabel);

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { validate } from '../../middleware/validate.middleware.js';
 import { uploadImage } from '../../middleware/upload.middleware.js';
 import * as businessController from './business.controller.js';
-import { createBusinessSchema, updateBusinessSchema } from './business.validation.js';
+import { updateBusinessSchema, businessProfileSchema } from './business.validation.js';
 
 const router = Router();
 
@@ -59,7 +59,8 @@ router.get('/', businessController.getProfile);
  * /business:
  *   post:
  *     tags: [Business]
- *     summary: Create business profile (one per tenant)
+ *     summary: Create or update business profile
+ *     description: Creates a new business profile or updates an existing one (upsert). Only basic profile fields required — no onboarding wizard fields.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -67,7 +68,16 @@ router.get('/', businessController.getProfile);
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/BusinessCreateInput'
+ *             type: object
+ *             required: [displayName]
+ *             properties:
+ *               displayName: { type: string, example: "Ada's Fashion House" }
+ *               category: { type: string, enum: [fashion, beauty, food, electronics, home, health, services, others], example: fashion }
+ *               categoryOther: { type: string, example: 'Event Planning' }
+ *               tagline: { type: string, example: 'Custom Made & Ready To Wear Fashion' }
+ *               description: { type: string, example: 'We design high-quality bespoke clothing.' }
+ *               email: { type: string, format: email, example: 'hello@adasfashion.com' }
+ *               whatsappNumber: { type: string, example: '+2348012345678' }
  *     responses:
  *       201:
  *         description: Business profile created
@@ -79,10 +89,10 @@ router.get('/', businessController.getProfile);
  *                 success: { type: boolean, example: true }
  *                 data:
  *                   $ref: '#/components/schemas/Business'
- *       400: { description: Profile already exists, or a field failed validation }
+ *       400: { description: Field failed validation }
  *       401: { description: Unauthorized }
  */
-router.post('/', validate(createBusinessSchema, 'body'), businessController.createProfile);
+router.post('/', validate(businessProfileSchema, 'body'), businessController.createProfile);
 
 /**
  * @openapi
@@ -90,6 +100,7 @@ router.post('/', validate(createBusinessSchema, 'body'), businessController.crea
  *   put:
  *     tags: [Business]
  *     summary: Update business profile
+ *     description: Update any subset of the business profile fields. All fields optional.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -97,7 +108,15 @@ router.post('/', validate(createBusinessSchema, 'body'), businessController.crea
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/BusinessUpdateInput'
+ *             type: object
+ *             properties:
+ *               displayName: { type: string }
+ *               category: { type: string, enum: [fashion, beauty, food, electronics, home, health, services, others] }
+ *               categoryOther: { type: string }
+ *               tagline: { type: string }
+ *               description: { type: string }
+ *               email: { type: string, format: email }
+ *               whatsappNumber: { type: string }
  *     responses:
  *       200:
  *         description: Updated business profile
