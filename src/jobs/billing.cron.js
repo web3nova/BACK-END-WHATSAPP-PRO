@@ -3,28 +3,29 @@
 // It checks daily for trial reminders and upcoming renewals.
 
 import cron from 'node-cron';
+import { logger } from '../config/logger.js';
 import { sendTrialReminders, sendMonthlyBillingReminders } from '../modules/billing/billing.service.js';
 
 // Runs every day at 8:00 AM
 cron.schedule('0 8 * * *', async () => {
-  console.log('[cron] Running trial reminder check...');
+  logger.info('[cron] running trial reminder check');
   try {
     const result = await sendTrialReminders();
-    console.log(`[cron] Trial reminders sent — day3: ${result.day3}, day5: ${result.day5}`);
+    logger.info({ day3: result.day3, day5: result.day5 }, '[cron] trial reminders sent');
   } catch (err) {
-    console.error('[cron] Trial reminder error:', err.message);
+    logger.error({ err: err.message }, '[cron] trial reminder error');
   }
 });
 
 // Runs every day at 9:00 AM
 cron.schedule('0 9 * * *', async () => {
-  console.log('[cron] Running monthly billing reminder check...');
+  logger.info('[cron] running monthly billing reminder check');
   try {
     const result = await sendMonthlyBillingReminders();
-    console.log(`[cron] Monthly billing reminders sent: ${result.sent}`);
+    logger.info({ sent: result.sent }, '[cron] monthly billing reminders sent');
   } catch (err) {
-    console.error('[cron] Monthly billing reminder error:', err.message);
+    logger.error({ err: err.message }, '[cron] monthly billing reminder error');
   }
 });
 
-console.log('[cron] Billing cron jobs scheduled.');
+logger.info('[cron] billing cron jobs scheduled');

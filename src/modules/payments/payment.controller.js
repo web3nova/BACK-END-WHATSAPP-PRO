@@ -2,6 +2,7 @@ import { asyncHandler } from '../../common/utils/asyncHandler.js';
 import { ok, created } from '../../common/utils/apiResponse.js';
 import { BadRequestError } from '../../common/errors/index.js';
 import { config } from '../../config/index.js';
+import { logger } from '../../config/logger.js';
 import * as paymentService from './payment.service.js';
 
 function tenantId(req) {
@@ -33,6 +34,6 @@ export const webhook = asyncHandler(async (req, res) => {
   try {
     await paymentService.handleWebhook(provider, payload, signature, req.rawBody);
   } catch (error) {
-    console.error('[Payment Webhook Error]', error);
+    logger.error({ err: error?.message }, '[payment] webhook processing error');
   }
 });

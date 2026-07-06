@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { ForbiddenError } from '../../common/errors/index.js';
+import { logger } from '../../config/logger.js';
 
 export const verifySignature = (req, res, next) => {
   try {
@@ -19,7 +20,7 @@ export const verifySignature = (req, res, next) => {
 
     const appSecret = process.env.META_APP_SECRET || process.env.WHATSAPP_APP_SECRET;
     if (!appSecret) {
-      console.error('[WhatsApp Webhook] Missing META_APP_SECRET or WHATSAPP_APP_SECRET in environment');
+      logger.error('[whatsapp] missing META_APP_SECRET or WHATSAPP_APP_SECRET in environment');
       return next(new ForbiddenError('Server configuration error'));
     }
 
@@ -30,7 +31,7 @@ export const verifySignature = (req, res, next) => {
     const expBuf = Buffer.from(expectedHash, 'hex');
 
     if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
-      console.warn('[WhatsApp Webhook] Signature mismatch');
+      logger.warn('[whatsapp] webhook signature mismatch');
       return next(new ForbiddenError('Invalid signature'));
     }
 

@@ -2,6 +2,7 @@ import { prisma } from '../../config/prisma.js';
 import { mainQueue } from '../../jobs/queue.js';
 import { NotFoundError } from '../../common/errors/index.js';
 import { redis } from '../../config/redis.js';
+import { logger } from '../../config/logger.js';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import crypto from 'crypto';
 
@@ -27,7 +28,7 @@ const normalizePhone = (phone) => {
 export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, senderName, text, messageId, media = [] }) => {
   // 0. Basic validations
   if (!phoneNumberId) {
-    console.error('[Conversation Service] Missing phoneNumberId in payload');
+    logger.error('[conversation] Missing phoneNumberId in payload');
     return;
   }
 
@@ -38,18 +39,18 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
       // NX = set if not exists, EX = expire seconds
       const locked = await redis.set(lockKey, '1', 'EX', 60, 'NX');
       if (!locked) {
-        console.log(`[Conversation Service] Duplicate message lock for ${messageId}, skipping processing.`);
+        logger.debug({ messageId }, '[conversation] duplicate message, skipping');
         return;
       }
     } catch (err) {
-      console.warn('[Conversation Service] Redis lock error, continuing without lock', err?.message || err);
+      logger.warn({ err: err?.message }, '[conversation] Redis lock error, continuing without lock');
     }
   }
 
   // 1. Tenant Resolution
   const whatsappAccount = await prisma.whatsappAccount.findFirst({ where: { phoneNumberId } });
   if (!whatsappAccount) {
-    console.error(`[Conversation Service] No tenant found for phone_number_id: ${phoneNumberId}`);
+    logger.error({ phoneNumberId }, '[conversation] no tenant found for phoneNumberId');
     return;
   }
   const tenantId = whatsappAccount.tenantId;
@@ -64,10 +65,10 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
       // verify tenant ownership via conversation
       const parentConv = await prisma.conversation.findUnique({ where: { id: existing.conversationId } });
       if (parentConv?.tenantId === tenantId) {
-        console.log(`[Conversation Service] Message ${messageId} already processed (db), skipping.`);
+        logger.debug({ messageId }, '[conversation] message already processed (db), skipping');
         return;
       }
-      console.warn(`[Conversation Service] externalId ${messageId} already exists but tenant mismatch`);
+      logger.warn({ messageId }, '[conversation] externalId already exists but tenant mismatch');
     }
   }
 
@@ -98,8 +99,7 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
             }
           });
         } catch (err) {
-          // best-effort: log but don't fail the whole transaction for media record errors
-          console.warn('[Conversation Service] Failed to persist media asset', err?.message || err);
+          logger.warn({ err: err?.message }, '[conversation] failed to persist media asset');
         }
       }
     }
@@ -115,7 +115,7 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
     const lockRes = await redis.set(convLockKey, lockId, 'NX', 'EX', lockExpire);
     if (lockRes) lockAcquired = true;
   } catch (err) {
-    console.warn('[Conversation Service] Conversation lock attempt failed', err?.message || err);
+    logger.warn({ err: err?.message }, '[conversation] conversation lock attempt failed');
   }
 
   // If lock not acquired, attempt a short-poll to find an existing open conversation
@@ -131,7 +131,7 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
       const jobId = messageId ? `aiReply:${messageId}` : undefined;
       await mainQueue.add('aiReply', { tenantId, conversationId: existing.id, messageId: msg.id }, jobId ? { jobId, removeOnComplete: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } } : { removeOnComplete: true });
 
-      console.log(`[Conversation Service] Saved message and enqueued aiReply for existing conversation: ${existing.id}`);
+      logger.info({ conversationId: existing.id }, '[conversation] message saved, aiReply enqueued (existing conversation)');
       return;
     }
     // If no existing conversation found, try to acquire lock with retries
@@ -171,14 +171,14 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
       const jobId = messageId ? `aiReply:${messageId}` : undefined;
       await mainQueue.add('aiReply', { tenantId: result.tenantId, conversationId: result.conversationId, messageId: result.messageId }, jobId ? { jobId, removeOnComplete: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } } : { removeOnComplete: true });
 
-      console.log(`[Conversation Service] Saved message and enqueued aiReply for conversation: ${result.conversationId}`);
+      logger.info({ conversationId: result.conversationId }, '[conversation] message saved, aiReply enqueued');
       return;
     } finally {
       try {
         const cur = await redis.get(convLockKey);
         if (cur === lockId) await redis.del(convLockKey);
       } catch (err) {
-        console.warn('[Conversation Service] Failed to release conversation lock', err?.message || err);
+        logger.warn({ err: err?.message }, '[conversation] failed to release conversation lock');
       }
     }
   }
@@ -214,7 +214,7 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
             }
           });
         } catch (err) {
-          console.warn('[Conversation Service] Failed to persist media asset (fallback path)', err?.message || err);
+          logger.warn({ err: err?.message }, '[conversation] failed to persist media asset (fallback path)');
         }
       }
     }
@@ -223,7 +223,7 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
 
   const fallbackJobId = messageId ? `aiReply:${messageId}` : undefined;
   await mainQueue.add('aiReply', { tenantId: fallbackResult.tenantId, conversationId: fallbackResult.conversationId, messageId: fallbackResult.messageId }, fallbackJobId ? { jobId: fallbackJobId, removeOnComplete: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } } : { removeOnComplete: true });
-  console.log(`[Conversation Service] Saved message (fallback) and enqueued aiReply for conversation: ${fallbackResult.conversationId}`);
+  logger.info({ conversationId: fallbackResult.conversationId }, '[conversation] message saved (fallback), aiReply enqueued');
 };
 
 /**

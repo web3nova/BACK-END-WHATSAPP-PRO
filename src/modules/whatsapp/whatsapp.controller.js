@@ -1,6 +1,7 @@
 import { BadRequestError } from '../../common/errors/index.js';
 import { asyncHandler } from '../../common/utils/asyncHandler.js';
 import { ok } from '../../common/utils/apiResponse.js';
+import { logger } from '../../config/logger.js';
 import * as whatsappService from './whatsapp.service.js';
 import { exchangeCodeForAccount } from './embeddedSignup.service.js';
 
@@ -14,7 +15,7 @@ export const verifyWebhook = (req, res) => {
 
   if (mode && token) {
     if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
-      console.log('[WhatsApp Webhook] Verification successful');
+      logger.info('[whatsapp] webhook verification successful');
       // Meta requires the raw challenge string to be sent back
       return res.status(200).send(challenge);
     } else {
@@ -55,8 +56,8 @@ export const receiveWebhook = (req, res) => {
   
   if (payload.object === 'whatsapp_business_account') {
     // Pass to service in the background
-    whatsappService.processIncoming(payload).catch(error => {
-      console.error('[WhatsApp Webhook] Async processing error:', error);
+    whatsappService.processIncoming(payload).catch((error) => {
+      logger.error({ err: error?.message }, '[whatsapp] async webhook processing error');
     });
   }
 };

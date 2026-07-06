@@ -5,7 +5,11 @@ import { config } from '../../config/index.js';
 
 const extensionByMime = {
   'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
   'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'application/pdf': 'pdf',
 };
 
 function safeName(name = 'asset') {

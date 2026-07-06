@@ -1,5 +1,6 @@
 import { Worker } from 'bullmq';
 import { redis } from '../config/redis.js';
+import { logger } from '../config/logger.js';
 import processAiReply from './processors/aiReply.job.js';
 import processOutbox from './processors/outbox.job.js';
 import processNotification from './processors/notification.job.js';
@@ -9,7 +10,7 @@ let workerInstance = null;
 export const startWorker = () => {
   if (workerInstance) return workerInstance;
 
-  console.log('[Worker] Starting background worker...');
+  logger.info('[worker] starting background worker');
 
   const worker = new Worker('main', async (job) => {
     switch (job.name) {
@@ -23,27 +24,27 @@ export const startWorker = () => {
         await processNotification(job);
         break;
       default:
-        console.warn(`[Worker] Unknown job name: ${job.name}`);
+        logger.warn({ jobName: job.name }, '[worker] unknown job name');
     }
   }, { connection: redis, checkCompatibility: false });
 
-  worker.on('completed', job => {
-    console.log(`[Worker] Job ${job.id} completed!`);
+  worker.on('completed', (job) => {
+    logger.info({ jobId: job.id, jobName: job.name }, '[worker] job completed');
   });
 
   worker.on('failed', (job, err) => {
-    console.error(`[Worker] Job ${job.id} failed with error ${err.message}`);
+    logger.error({ jobId: job.id, jobName: job.name, err: err.message }, '[worker] job failed');
   });
 
   // Graceful shutdown helper
   const shutdown = async (signal) => {
-    console.log(`[Worker] ${signal} received — shutting down worker...`);
+    logger.info({ signal }, '[worker] shutting down');
     try {
       await worker.close();
-      console.log('[Worker] Graceful shutdown complete.');
+      logger.info('[worker] graceful shutdown complete');
       process.exit(0);
     } catch (err) {
-      console.error('[Worker] Error during shutdown', err?.message || err);
+      logger.error({ err: err?.message }, '[worker] error during shutdown');
       process.exit(1);
     }
   };

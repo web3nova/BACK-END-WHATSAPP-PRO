@@ -1,6 +1,7 @@
 import * as conversationService from '../conversations/conversation.service.js';
 import { prisma } from '../../config/prisma.js';
 import { mainQueue } from '../../jobs/queue.js';
+import { logger } from '../../config/logger.js';
 import { fetchAndStoreMedia } from './media.service.js';
 import { parseMessage, isMediaMessage, extractMediaId } from './whatsapp.parser.js';
 
@@ -26,7 +27,7 @@ export const processIncoming = async (payload) => {
         const senderName = contact?.profile?.name || '';
         const { text } = parseMessage(message);
 
-        console.log(`[WhatsApp] Message from ${senderPhone} to ${phoneNumberId}: ${text}`);
+        logger.info({ senderPhone, phoneNumberId }, '[whatsapp] incoming message');
 
         const mediaAssets = [];
         try {
@@ -39,7 +40,7 @@ export const processIncoming = async (payload) => {
             }
           }
         } catch (err) {
-          console.warn('[WhatsApp] Failed to fetch/store media:', err?.message || err);
+          logger.warn({ err: err?.message }, '[whatsapp] failed to fetch/store media');
         }
 
         await conversationService.handleIncomingMessage({

@@ -1,4 +1,5 @@
 import { prisma } from '../../config/prisma.js';
+import { logger } from '../../config/logger.js';
 import aiService from '../../modules/ai/ai.service.js';
 import * as whatsappService from '../../modules/whatsapp/whatsapp.service.js';
 
@@ -21,7 +22,7 @@ export default async function processAiReply(job) {
 
   // If conversation is escalated or closed, AI shouldn't reply automatically
   if (conversation.status !== 'open') {
-    console.log(`[aiReply] Conversation ${conversationId} is ${conversation.status}. AI skipped.`);
+    logger.info({ conversationId, status: conversation.status }, '[aiReply] conversation not open, skipping');
     return;
   }
 
@@ -31,13 +32,13 @@ export default async function processAiReply(job) {
       where: { conversationId, role: 'ai', meta: { path: ['aiForMessageId'], equals: messageId } }
     });
     if (existingAi) {
-      console.log(`[aiReply] AI reply already exists for message ${messageId}, skipping.`);
+      logger.info({ messageId }, '[aiReply] AI reply already exists, skipping');
       return;
     }
   }
 
   // 2. Call the AI Service
-  console.log(`[aiReply] Triggering AI for conversation ${conversationId}`);
+  logger.info({ conversationId }, '[aiReply] triggering AI');
   let aiResponse;
   try {
     aiResponse = await aiService.chat({
@@ -47,22 +48,21 @@ export default async function processAiReply(job) {
       message: message.content
     });
   } catch (err) {
-    console.error(`[aiReply] AI service failed for conversation ${conversationId}:`, err?.message || err);
+    logger.error({ err: err?.message, conversationId }, '[aiReply] AI service failed, escalating');
 
-    // Save a fallback AI message and attempt to notify the user, then escalate the conversation
     const fallback = 'Sorry, I could not process your message right now. A human will reply shortly.';
     await prisma.message.create({ data: { conversationId, role: 'ai', content: fallback, meta: { aiForMessageId: messageId } } });
 
     try {
       await whatsappService.sendMessage(tenantId, conversation.customer.phone, fallback);
     } catch (sendErr) {
-      console.error('[aiReply] Failed to send fallback message via WhatsApp:', sendErr?.message || sendErr);
+      logger.error({ err: sendErr?.message }, '[aiReply] failed to send fallback message');
     }
 
     try {
       await prisma.conversation.update({ where: { id: conversationId }, data: { status: 'escalated' } });
     } catch (updErr) {
-      console.error('[aiReply] Failed to escalate conversation:', updErr?.message || updErr);
+      logger.error({ err: updErr?.message }, '[aiReply] failed to escalate conversation');
     }
 
     return; // treat job as handled to avoid retry storms
@@ -81,5 +81,5 @@ export default async function processAiReply(job) {
   // 4. Send response back to customer via WhatsApp
   await whatsappService.sendMessage(tenantId, conversation.customer.phone, aiResponse.reply);
 
-  console.log(`[aiReply] AI response sent to ${conversation.customer.phone}`);
+  logger.info({ conversationId }, '[aiReply] AI response delivered');
 }
