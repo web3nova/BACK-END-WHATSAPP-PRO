@@ -8,6 +8,11 @@ export const getPlans = asyncHandler(async (req, res) => {
   return ok(res, plans);
 });
 
+export const getSubscription = asyncHandler(async (req, res) => {
+  const sub = await billingService.getSubscription(req.user?.tenantId ?? null);
+  return ok(res, sub);
+});
+
 export const initializePayment = asyncHandler(async (req, res) => {
   const { planId } = req.body;
   const tenantId   = req.user.tenantId;

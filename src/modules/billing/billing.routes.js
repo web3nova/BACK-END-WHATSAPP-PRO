@@ -10,6 +10,33 @@ const router = Router();
 
 /**
  * @openapi
+ * /billing/subscription:
+ *   get:
+ *     summary: Get the current tenant's subscription status
+ *     tags: [Billing]
+ *     responses:
+ *       200:
+ *         description: Subscription object (null if none exists)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     status: { type: string, enum: [TRIAL, ACTIVE, EXPIRED, CANCELLED] }
+ *                     plan: { type: string, nullable: true }
+ *                     trialEndsAt: { type: string, format: date-time, nullable: true }
+ *                     currentPeriodEnd: { type: string, format: date-time, nullable: true }
+ *                     isActive: { type: boolean }
+ */
+router.get('/subscription', controller.getSubscription);
+
+/**
+ * @openapi
  * /billing/initialize:
  *   post:
  *     summary: Initialize a Monnify checkout for a subscription plan

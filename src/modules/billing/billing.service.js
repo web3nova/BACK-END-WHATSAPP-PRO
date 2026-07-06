@@ -47,6 +47,26 @@ export const startTrial = async (tenantId) => {
   });
 };
 
+// ── Get subscription for a tenant ────────────────────────────────────────────
+
+export const getSubscription = async (tenantId) => {
+  if (!tenantId) return null;
+  const sub = await prisma.subscription.findUnique({ where: { tenantId } });
+  if (!sub) return null;
+
+  const now = new Date();
+  const isTrialExpired = sub.status === 'TRIAL' && sub.trialEndsAt && sub.trialEndsAt < now;
+  const isExpired = sub.status === 'ACTIVE' && sub.currentPeriodEnd && sub.currentPeriodEnd < now;
+
+  return {
+    status: isTrialExpired || isExpired ? 'EXPIRED' : sub.status,
+    plan: sub.planId ?? null,
+    trialEndsAt: sub.trialEndsAt ?? null,
+    currentPeriodEnd: sub.currentPeriodEnd ?? null,
+    isActive: !isTrialExpired && !isExpired && (sub.status === 'TRIAL' || sub.status === 'ACTIVE'),
+  };
+};
+
 // ── Get available billing plans ───────────────────────────────────────────────
 
 export const getPlans = async () => {
