@@ -36,7 +36,14 @@ export const startWorker = () => {
     logger.error({ jobId: job.id, jobName: job.name, err: err.message }, '[worker] job failed');
   });
 
-  // Graceful shutdown helper
+  workerInstance = worker;
+  return workerInstance;
+};
+
+// When run as a standalone process (`npm run worker`), handle shutdown here.
+// When embedded inside server.js, server.js owns the shutdown lifecycle.
+if (process.argv[1].endsWith('worker.js') || process.argv[1].endsWith('worker.ts')) {
+  const worker = startWorker();
   const shutdown = async (signal) => {
     logger.info({ signal }, '[worker] shutting down');
     try {
@@ -48,15 +55,6 @@ export const startWorker = () => {
       process.exit(1);
     }
   };
-
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
-
-  workerInstance = worker;
-  return workerInstance;
-};
-
-// Start worker immediately if this file is run directly (e.g. `npm run worker`)
-if (process.argv[1].endsWith('worker.js') || process.argv[1].endsWith('worker.ts')) {
-  startWorker();
 }
