@@ -1,10 +1,20 @@
 // src/middleware/error.middleware.js
 
+import { ZodError } from 'zod';
 import { AppError } from '../common/errors/index.js';
 import logger from '../config/logger.js';
 
 // Central error handler — must be registered LAST in app.js (after all routes)
 export const errorMiddleware = (err, req, res, next) => {
+  // Zod validation errors (from direct .parse() calls in controllers)
+  if (err instanceof ZodError) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation error',
+      errors: err.flatten(),
+    });
+  }
+
   // Known, intentional errors (BadRequestError, NotFoundError, etc.)
   if (err instanceof AppError) {
     logger.warn(`[${err.statusCode}] ${err.message}`);
