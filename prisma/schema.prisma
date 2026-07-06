@@ -296,6 +296,7 @@ model Document {
   tenantId  String
   filename  String
   mimeType  String
+  size      Int?
   status    String   @default("pending")
   createdAt DateTime @default(now())
 

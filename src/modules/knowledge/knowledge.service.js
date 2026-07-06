@@ -21,7 +21,7 @@ import { retrieve } from './pipeline/retriever.js';
  */
 export async function ingestDocument({ tenantId, file, inlineEmbed = true }) {
   const document = await prisma.document.create({
-    data: { tenantId, filename: file.originalname, mimeType: file.mimetype, status: 'processing' },
+    data: { tenantId, filename: file.originalname, mimeType: file.mimetype, size: file.size ?? null, status: 'processing' },
   });
 
   try {
@@ -102,7 +102,15 @@ export async function listDocuments(tenantId) {
   return prisma.document.findMany({
     where: { tenantId },
     orderBy: { createdAt: 'desc' },
-    select: { id: true, filename: true, mimeType: true, status: true, createdAt: true },
+    select: {
+      id: true,
+      filename: true,
+      mimeType: true,
+      status: true,
+      size: true,
+      createdAt: true,
+      _count: { select: { chunks: true } },
+    },
   });
 }
 
