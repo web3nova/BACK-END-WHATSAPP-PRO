@@ -1,5 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { NotFoundError } from '../../common/errors/index.js';
+import { createInApp } from '../notifications/notification.service.js';
 
 const orderSelect = {
   id: true,
@@ -103,7 +104,18 @@ export const createOrder = async (tenantId, data) => {
   });
 
   const customerMap = await loadCustomers(tenantId, [order.customerId]);
-  return attachCustomer(order, customerMap);
+  const result = attachCustomer(order, customerMap);
+
+  const amount = order.totalMinor ? `₦${(order.totalMinor / 100).toLocaleString()}` : '';
+  const customerName = result.customer?.name || result.customer?.phone || 'A customer';
+  createInApp(tenantId, {
+    type: 'new_order',
+    title: `New order from ${customerName}`,
+    body: `Order ${amount ? `for ${amount} ` : ''}has been placed`,
+    metadata: { orderId: order.id },
+  }).catch(() => {});
+
+  return result;
 };
 
 export const updateOrderStatus = async (tenantId, id, status) => {

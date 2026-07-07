@@ -5,6 +5,7 @@ import { redis } from '../../config/redis.js';
 import { logger } from '../../config/logger.js';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import crypto from 'crypto';
+import { createInApp } from '../notifications/notification.service.js';
 
 // Normalize phone to E.164 when possible; fall back to digits-preserving format.
 const normalizePhone = (phone) => {
@@ -170,6 +171,15 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
 
       const jobId = messageId ? `aiReply:${messageId}` : undefined;
       await mainQueue.add('aiReply', { tenantId: result.tenantId, conversationId: result.conversationId, messageId: result.messageId }, jobId ? { jobId, removeOnComplete: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } } : { removeOnComplete: true });
+
+      const displayName = senderName || senderPhone || 'A customer';
+      const preview = text ? (text.length > 60 ? text.slice(0, 57) + '…' : text) : 'Media message';
+      createInApp(tenantId, {
+        type: 'new_message',
+        title: `New message from ${displayName}`,
+        body: preview,
+        metadata: { senderPhone, conversationId: result.conversationId },
+      }).catch(() => {});
 
       logger.info({ conversationId: result.conversationId }, '[conversation] message saved, aiReply enqueued');
       return;

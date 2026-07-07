@@ -38,8 +38,25 @@ model Tenant {
   onboardingOverrides OnboardingOverride[]
   onboardingProgress  OnboardingProgress?
   paymentConfig       PaymentConfig?
+  notifications       Notification[]
 
   @@map("tenants")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  type      String
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, read])
+  @@index([tenantId, createdAt])
+  @@map("notifications")
 }
 
 enum TenantStatus {
