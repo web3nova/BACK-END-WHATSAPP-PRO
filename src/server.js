@@ -1,7 +1,7 @@
 import { createApp } from './app.js';
 import { config } from './config/index.js';
 import { logger } from './config/logger.js';
-import { bootstrapSuperAdmin } from './config/bootstrap.js';
+import { bootstrapSuperAdmin, bootstrapVectorDb } from './config/bootstrap.js';
 import { startWorker } from './jobs/worker.js';
 import './jobs/billing.cron.js';
 
@@ -11,6 +11,7 @@ const worker = startWorker();
 const server = app.listen(config.port, async () => {
   logger.info(`API listening on http://localhost:${config.port}${config.apiPrefix}`);
   await bootstrapSuperAdmin();
+  await bootstrapVectorDb();
 });
 
 const shutdown = async (signal) => {

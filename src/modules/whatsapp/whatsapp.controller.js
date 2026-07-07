@@ -53,6 +53,11 @@ export const getAccount = asyncHandler(async (req, res) => {
   return ok(res, account);
 });
 
+export const disconnect = asyncHandler(async (req, res) => {
+  const result = await whatsappService.disconnectAccount(req.tenant.id);
+  return ok(res, result);
+});
+
 /**
  * GET /whatsapp/business-profile — fetch WhatsApp Business Profile from Meta
  */

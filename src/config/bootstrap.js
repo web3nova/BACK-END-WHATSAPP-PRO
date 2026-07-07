@@ -2,6 +2,7 @@ import prisma from './prisma.js';
 import { config } from './index.js';
 import { hashPassword } from '../common/utils/hash.js';
 import { logger } from './logger.js';
+import { ensureTenantIndex } from './vectordb.js';
 
 async function withDbRetry(fn, retries = 5, delayMs = 2000) {
   for (let i = 0; i < retries; i++) {
@@ -12,6 +13,15 @@ async function withDbRetry(fn, retries = 5, delayMs = 2000) {
     }
   }
 }
+
+export const bootstrapVectorDb = async () => {
+  try {
+    await ensureTenantIndex();
+    logger.info('[bootstrap] Qdrant tenantId index ready');
+  } catch (err) {
+    logger.warn({ err }, '[bootstrap] Qdrant index check failed — search may not filter correctly');
+  }
+};
 
 export const bootstrapSuperAdmin = async () => {
   const email    = config.superAdmin.email;

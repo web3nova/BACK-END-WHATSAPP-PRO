@@ -47,6 +47,12 @@ export const getAccountWithStatus = async (tenantId) => {
   return { ...safe, status, qualityRating };
 };
 
+/** Remove the tenant's WhatsApp account record (disconnect). */
+export const disconnectAccount = async (tenantId) => {
+  await prisma.whatsappAccount.deleteMany({ where: { tenantId } });
+  return { disconnected: true };
+};
+
 /** Fetch WhatsApp Business Profile from Meta for the tenant's phone number. */
 export const getBusinessProfile = async (tenantId) => {
   const account = await prisma.whatsappAccount.findUnique({

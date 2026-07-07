@@ -85,6 +85,7 @@ export const setupRouter = Router();
  */
 setupRouter.get('/account', controller.getAccount);
 setupRouter.post('/connect', controller.connect);
+setupRouter.delete('/disconnect', controller.disconnect);
 setupRouter.get('/business-profile', controller.getBusinessProfile);
 setupRouter.put('/business-profile', controller.updateBusinessProfile);
 
