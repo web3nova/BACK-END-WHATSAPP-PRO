@@ -16,10 +16,6 @@ const required = [
   'QDRANT_URL',
   'QDRANT_API_KEY',
 
-  // AI — chat provider (Anthropic) + embeddings (OpenAI)
-  'ANTHROPIC_API_KEY',
-  'OPENAI_API_KEY',
-
   // WhatsApp Cloud API
   'META_APP_ID',
   'META_APP_SECRET',
@@ -87,6 +83,14 @@ export const config = {
       apiKey: process.env.OPENAI_API_KEY,
       chatModel: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini',
       embeddingModel: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
+    },
+    openrouter: {
+      apiKey: process.env.OPENROUTER_API_KEY,
+      chatModel: process.env.OPENROUTER_CHAT_MODEL || 'meta-llama/llama-3.1-8b-instruct:free',
+    },
+    jina: {
+      apiKey: process.env.JINA_API_KEY,
+      embedModel: process.env.JINA_EMBED_MODEL || 'jina-embeddings-v3',
     },
   },
 

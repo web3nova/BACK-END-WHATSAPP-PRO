@@ -2,22 +2,19 @@ import { claudeProvider } from './claude.provider.js';
 import { openaiProvider } from './openai.provider.js';
 import { geminiProvider } from './gemini.provider.js';
 import { deepseekProvider } from './deepseek.provider.js';
+import { openrouterProvider } from './openrouter.provider.js';
+import { jinaProvider } from './jina.provider.js';
 import { config } from '../../../config/index.js';
 
 /**
  * Provider abstraction for the Intelligence Layer.
  *
- * Normalized message history (provider-agnostic):
- *   { role: 'user'|'assistant', content: string }
- *   { role: 'assistant', content?: string, toolCalls: [{ id, name, input }] }
- *   { role: 'tool', toolCallId, name, content }
- *
- * A chat provider implements:
+ * Chat providers implement:
  *   chat({ system, messages, tools, maxTokens })
  *     -> { text: string|null, toolCalls: [{ id, name, input }], stopReason }
  *
- * Tool definitions passed to chat():
- *   { name, description, parameters: <JSON schema object> }
+ * Embedding providers implement:
+ *   embed(texts: string[]) -> Promise<number[][]>
  */
 
 const chatProviders = {
@@ -25,16 +22,27 @@ const chatProviders = {
   openai: openaiProvider,
   gemini: geminiProvider,
   deepseek: deepseekProvider,
+  openrouter: openrouterProvider,
+};
+
+const embeddingProviders = {
+  openai: openaiProvider, // needs OPENAI_API_KEY
+  jina: jinaProvider,     // needs JINA_API_KEY — 8M tokens/month free
 };
 
 export function getChatProvider() {
-  return chatProviders[process.env.AI_CHAT_PROVIDER] ?? chatProviders[config.ai.chatProvider] ?? claudeProvider;
+  const key = process.env.AI_CHAT_PROVIDER ?? config.ai.chatProvider ?? 'anthropic';
+  const provider = chatProviders[key];
+  if (!provider) throw new Error(`Unknown AI_CHAT_PROVIDER: "${key}". Valid: ${Object.keys(chatProviders).join(', ')}`);
+  return provider;
 }
 
-// Only OpenAI implements embeddings here; Claude has no embedding endpoint.
 export function getEmbeddingProvider() {
-  return openaiProvider;
+  const key = process.env.AI_EMBEDDING_PROVIDER ?? config.ai.embeddingProvider ?? 'openai';
+  const provider = embeddingProviders[key];
+  if (!provider) throw new Error(`Unknown AI_EMBEDDING_PROVIDER: "${key}". Valid: ${Object.keys(embeddingProviders).join(', ')}`);
+  return provider;
 }
 
-export { claudeProvider, openaiProvider, geminiProvider, deepseekProvider };
+export { claudeProvider, openaiProvider, geminiProvider, deepseekProvider, openrouterProvider, jinaProvider };
 
