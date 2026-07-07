@@ -5,7 +5,7 @@ import { config } from '../../config/index.js';
 import { sendMail } from '../../config/mailer.js';
 import { BadRequestError, NotFoundError } from '../../common/errors/index.js';
 
-const TRIAL_DAYS = 5;
+const TRIAL_DAYS = 14;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -35,15 +35,18 @@ export const startTrial = async (tenantId) => {
   const trialStartsAt = new Date();
   const trialEndsAt   = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
 
+  const existing = await prisma.subscription.findUnique({ where: { tenantId } });
+
+  // If an active trial or paid subscription already exists, leave it alone
+  if (existing && (existing.status === 'ACTIVE' || (existing.status === 'TRIAL' && existing.trialEndsAt > new Date()))) {
+    return existing;
+  }
+
+  // Create or reset the trial (covers new users and those whose trial expired)
   return prisma.subscription.upsert({
     where:  { tenantId },
-    update: {},
-    create: {
-      tenantId,
-      status: 'TRIAL',
-      trialStartsAt,
-      trialEndsAt,
-    },
+    update: { status: 'TRIAL', trialStartsAt, trialEndsAt },
+    create: { tenantId, status: 'TRIAL', trialStartsAt, trialEndsAt },
   });
 };
 

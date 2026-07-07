@@ -34,6 +34,7 @@ const router = Router();
  *                     isActive: { type: boolean }
  */
 router.get('/subscription', controller.getSubscription);
+router.post('/trial', controller.activateTrial);
 
 /**
  * @openapi

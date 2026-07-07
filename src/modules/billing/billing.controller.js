@@ -13,6 +13,13 @@ export const getSubscription = asyncHandler(async (req, res) => {
   return ok(res, sub);
 });
 
+export const activateTrial = asyncHandler(async (req, res) => {
+  const tenantId = req.user?.tenantId;
+  await billingService.startTrial(tenantId);
+  const sub = await billingService.getSubscription(tenantId);
+  return ok(res, sub);
+});
+
 export const initializePayment = asyncHandler(async (req, res) => {
   const { planId } = req.body;
   const tenantId   = req.user.tenantId;
