@@ -1,7 +1,7 @@
 import { prisma } from '../../config/prisma.js';
-import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
+import { NotFoundError, BadRequestError, ForbiddenError } from '../../common/errors/index.js';
 import { paginate, paginatedResponse } from '../../common/utils/pagination.js';
-import { getAssetUrl, uploadAsset } from '../../common/utils/uploadAsset.js';
+import { getAssetUrl, uploadAsset, deleteAsset } from '../../common/utils/uploadAsset.js';
 
 
 async function requireBusiness(tenantId) {
@@ -25,6 +25,7 @@ const defaultSettings = {
   navigation: [],
   seo: {},
   social: {},
+  sections: [],
   published: false,
 };
 
@@ -107,7 +108,15 @@ export async function getSettings(tenantId) {
 export async function uploadImage(tenantId, file) {
   await requireBusiness(tenantId);
   const asset = await uploadAsset({ tenantId, folder: 'website-images', file });
-  return { url: asset.url };
+  return { url: asset.url, storageKey: asset.storageKey };
+}
+
+export async function deleteImage(tenantId, storageKey) {
+  await requireBusiness(tenantId);
+  if (!storageKey.startsWith(`website-images/${tenantId}/`)) {
+    throw new ForbiddenError('Cannot delete an asset outside your own tenant.');
+  }
+  await deleteAsset(storageKey);
 }
 
 export async function updateSettings(tenantId, data) {

@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { config } from './index.js';
 
@@ -31,6 +31,13 @@ export const storage = {
       Key: key,
     });
     return getSignedUrl(client, command, { expiresIn });
+  },
+
+  async deleteObject(key) {
+    await client.send(new DeleteObjectCommand({
+      Bucket: config.storage.bucket,
+      Key: key,
+    }));
   },
 
   bucket: config.storage.bucket,

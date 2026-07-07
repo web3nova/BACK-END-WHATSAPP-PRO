@@ -232,6 +232,7 @@ model WebsiteSettings {
   navigation Json     @default("[]")
   seo        Json     @default("{}")
   social     Json     @default("{}")
+  sections   Json     @default("[]")
   published  Boolean  @default(false)
   updatedAt  DateTime @updatedAt
 

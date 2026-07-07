@@ -35,7 +35,12 @@ export const updateWebsiteSettingsSchema = z.object({
   navigation: z.array(z.record(z.unknown())).optional(),
   seo: z.record(z.unknown()).optional(),
   social: z.record(z.unknown()).optional(),
+  sections: z.array(z.record(z.unknown())).optional(),
   published: z.boolean().optional(),
+});
+
+export const deleteImageSchema = z.object({
+  storageKey: z.string().trim().min(1),
 });
 
 export const storefrontQuerySchema = z

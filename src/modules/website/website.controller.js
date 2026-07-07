@@ -58,6 +58,11 @@ export const uploadImage = asyncHandler(async (req, res) => {
   return ok(res, data);
 });
 
+export const deleteImage = asyncHandler(async (req, res) => {
+  await websiteService.deleteImage(getTenantId(req), req.body.storageKey);
+  return noContent(res);
+});
+
 export const updateSettings = asyncHandler(async (req, res) => {
   const data = await websiteService.updateSettings(getTenantId(req), req.body);
   return ok(res, data);

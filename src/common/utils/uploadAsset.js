@@ -53,6 +53,19 @@ export async function uploadAsset({ tenantId, folder, file }) {
   }
 }
 
+export async function deleteAsset(storageKey) {
+  try {
+    await storage.deleteObject(storageKey);
+  } catch (error) {
+    if (config.env !== 'development' && config.env !== 'test') {
+      throw error;
+    }
+
+    const localPath = path.join(process.cwd(), 'storage', storageKey);
+    await fs.rm(localPath, { force: true });
+  }
+}
+
 export async function getAssetUrl(storageKey, fallbackUrl) {
   if (!storageKey) return fallbackUrl;
 

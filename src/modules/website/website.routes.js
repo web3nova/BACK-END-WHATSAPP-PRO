@@ -5,6 +5,7 @@ import { uploadImage } from '../../middleware/upload.middleware.js';
 import * as websiteController from './website.controller.js';
 import {
   createPageSchema,
+  deleteImageSchema,
   listPagesSchema,
   pageParamsSchema,
   publishPageSchema,
@@ -52,6 +53,31 @@ router.get('/settings', websiteController.getSettings);
  *       400: { description: Invalid or missing image }
  */
 router.post('/image', uploadImage, websiteController.uploadImage);
+
+/**
+ * @openapi
+ * /website/image:
+ *   delete:
+ *     tags: [Website]
+ *     summary: Delete a previously uploaded website image from storage
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [storageKey]
+ *             properties:
+ *               storageKey: { type: string }
+ *     responses:
+ *       204: { description: Deleted }
+ *       403: { description: storageKey does not belong to this tenant }
+ */
+router.delete(
+  '/image',
+  validate(deleteImageSchema, 'body'),
+  websiteController.deleteImage,
+);
 
 /**
  * @openapi
