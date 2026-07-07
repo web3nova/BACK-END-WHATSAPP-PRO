@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireFeature } from '../../middleware/subscription.middleware.js';
 import { validate } from '../../middleware/validate.middleware.js';
+import { uploadImage } from '../../middleware/upload.middleware.js';
 import * as websiteController from './website.controller.js';
 import {
   createPageSchema,
@@ -27,6 +28,30 @@ router.use(requireFeature('websiteBuilder'));
  *       200: { description: Website settings }
  */
 router.get('/settings', websiteController.getSettings);
+
+/**
+ * @openapi
+ * /website/image:
+ *   post:
+ *     tags: [Website]
+ *     summary: Upload an image (gallery photo, hero background) for the website builder
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [image]
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *                 description: JPG, PNG, WEBP, or GIF image, max 5MB
+ *     responses:
+ *       200: { description: Uploaded image URL }
+ *       400: { description: Invalid or missing image }
+ */
+router.post('/image', uploadImage, websiteController.uploadImage);
 
 /**
  * @openapi

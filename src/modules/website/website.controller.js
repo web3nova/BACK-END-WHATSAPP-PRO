@@ -1,6 +1,7 @@
 import { asyncHandler } from '../../common/utils/asyncHandler.js';
 import { ok, created, noContent } from '../../common/utils/apiResponse.js';
 import { getTenantId } from '../../common/utils/tenantContext.js';
+import { BadRequestError } from '../../common/errors/index.js';
 import * as websiteService from './website.service.js';
 
 function normalizeHost(host = '') {
@@ -46,6 +47,14 @@ export const setPublished = asyncHandler(async (req, res) => {
 
 export const getSettings = asyncHandler(async (req, res) => {
   const data = await websiteService.getSettings(getTenantId(req));
+  return ok(res, data);
+});
+
+export const uploadImage = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    throw new BadRequestError('No image uploaded. Send multipart/form-data with field "image".');
+  }
+  const data = await websiteService.uploadImage(getTenantId(req), req.file);
   return ok(res, data);
 });
 

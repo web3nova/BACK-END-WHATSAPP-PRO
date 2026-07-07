@@ -1,7 +1,7 @@
 import { prisma } from '../../config/prisma.js';
 import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
 import { paginate, paginatedResponse } from '../../common/utils/pagination.js';
-import { getAssetUrl } from '../../common/utils/uploadAsset.js';
+import { getAssetUrl, uploadAsset } from '../../common/utils/uploadAsset.js';
 
 
 async function requireBusiness(tenantId) {
@@ -102,6 +102,12 @@ export async function getSettings(tenantId) {
     create: { businessId: business.id, ...defaultSettings },
     update: {},
   });
+}
+
+export async function uploadImage(tenantId, file) {
+  await requireBusiness(tenantId);
+  const asset = await uploadAsset({ tenantId, folder: 'website-images', file });
+  return { url: asset.url };
 }
 
 export async function updateSettings(tenantId, data) {
