@@ -37,6 +37,7 @@ model Tenant {
   payments        Payment[]
   onboardingOverrides OnboardingOverride[]
   onboardingProgress  OnboardingProgress?
+  paymentConfig       PaymentConfig?
 
   @@map("tenants")
 }
@@ -226,22 +227,69 @@ model Product {
   id              String   @id @default(uuid())
   tenantId        String
   name            String
+  slug            String?
+  sku             String?
+  barcode         String?
+  hsCode          String?
   category        String?
+  brand           String?
   description     String?
   review          String?
   imageUrl        String?
   imageStorageKey String?
+  galleryImages   Json     @default("[]")
   priceMinor      Int      @default(0)
+  costPrice       Int?
+  compareAtPrice  Int?
   currency        String   @default("NGN")
   attributes      Json     @default("{}")
+  specifications  Json     @default("[]")
+  features        Json     @default("[]")
+  faqs            Json     @default("[]")
+  seoMetadata     Json     @default("{}")
+  tags            String[]
+  collections     String[]
   stock           Int      @default(0)
+  unit            String   @default("piece")
+  minimumOrderQuantity Int  @default(1)
+  isActive        Boolean  @default(true)
+  isFeatured      Boolean  @default(false)
+  sortOrder       Int      @default(0)
+  relatedProductIds  String[]
+  upsellProductIds   String[]
+  crossSellProductIds String[]
   createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  tenant    Tenant          @relation(fields: [tenantId], references: [id])
   inventory Inventory?
+  variants  ProductVariant[]
 
   @@index([tenantId])
+  @@index([category])
+  @@index([isFeatured])
+  @@index([isActive])
   @@map("products")
+}
+
+model ProductVariant {
+  id              String   @id @default(uuid())
+  productId       String
+  name            String
+  sku             String?
+  priceMinor      Int?
+  stock           Int      @default(0)
+  attributes      Json     @default("{}")
+  imageUrl        String?
+  imageStorageKey String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_variants")
 }
 
 model Inventory {
@@ -483,6 +531,18 @@ model Payment {
   @@index([tenantId])
   @@index([orderId])
   @@map("payments")
+}
+
+model PaymentConfig {
+  id        String   @id @default(uuid())
+  tenantId  String   @unique
+  data      Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("payment_configs")
 }
 
 model OnboardingOverride {

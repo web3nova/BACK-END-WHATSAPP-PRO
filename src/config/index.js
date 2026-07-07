@@ -34,6 +34,9 @@ const required = [
   'MONNIFY_SECRET_KEY',
   'MONNIFY_CONTRACT_CODE',
 
+  // Lenco (account verification / transfers)
+  'LENCO_API_KEY',
+
   // Email (Nodemailer)
   'EMAIL_USER',
   'EMAIL_PASSWORD',
@@ -109,6 +112,11 @@ export const config = {
     secretKey: process.env.MONNIFY_SECRET_KEY,
     contractCode: process.env.MONNIFY_CONTRACT_CODE,
     baseUrl: process.env.MONNIFY_BASE_URL || 'https://api.monnify.com',
+  },
+
+  lenco: {
+    apiKey: process.env.LENCO_API_KEY,
+    baseUrl: process.env.LENCO_BASE_URL || 'https://api.lenco.co/access/v1',
   },
 
   payment: {

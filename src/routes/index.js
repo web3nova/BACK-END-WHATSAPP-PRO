@@ -34,6 +34,7 @@ import customerRoutes from '../modules/customers/customer.routes.js';
 import orderRoutes from '../modules/orders/order.routes.js';
 import quoteRoutes from '../modules/quotes/quote.routes.js';
 import paymentRoutes from '../modules/payments/payment.routes.js';
+import paymentConfigRoutes from '../modules/payments/payment-config.routes.js';
 import notificationRoutes from '../modules/notifications/notification.routes.js';
 
 const router = Router();
@@ -93,6 +94,7 @@ router.use('/customers', customerRoutes);
 router.use('/orders', orderRoutes);
 router.use('/quotes', quoteRoutes);
 router.use('/payments', paymentRoutes);
+router.use('/payment-config', paymentConfigRoutes);
 router.use('/notifications', notificationRoutes);
 
 export default router;

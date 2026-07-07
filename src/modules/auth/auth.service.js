@@ -87,8 +87,14 @@ export const login = async ({ email, password }) => {
   const valid = await comparePassword(password, user.passwordHash);
   if (!valid) throw new UnauthorizedError('Invalid credentials');
 
+  // Fetch subscription so the frontend can restore state across browsers
+  const subscription = await prisma.subscription.findUnique({
+    where: { tenantId: user.tenantId },
+    select: { id: true, plan: true, status: true, trialEndsAt: true },
+  });
+
   const tokens = await issueTokens(user);
-  return { user: sanitizeUser(user), ...tokens };
+  return { user: sanitizeUser(user), subscription, ...tokens };
 };
 
 export const refresh = async ({ refreshToken }) => {

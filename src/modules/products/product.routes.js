@@ -189,4 +189,17 @@ router.post(
  */
 router.delete('/:id', validate(productParamsSchema, 'params'), productController.remove);
 
+router.post(
+  '/:id/gallery',
+  validate(productParamsSchema, 'params'),
+  upload.single('image'),
+  productController.uploadGalleryImage,
+);
+
+router.delete(
+  '/:id/gallery',
+  validate(productParamsSchema, 'params'),
+  productController.removeGalleryImage,
+);
+
 export default router;

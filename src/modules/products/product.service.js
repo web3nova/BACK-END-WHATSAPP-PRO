@@ -5,9 +5,12 @@ import { getAssetUrl, uploadAsset } from '../../common/utils/uploadAsset.js';
 import { PRODUCT_CATEGORIES } from '../../common/constants/businessProfile.js';
 
 async function findOwned(id, tenantId) {
-  const product = await prisma.product.findFirst({ where: { id, tenantId } });
+  const product = await prisma.product.findFirst({
+    where: { id, tenantId },
+    include: { variants: true },
+  });
   if (!product) throw new NotFoundError('Product not found.');
-  return withFreshImageUrl(product);
+  return withFreshImageUrls(product);
 }
 
 async function withFreshImageUrl(product) {
@@ -18,21 +21,76 @@ async function withFreshImageUrl(product) {
   };
 }
 
-async function withFreshImageUrls(products) {
-  return Promise.all(products.map((product) => withFreshImageUrl(product)));
+async function withFreshImageUrls(product) {
+  if (!product) return product;
+  const result = await withFreshImageUrl(product);
+  if (result.galleryImages?.length) {
+    result.galleryImages = await Promise.all(
+      result.galleryImages.map(async (img) => {
+        if (img.storageKey) {
+          return { ...img, url: await getAssetUrl(img.storageKey, img.url) };
+        }
+        return img;
+      }),
+    );
+  }
+  if (result.variants?.length) {
+    result.variants = await Promise.all(
+      result.variants.map(async (v) => {
+        if (v.imageStorageKey) {
+          return { ...v, imageUrl: await getAssetUrl(v.imageStorageKey, v.imageUrl) };
+        }
+        return v;
+      }),
+    );
+  }
+  return result;
+}
+
+async function withFreshImageUrlsList(products) {
+  return Promise.all(products.map((product) => withFreshImageUrls(product)));
+}
+
+function buildWhere(tenantId, query) {
+  const where = { tenantId };
+  if (query.q) where.name = { contains: query.q, mode: 'insensitive' };
+  if (query.category) where.category = query.category;
+  if (query.brand) where.brand = { contains: query.brand, mode: 'insensitive' };
+  if (query.isFeatured !== undefined) where.isFeatured = query.isFeatured;
+  if (query.isActive !== undefined) where.isActive = query.isActive;
+  if (query.tag) where.tags = { has: query.tag };
+  if (query.collection) where.collections = { has: query.collection };
+  if (query.minPrice !== undefined || query.maxPrice !== undefined) {
+    where.priceMinor = {};
+    if (query.minPrice !== undefined) where.priceMinor.gte = Math.round(query.minPrice * 100);
+    if (query.maxPrice !== undefined) where.priceMinor.lte = Math.round(query.maxPrice * 100);
+  }
+  return where;
+}
+
+function buildOrderBy(sort) {
+  if (!sort) return { createdAt: 'desc' };
+  const desc = sort.startsWith('-');
+  const field = desc ? sort.slice(1) : sort;
+  return { [field]: desc ? 'desc' : 'asc' };
 }
 
 export async function list(tenantId, query) {
   const { page, limit, skip } = paginate(query);
-  const where = { tenantId };
-  if (query.q) where.name = { contains: query.q, mode: 'insensitive' };
-  if (query.category) where.category = query.category;
+  const where = buildWhere(tenantId, query);
+  const orderBy = buildOrderBy(query.sort);
 
   const [items, total] = await Promise.all([
-    prisma.product.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' } }),
+    prisma.product.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy,
+      include: { variants: true },
+    }),
     prisma.product.count({ where }),
   ]);
-  return paginatedResponse(await withFreshImageUrls(items), total, page, limit);
+  return paginatedResponse(await withFreshImageUrlsList(items), total, page, limit);
 }
 
 export async function getById(id, tenantId) {
@@ -40,21 +98,33 @@ export async function getById(id, tenantId) {
 }
 
 export async function create(tenantId, data) {
-  const { stock = 0, ...productData } = data;
+  const { stock = 0, variants = [], ...productData } = data;
   return prisma.$transaction(async (tx) => {
-    const product = await tx.product.create({ data: { tenantId, ...productData, stock } });
+    const product = await tx.product.create({
+      data: { tenantId, ...productData, stock },
+    });
     await tx.inventory.create({
       data: { tenantId, productId: product.id, quantity: stock },
     });
-    return withFreshImageUrl(product);
+    if (variants.length) {
+      await tx.productVariant.createMany({
+        data: variants.map((v) => ({ ...v, productId: product.id })),
+      });
+    }
+    return withFreshImageUrls(
+      await tx.product.findUnique({
+        where: { id: product.id },
+        include: { variants: true },
+      }),
+    );
   });
 }
 
 export async function update(id, tenantId, data) {
   await findOwned(id, tenantId);
-  const { stock, ...productData } = data;
+  const { stock, variants, ...productData } = data;
   return prisma.$transaction(async (tx) => {
-    const product = await tx.product.update({
+    await tx.product.update({
       where: { id },
       data: stock === undefined ? productData : { ...productData, stock },
     });
@@ -67,7 +137,21 @@ export async function update(id, tenantId, data) {
       });
     }
 
-    return withFreshImageUrl(product);
+    if (variants !== undefined) {
+      await tx.productVariant.deleteMany({ where: { productId: id } });
+      if (variants.length) {
+        await tx.productVariant.createMany({
+          data: variants.map((v) => ({ ...v, productId: id })),
+        });
+      }
+    }
+
+    return withFreshImageUrls(
+      await tx.product.findUnique({
+        where: { id },
+        include: { variants: true },
+      }),
+    );
   });
 }
 
@@ -86,7 +170,29 @@ export async function uploadImage(id, tenantId, file) {
       imageStorageKey: asset.storageKey,
     },
   });
-  return withFreshImageUrl(product);
+  return withFreshImageUrls(product);
+}
+
+export async function uploadGalleryImage(id, tenantId, file) {
+  await findOwned(id, tenantId);
+  const asset = await uploadAsset({ tenantId, folder: 'product-gallery', file });
+  const product = await prisma.product.findUnique({ where: { id } });
+  const gallery = [...(product.galleryImages || []), { url: asset.url, storageKey: asset.storageKey }];
+  const updated = await prisma.product.update({
+    where: { id },
+    data: { galleryImages: gallery },
+  });
+  return withFreshImageUrls(updated);
+}
+
+export async function removeGalleryImage(id, tenantId, storageKey) {
+  await findOwned(id, tenantId);
+  const product = await prisma.product.findUnique({ where: { id } });
+  const gallery = (product.galleryImages || []).filter((img) => img.storageKey !== storageKey);
+  return prisma.product.update({
+    where: { id },
+    data: { galleryImages: gallery },
+  });
 }
 
 export function listCategories() {

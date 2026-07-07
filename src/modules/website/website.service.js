@@ -130,7 +130,7 @@ export async function getStorefront({ tenantId, slug, domain }) {
     }),
     prisma.product.findMany({
       where: { tenantId: tenant.id, stock: { gt: 0 } },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { sortOrder: 'asc' },
       select: {
         id: true,
         name: true,

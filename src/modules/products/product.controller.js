@@ -40,3 +40,20 @@ export const uploadImage = asyncHandler(async (req, res) => {
 export const listCategories = asyncHandler(async (_req, res) => {
   return ok(res, productService.listCategories());
 });
+
+export const uploadGalleryImage = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    throw new BadRequestError('No image uploaded. Send multipart/form-data with field "image".');
+  }
+  const data = await productService.uploadGalleryImage(req.params.id, getTenantId(req), req.file);
+  return ok(res, data);
+});
+
+export const removeGalleryImage = asyncHandler(async (req, res) => {
+  const { storageKey } = req.body;
+  if (!storageKey) {
+    throw new BadRequestError('storageKey is required.');
+  }
+  const data = await productService.removeGalleryImage(req.params.id, getTenantId(req), storageKey);
+  return ok(res, data);
+});
