@@ -1,15 +1,17 @@
 // Plan definitions — feature limits per plan
 // All modules check against these via subscription.middleware.js
 
+// TEMPORARY: free plan is unrestricted (matches enterprise) until we have a
+// real mechanism for tuning per-plan limits without a code change/deploy.
 export const PLANS = {
   free: {
-    maxUsers:         2,
-    maxProducts:      20,
-    maxOrders:        50,
-    aiReplies:        100,   // per month
-    knowledgeDocs:    3,
-    whatsappAccounts: 1,
-    websiteBuilder:   false,
+    maxUsers:         Infinity,
+    maxProducts:      Infinity,
+    maxOrders:        Infinity,
+    aiReplies:        Infinity,
+    knowledgeDocs:    Infinity,
+    whatsappAccounts: Infinity,
+    websiteBuilder:   true,
   },
   starter: {
     maxUsers:         5,
