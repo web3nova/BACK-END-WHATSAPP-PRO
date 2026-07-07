@@ -189,7 +189,7 @@ model Business {
   // Operations (Step 3)
   activeClients   Int?             // ← new
   staffCount      Int?             // ← new
-  monthlyRevenue  Int?             // ← new (stored in kobo/minor units)
+  monthlyRevenue  Float?           // stored in naira; Float avoids Int overflow for large revenues
   deliveryStructure String?        // ← new
 
   // Presence & hours (Step 4)

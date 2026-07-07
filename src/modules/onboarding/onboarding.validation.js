@@ -34,7 +34,7 @@ const frontendBase = {
   taxId: z.string().trim().max(50).optional(),
   numClients: z.coerce.number().int().min(0).optional(),
   numStaff: z.coerce.number().int().min(0).optional(),
-  avgMonthlyIncome: z.coerce.number().int().min(0).optional(),
+  avgMonthlyIncome: z.coerce.number().min(0).optional(),
   deliveryStructure: z.enum(DELIVERY_STRUCTURES).optional(),
   instagram: z.string().trim().max(60).optional(),
   twitter: z.string().trim().max(60).optional(),
@@ -97,7 +97,7 @@ export const businessProfileSchema = z
     // Operations
     numberOfActiveClients: z.coerce.number().int().min(0).optional(),
     numberOfStaff: z.coerce.number().int().min(0).optional(),
-    averageMonthlyRevenue: z.coerce.number().int().min(0).optional(),
+    averageMonthlyRevenue: z.coerce.number().min(0).optional(),
     deliveryStructure: z.enum(DELIVERY_STRUCTURES).optional(),
 
     // Presence & hours
