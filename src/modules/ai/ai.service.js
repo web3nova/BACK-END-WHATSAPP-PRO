@@ -51,7 +51,7 @@ export async function chat({ tenantId, conversationId, customerId, message }) {
       continue; // let the model read tool results and respond
     }
 
-    const reply = res.text ?? '';
+    const reply = res.text?.trim() || 'I\'m not sure how to help with that. Could you rephrase your question?';
     history.push({ role: 'assistant', content: reply });
     await memory.save(conversationId, history);
     return { reply, steps: step + 1 };
