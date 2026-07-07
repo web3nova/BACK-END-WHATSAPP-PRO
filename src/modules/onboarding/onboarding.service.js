@@ -30,7 +30,7 @@ function computeBusinessPanelStatus(business) {
   }
   return {
     identity: !!(business.displayName && business.phone && business.location),
-    compliance: !!business.cacNumber,
+    compliance: true, // CAC and TIN are optional — never blocks onboarding completion
     operations:
       business.activeClients != null &&
       business.staffCount != null &&
