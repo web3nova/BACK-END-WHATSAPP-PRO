@@ -45,6 +45,15 @@ export const connect = asyncHandler(async (req, res) => {
 });
 
 /**
+ * GET /whatsapp/account — returns the tenant's connected WhatsApp account (no token exposed)
+ */
+export const getAccount = asyncHandler(async (req, res) => {
+  if (!req.tenant) throw new BadRequestError('Tenant required');
+  const account = await whatsappService.getAccount(req.tenant.id);
+  return ok(res, account);
+});
+
+/**
  * Receive incoming messages from WhatsApp
  */
 export const receiveWebhook = (req, res) => {

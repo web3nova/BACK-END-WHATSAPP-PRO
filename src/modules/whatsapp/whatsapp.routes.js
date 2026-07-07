@@ -83,6 +83,7 @@ export const setupRouter = Router();
  *       200:
  *         description: WhatsApp account connected
  */
+setupRouter.get('/account', controller.getAccount);
 setupRouter.post('/connect', controller.connect);
 
 export default router;

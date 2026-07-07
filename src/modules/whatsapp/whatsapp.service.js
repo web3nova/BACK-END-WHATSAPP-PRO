@@ -5,6 +5,15 @@ import { logger } from '../../config/logger.js';
 import { fetchAndStoreMedia } from './media.service.js';
 import { parseMessage, isMediaMessage, extractMediaId } from './whatsapp.parser.js';
 
+/** Return the tenant's connected WhatsApp account (no access token). */
+export const getAccount = async (tenantId) => {
+  const account = await prisma.whatsappAccount.findUnique({
+    where: { tenantId },
+    select: { id: true, wabaId: true, phoneNumberId: true, verified: true },
+  });
+  return account ?? null;
+};
+
 /**
  * Process the incoming Meta Webhook payload asynchronously.
  * Extracts the messages and passes them to the conversation service.
