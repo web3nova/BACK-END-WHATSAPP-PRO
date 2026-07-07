@@ -9,7 +9,7 @@ import { parseMessage, isMediaMessage, extractMediaId } from './whatsapp.parser.
 export const getAccount = async (tenantId) => {
   const account = await prisma.whatsappAccount.findUnique({
     where: { tenantId },
-    select: { id: true, wabaId: true, phoneNumberId: true, verified: true },
+    select: { id: true, wabaId: true, phoneNumberId: true, phoneNumber: true, verified: true },
   });
   return account ?? null;
 };

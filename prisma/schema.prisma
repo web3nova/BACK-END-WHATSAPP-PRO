@@ -377,6 +377,7 @@ model WhatsappAccount {
   tenantId      String  @unique
   wabaId        String?
   phoneNumberId String?
+  phoneNumber   String?
   accessToken   String?
   verified      Boolean @default(false)
 

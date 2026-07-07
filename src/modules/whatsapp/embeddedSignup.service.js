@@ -56,14 +56,26 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
 
   const accessToken = longTokenJson.access_token;
 
-  // 3. Persist all identifiers — tenant can now send/receive WhatsApp messages
+  // 3. Fetch the human-readable display phone number from Meta
+  let phoneNumber = null;
+  try {
+    const phoneRes = await fetch(
+      `${GRAPH_BASE}/${phoneNumberId}?fields=display_phone_number&access_token=${accessToken}`
+    );
+    const phoneJson = await phoneRes.json().catch(() => ({}));
+    phoneNumber = phoneJson.display_phone_number ?? null;
+  } catch {
+    // non-fatal — phoneNumber stays null
+  }
+
+  // 4. Persist all identifiers — tenant can now send/receive WhatsApp messages
   await prisma.whatsappAccount.upsert({
     where: { tenantId },
-    update: { accessToken, wabaId, phoneNumberId, verified: true },
-    create: { tenantId, accessToken, wabaId, phoneNumberId, verified: true },
+    update: { accessToken, wabaId, phoneNumberId, phoneNumber, verified: true },
+    create: { tenantId, accessToken, wabaId, phoneNumberId, phoneNumber, verified: true },
   });
 
-  return { tenantId, wabaId, phoneNumberId, verified: true };
+  return { tenantId, wabaId, phoneNumberId, phoneNumber, verified: true };
 }
 
 export default { exchangeCodeForAccount };
