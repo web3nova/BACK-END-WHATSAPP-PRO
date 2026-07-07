@@ -49,7 +49,7 @@ export const connect = asyncHandler(async (req, res) => {
  */
 export const getAccount = asyncHandler(async (req, res) => {
   if (!req.tenant) throw new BadRequestError('Tenant required');
-  const account = await whatsappService.getAccount(req.tenant.id);
+  const account = await whatsappService.getAccountWithStatus(req.tenant.id);
   return ok(res, account);
 });
 

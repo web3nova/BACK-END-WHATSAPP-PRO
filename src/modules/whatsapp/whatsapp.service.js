@@ -16,6 +16,36 @@ export const getAccount = async (tenantId) => {
   return account ?? null;
 };
 
+/** Return the tenant's connected WhatsApp account with live status from Meta. */
+export const getAccountWithStatus = async (tenantId) => {
+  const account = await prisma.whatsappAccount.findUnique({
+    where: { tenantId },
+    select: { id: true, wabaId: true, phoneNumberId: true, phoneNumber: true, accessToken: true, verified: true },
+  });
+  if (!account) return null;
+
+  let status = null;
+  let qualityRating = null;
+  try {
+    const res = await fetch(
+      `${GRAPH_BASE}/${account.phoneNumberId}?fields=display_phone_number,verified_name,status,quality_rating&access_token=${account.accessToken}`
+    );
+    const json = await res.json().catch(() => ({}));
+    status = json.status ?? null;
+    qualityRating = json.quality_rating ?? null;
+    if (!account.phoneNumber && json.display_phone_number) {
+      await prisma.whatsappAccount.update({
+        where: { tenantId },
+        data: { phoneNumber: json.display_phone_number },
+      });
+      account.phoneNumber = json.display_phone_number;
+    }
+  } catch { /* non-fatal */ }
+
+  const { accessToken: _, ...safe } = account;
+  return { ...safe, status, qualityRating };
+};
+
 /** Fetch WhatsApp Business Profile from Meta for the tenant's phone number. */
 export const getBusinessProfile = async (tenantId) => {
   const account = await prisma.whatsappAccount.findUnique({
