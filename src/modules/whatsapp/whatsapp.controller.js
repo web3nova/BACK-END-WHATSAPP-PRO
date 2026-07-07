@@ -54,6 +54,27 @@ export const getAccount = asyncHandler(async (req, res) => {
 });
 
 /**
+ * GET /whatsapp/business-profile — fetch WhatsApp Business Profile from Meta
+ */
+export const getBusinessProfile = asyncHandler(async (req, res) => {
+  if (!req.tenant) throw new BadRequestError('Tenant required');
+  const profile = await whatsappService.getBusinessProfile(req.tenant.id);
+  return ok(res, profile);
+});
+
+/**
+ * PUT /whatsapp/business-profile — update WhatsApp Business Profile on Meta
+ */
+export const updateBusinessProfile = asyncHandler(async (req, res) => {
+  if (!req.tenant) throw new BadRequestError('Tenant required');
+  const { about, address, description, email, websites, vertical } = req.body;
+  const result = await whatsappService.updateBusinessProfile(req.tenant.id, {
+    about, address, description, email, websites, vertical,
+  });
+  return ok(res, result);
+});
+
+/**
  * Receive incoming messages from WhatsApp
  */
 export const receiveWebhook = (req, res) => {
