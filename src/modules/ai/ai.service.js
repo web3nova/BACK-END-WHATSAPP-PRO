@@ -6,6 +6,16 @@ import { buildSystemPrompt } from './prompts/system.prompt.js';
 import * as memory from './memory/conversationMemory.js';
 
 const MAX_STEPS = 6; // safety cap on the tool-calling loop
+const PROVIDER_TIMEOUT_MS = 20000; // 20s per LLM call — fail fast if provider hangs
+
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`AI provider timed out after ${ms / 1000}s`)), ms)
+    ),
+  ]);
+}
 
 async function loadBusinessContext(tenantId) {
   const business = await prisma.business.findUnique({ where: { tenantId } });
@@ -35,7 +45,7 @@ export async function chat({ tenantId, conversationId, customerId, message }) {
   history.push({ role: 'user', content: message });
 
   for (let step = 0; step < MAX_STEPS; step++) {
-    const res = await provider.chat({ system, messages: history, tools });
+    const res = await withTimeout(provider.chat({ system, messages: history, tools }), PROVIDER_TIMEOUT_MS);
 
     if (res.toolCalls?.length) {
       history.push({ role: 'assistant', content: res.text || '', toolCalls: res.toolCalls });
