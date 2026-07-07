@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../../common/utils/asyncHandler.js';
 import { ok } from '../../common/utils/apiResponse.js';
 import { BadRequestError } from '../../common/errors/index.js';
-import { send, listForTenant, getUnreadCount, markAllRead, markOneRead } from './notification.service.js';
+import { send, listForTenant, getUnreadCount, markAllRead, markOneRead, getNotificationPrefs, updateNotificationPrefs } from './notification.service.js';
 
 const sendSchema = z.object({
   channel: z.enum(['email', 'whatsapp', 'sms']),
@@ -36,4 +36,23 @@ export const markAllNotificationsRead = asyncHandler(async (req, res) => {
 export const markOneNotificationRead = asyncHandler(async (req, res) => {
   await markOneRead(req.tenant.id, req.params.id);
   return ok(res, { updated: true });
+});
+
+const prefsSchema = z.object({
+  orderNotif:    z.boolean().optional(),
+  whatsappNotif: z.boolean().optional(),
+  emailNotif:    z.boolean().optional(),
+  weeklyReport:  z.boolean().optional(),
+});
+
+export const getPreferences = asyncHandler(async (req, res) => {
+  const prefs = await getNotificationPrefs(req.tenant.id);
+  return ok(res, prefs);
+});
+
+export const patchPreferences = asyncHandler(async (req, res) => {
+  const parsed = prefsSchema.safeParse(req.body);
+  if (!parsed.success) throw new BadRequestError('Invalid preferences', parsed.error.flatten());
+  const prefs = await updateNotificationPrefs(req.tenant.id, parsed.data);
+  return ok(res, prefs);
 });

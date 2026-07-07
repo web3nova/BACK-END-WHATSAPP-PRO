@@ -69,20 +69,72 @@ export async function createInApp(tenantId, { type, title, body, metadata } = {}
  * outbound=false skips outbound (e.g. for very noisy events like every message).
  * Call fire-and-forget: notify(...).catch(() => {})
  */
+// Notification type → preference key mapping
+const TYPE_TO_PREF = {
+  new_order:       'orderNotif',
+  escalation:      'whatsappNotif',
+  trial_started:   'emailNotif',
+  payment_received:'emailNotif',
+  whatsapp_connected: 'emailNotif',
+  account_update:  'emailNotif',
+  phone_quality_update: 'emailNotif',
+  account_review:  'emailNotif',
+  phone_name_update: 'emailNotif',
+  account_alert:   'emailNotif',
+  business_status: 'emailNotif',
+  template_status: 'emailNotif',
+  // weekly_report handled separately by cron
+};
+
+const DEFAULT_PREFS = {
+  orderNotif:     true,
+  whatsappNotif:  true,
+  emailNotif:     true,
+  weeklyReport:   true,
+};
+
+export async function getNotificationPrefs(tenantId) {
+  const biz = await prisma.business.findUnique({ where: { tenantId }, select: { settings: true } });
+  const stored = biz?.settings?.notificationPrefs ?? {};
+  return { ...DEFAULT_PREFS, ...stored };
+}
+
+export async function updateNotificationPrefs(tenantId, prefs) {
+  const biz = await prisma.business.findUnique({ where: { tenantId }, select: { settings: true } });
+  const current = biz?.settings ?? {};
+  const merged = { ...DEFAULT_PREFS, ...(current.notificationPrefs ?? {}), ...prefs };
+  await prisma.business.update({
+    where: { tenantId },
+    data: { settings: { ...current, notificationPrefs: merged } },
+  });
+  return merged;
+}
+
 export async function notify(tenantId, { type, title, body, metadata, outbound = true, emailSubject } = {}) {
   // 1. In-app (never throws)
   await createInApp(tenantId, { type, title, body, metadata });
 
   if (!outbound) return;
 
-  // 2. Look up tenant owner contact details
+  // 2. Look up tenant owner contact details + notification prefs in one shot
   try {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      include: { users: { take: 1, orderBy: { createdAt: 'asc' }, select: { email: true } } },
-    });
+    const [tenant, prefs] = await Promise.all([
+      prisma.tenant.findUnique({
+        where: { id: tenantId },
+        include: { users: { take: 1, orderBy: { createdAt: 'asc' }, select: { email: true } } },
+      }),
+      getNotificationPrefs(tenantId),
+    ]);
+
     const ownerEmail = tenant?.users?.[0]?.email;
     if (!ownerEmail) return;
+
+    // Global email toggle
+    if (!prefs.emailNotif) return;
+
+    // Per-type preference check
+    const prefKey = TYPE_TO_PREF[type];
+    if (prefKey && !prefs[prefKey]) return;
 
     // Email — enqueued for background delivery with retries
     await enqueue({
