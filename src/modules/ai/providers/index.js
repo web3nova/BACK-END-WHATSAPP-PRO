@@ -31,10 +31,15 @@ const embeddingProviders = {
 };
 
 export function getChatProvider() {
-  const key = process.env.AI_CHAT_PROVIDER ?? config.ai.chatProvider ?? 'anthropic';
-  const provider = chatProviders[key];
-  if (!provider) throw new Error(`Unknown AI_CHAT_PROVIDER: "${key}". Valid: ${Object.keys(chatProviders).join(', ')}`);
-  return provider;
+  const key = process.env.AI_CHAT_PROVIDER ?? config.ai.chatProvider;
+  // Explicit provider set — use it
+  if (key && key !== 'auto' && chatProviders[key]) return chatProviders[key];
+  // Auto-detect: first key that is configured wins
+  if (process.env.OPENROUTER_API_KEY) return openrouterProvider;
+  if (process.env.ANTHROPIC_API_KEY)   return claudeProvider;
+  if (process.env.OPENAI_API_KEY)      return openaiProvider;
+  if (process.env.DEEPSEEK_API_KEY)    return deepseekProvider;
+  throw new Error('No AI provider configured. Set OPENROUTER_API_KEY (or ANTHROPIC_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY).');
 }
 
 export function getEmbeddingProvider() {

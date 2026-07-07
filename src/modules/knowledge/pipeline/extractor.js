@@ -20,14 +20,25 @@ export async function extractText(file) {
   }
 
   if (mimetype === 'application/pdf' || /\.pdf$/i.test(originalname)) {
-    // pdf-parse is an optional dependency — loaded lazily so text uploads
-    // work without it. Add `pdf-parse` to package.json to enable PDFs.
     try {
       const { default: pdfParse } = await import('pdf-parse');
       const data = await pdfParse(buffer);
       return data.text;
-    } catch {
-      throw new BadRequestError('PDF parsing not available — add the "pdf-parse" dependency.');
+    } catch (err) {
+      throw new BadRequestError(`PDF parsing failed: ${err?.message || 'unknown error'}`);
+    }
+  }
+
+  if (
+    mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    /\.docx$/i.test(originalname)
+  ) {
+    try {
+      const mammoth = await import('mammoth');
+      const result = await mammoth.extractRawText({ buffer });
+      return result.value;
+    } catch (err) {
+      throw new BadRequestError(`DOCX parsing failed: ${err?.message || 'unknown error'}`);
     }
   }
 
