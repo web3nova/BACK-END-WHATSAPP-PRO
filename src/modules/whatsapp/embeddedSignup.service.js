@@ -1,7 +1,7 @@
 import { prisma } from '../../config/prisma.js';
 import { BadRequestError } from '../../common/errors/index.js';
 import { logger } from '../../config/logger.js';
-import { createInApp } from '../notifications/notification.service.js';
+import { notify } from '../notifications/notification.service.js';
 
 const GRAPH_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v20.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
@@ -92,11 +92,13 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
     create: { tenantId, accessToken, wabaId, phoneNumberId, phoneNumber, verified: true },
   });
 
-  createInApp(tenantId, {
+  notify(tenantId, {
     type: 'whatsapp_connected',
     title: 'WhatsApp Business connected',
-    body: phoneNumber ? `${phoneNumber} is now connected and ready` : 'Your WhatsApp number is now connected and ready',
+    body: phoneNumber ? `${phoneNumber} is now connected and ready to receive messages.` : 'Your WhatsApp number is now connected and ready to receive messages.',
+    emailSubject: 'WhatsApp Business number connected successfully',
     metadata: { wabaId, phoneNumberId, phoneNumber },
+    outbound: true,
   }).catch(() => {});
 
   return { tenantId, wabaId, phoneNumberId, phoneNumber, verified: true };

@@ -4,7 +4,7 @@ import prisma from '../../config/prisma.js';
 import { config } from '../../config/index.js';
 import { sendMail } from '../../config/mailer.js';
 import { BadRequestError, NotFoundError } from '../../common/errors/index.js';
-import { createInApp } from '../notifications/notification.service.js';
+import { notify } from '../notifications/notification.service.js';
 
 const TRIAL_DAYS = 14;
 
@@ -50,10 +50,12 @@ export const startTrial = async (tenantId) => {
     create: { tenantId, status: 'TRIAL', trialStartsAt, trialEndsAt },
   });
 
-  createInApp(tenantId, {
+  notify(tenantId, {
     type: 'trial_started',
     title: 'Your 14-day free trial has started',
     body: `You have full access until ${trialEndsAt.toDateString()}. Upgrade anytime to keep access.`,
+    emailSubject: 'Welcome — your free trial has started',
+    outbound: true,
   }).catch(() => {});
 
   return sub;
@@ -211,11 +213,13 @@ export const handleWebhook = async (payload, signature) => {
     });
   }
 
-  createInApp(payment.tenantId, {
+  notify(payment.tenantId, {
     type: 'payment_received',
     title: 'Payment confirmed — subscription active',
     body: `₦${(payment.amountMinor / 100).toLocaleString()} received. Your subscription is now active${renewsAt ? ` until ${renewsAt.toDateString()}` : ''}.`,
+    emailSubject: 'Payment confirmed — your subscription is active',
     metadata: { reference: paymentReference, planId },
+    outbound: true,
   }).catch(() => {});
 
   return { success: true };

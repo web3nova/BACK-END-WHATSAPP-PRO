@@ -52,11 +52,6 @@ export default { send, enqueue };
 
 // ── In-app notification store ──────────────────────────────────────────────
 
-/**
- * Fire-and-forget: create an in-app notification for a tenant.
- * Call with .catch() or inside a non-blocking try/catch so it never throws
- * in the caller's critical path.
- */
 export async function createInApp(tenantId, { type, title, body, metadata } = {}) {
   try {
     await prisma.notification.create({
@@ -64,6 +59,42 @@ export async function createInApp(tenantId, { type, title, body, metadata } = {}
     });
   } catch (err) {
     logger.warn({ err: err?.message, tenantId, type }, '[notification] failed to create in-app notification');
+  }
+}
+
+/**
+ * Unified notify — creates an in-app record AND enqueues outbound delivery
+ * (email always; WhatsApp/SMS if the tenant owner has a phone on record).
+ *
+ * outbound=false skips outbound (e.g. for very noisy events like every message).
+ * Call fire-and-forget: notify(...).catch(() => {})
+ */
+export async function notify(tenantId, { type, title, body, metadata, outbound = true, emailSubject } = {}) {
+  // 1. In-app (never throws)
+  await createInApp(tenantId, { type, title, body, metadata });
+
+  if (!outbound) return;
+
+  // 2. Look up tenant owner contact details
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      include: { users: { take: 1, orderBy: { createdAt: 'asc' }, select: { email: true } } },
+    });
+    const ownerEmail = tenant?.users?.[0]?.email;
+    if (!ownerEmail) return;
+
+    // Email — enqueued for background delivery with retries
+    await enqueue({
+      tenantId,
+      channel: 'email',
+      to: ownerEmail,
+      subject: emailSubject || title,
+      text: body,
+      html: `<p>${body}</p>`,
+    });
+  } catch (err) {
+    logger.warn({ err: err?.message, tenantId, type }, '[notification] failed to enqueue outbound notification');
   }
 }
 

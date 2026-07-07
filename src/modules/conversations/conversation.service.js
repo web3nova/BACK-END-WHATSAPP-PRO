@@ -5,7 +5,7 @@ import { redis } from '../../config/redis.js';
 import { logger } from '../../config/logger.js';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import crypto from 'crypto';
-import { createInApp } from '../notifications/notification.service.js';
+import { notify } from '../notifications/notification.service.js';
 
 // Normalize phone to E.164 when possible; fall back to digits-preserving format.
 const normalizePhone = (phone) => {
@@ -174,11 +174,12 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
 
       const displayName = senderName || senderPhone || 'A customer';
       const preview = text ? (text.length > 60 ? text.slice(0, 57) + '…' : text) : 'Media message';
-      createInApp(tenantId, {
+      notify(tenantId, {
         type: 'new_message',
-        title: `New message from ${displayName}`,
+        title: `New WhatsApp message from ${displayName}`,
         body: preview,
         metadata: { senderPhone, conversationId: result.conversationId },
+        outbound: false, // too noisy to email every message — in-app only
       }).catch(() => {});
 
       logger.info({ conversationId: result.conversationId }, '[conversation] message saved, aiReply enqueued');

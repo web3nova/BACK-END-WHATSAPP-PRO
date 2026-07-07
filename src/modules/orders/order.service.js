@@ -1,6 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { NotFoundError } from '../../common/errors/index.js';
-import { createInApp } from '../notifications/notification.service.js';
+import { notify } from '../notifications/notification.service.js';
 
 const orderSelect = {
   id: true,
@@ -108,11 +108,13 @@ export const createOrder = async (tenantId, data) => {
 
   const amount = order.totalMinor ? `₦${(order.totalMinor / 100).toLocaleString()}` : '';
   const customerName = result.customer?.name || result.customer?.phone || 'A customer';
-  createInApp(tenantId, {
+  notify(tenantId, {
     type: 'new_order',
     title: `New order from ${customerName}`,
-    body: `Order ${amount ? `for ${amount} ` : ''}has been placed`,
+    body: `Order ${amount ? `for ${amount} ` : ''}has been placed and is awaiting fulfillment.`,
+    emailSubject: `New order received — ${amount || 'check your dashboard'}`,
     metadata: { orderId: order.id },
+    outbound: true,
   }).catch(() => {});
 
   return result;
