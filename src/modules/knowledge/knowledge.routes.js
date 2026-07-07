@@ -58,5 +58,7 @@ router.get('/search', knowledgeController.search);
  *       200: { description: Document list }
  */
 router.get('/documents', knowledgeController.listDocuments);
+router.post('/:id/retry', knowledgeController.retryDocument);
+router.delete('/:id', knowledgeController.deleteDocument);
 
 export default router;

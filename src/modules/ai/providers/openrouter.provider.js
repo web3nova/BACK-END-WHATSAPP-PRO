@@ -1,10 +1,13 @@
 import OpenAI from 'openai';
 
+const CALL_TIMEOUT_MS = 20_000;
+
 let client;
 const getClient = () =>
   (client ??= new OpenAI({
     apiKey: process.env.OPENROUTER_API_KEY,
     baseURL: 'https://openrouter.ai/api/v1',
+    timeout: CALL_TIMEOUT_MS,
     defaultHeaders: {
       'HTTP-Referer': process.env.FRONTEND_URL || 'https://www.biziq.online',
       'X-OpenRouter-Title': 'BizIQ',
@@ -47,18 +50,23 @@ export const openrouterProvider = {
   name: 'openrouter',
 
   async chat({ system, messages, tools, maxTokens = 1024 }) {
-    const model = process.env.OPENROUTER_CHAT_MODEL || 'meta-llama/llama-3.1-8b-instruct:free';
+    const model = process.env.OPENROUTER_CHAT_MODEL || 'openrouter/free';
+
     const res = await getClient().chat.completions.create({
       model,
       max_tokens: maxTokens,
       messages: toMessages(system, messages),
-      tools: tools?.length
-        ? tools.map((t) => ({
-            type: 'function',
-            function: { name: t.name, description: t.description, parameters: t.parameters },
-          }))
-        : undefined,
-      tool_choice: tools?.length ? 'auto' : undefined,
+      ...(tools?.length && {
+        tools: tools.map((t) => ({
+          type: 'function',
+          function: { name: t.name, description: t.description, parameters: t.parameters },
+        })),
+        tool_choice: 'auto',
+      }),
+      provider: {
+        sort: 'throughput',
+        require_parameters: true, // only route to providers that support tools
+      },
     });
 
     const msg = res.choices[0].message;

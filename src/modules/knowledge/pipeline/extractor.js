@@ -21,7 +21,9 @@ export async function extractText(file) {
 
   if (mimetype === 'application/pdf' || /\.pdf$/i.test(originalname)) {
     try {
-      const { default: pdfParse } = await import('pdf-parse');
+      const pdfParseModule = await import('pdf-parse');
+      const pdfParse = pdfParseModule.default ?? pdfParseModule;
+      if (typeof pdfParse !== 'function') throw new Error('pdf-parse module did not export a function');
       const data = await pdfParse(buffer);
       return data.text;
     } catch (err) {

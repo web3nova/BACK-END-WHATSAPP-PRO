@@ -2,8 +2,8 @@
 // API key: https://jina.ai — sign up, copy key, set JINA_API_KEY
 
 const JINA_BASE = 'https://api.jina.ai/v1';
-// Request 1536 dims to match our existing Qdrant collection
-const EMBED_DIM = 1536;
+// jina-embeddings-v3 max is 1024 dimensions
+const EMBED_DIM = 1024;
 const JINA_EMBED_MODEL = process.env.JINA_EMBED_MODEL || 'jina-embeddings-v3';
 const BATCH_SIZE = 64;
 

@@ -3,6 +3,16 @@ import { config } from './index.js';
 import { hashPassword } from '../common/utils/hash.js';
 import { logger } from './logger.js';
 
+async function withDbRetry(fn, retries = 5, delayMs = 2000) {
+  for (let i = 0; i < retries; i++) {
+    try { return await fn(); } catch (err) {
+      if (i === retries - 1) throw err;
+      logger.warn(`[bootstrap] DB not ready, retrying in ${delayMs}ms… (${i + 1}/${retries})`);
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+}
+
 export const bootstrapSuperAdmin = async () => {
   const email    = config.superAdmin.email;
   const password = config.superAdmin.password;
@@ -12,7 +22,7 @@ export const bootstrapSuperAdmin = async () => {
     return;
   }
 
-  const existing = await prisma.user.findFirst({ where: { email, isSuperAdmin: true } });
+  const existing = await withDbRetry(() => prisma.user.findFirst({ where: { email, isSuperAdmin: true } }));
   if (existing) {
     logger.info(`[bootstrap] Super admin already exists (${email})`);
     return;

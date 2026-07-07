@@ -22,7 +22,13 @@ export const chat = asyncHandler(async (req, res) => {
   const parsed = chatSchema.safeParse(req.body);
   if (!parsed.success) throw new BadRequestError('Invalid chat payload', parsed.error.flatten());
 
-  const result = await aiService.chat({ tenantId: tenantId(req), ...parsed.data });
+  const TIMEOUT_MS = 35000;
+  const result = await Promise.race([
+    aiService.chat({ tenantId: tenantId(req), ...parsed.data }),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('AI request timed out — please try again')), TIMEOUT_MS)
+    ),
+  ]);
   return ok(res, result);
 });
 

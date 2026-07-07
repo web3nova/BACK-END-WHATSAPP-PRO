@@ -39,3 +39,15 @@ export const listDocuments = asyncHandler(async (req, res) => {
   const docs = await knowledgeService.listDocuments(tenantId(req));
   return ok(res, docs);
 });
+
+// POST /knowledge/:id/retry
+export const retryDocument = asyncHandler(async (req, res) => {
+  const result = await knowledgeService.retryDocument(tenantId(req), req.params.id);
+  return ok(res, result);
+});
+
+// DELETE /knowledge/:id
+export const deleteDocument = asyncHandler(async (req, res) => {
+  const result = await knowledgeService.deleteDocument(tenantId(req), req.params.id);
+  return ok(res, result);
+});

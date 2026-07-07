@@ -363,8 +363,9 @@ model Document {
   filename  String
   mimeType  String
   size      Int?
-  status    String   @default("pending")
-  createdAt DateTime @default(now())
+  status       String   @default("pending")
+  errorMessage String?
+  createdAt    DateTime @default(now())
 
   tenant Tenant          @relation(fields: [tenantId], references: [id])
   chunks DocumentChunk[]

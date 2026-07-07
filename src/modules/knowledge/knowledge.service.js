@@ -114,4 +114,40 @@ export async function listDocuments(tenantId) {
   });
 }
 
-export default { ingestDocument, embedDocument, search, listDocuments };
+/** Delete a document and all its chunks + Qdrant vectors. */
+export async function deleteDocument(tenantId, documentId) {
+  const doc = await prisma.document.findFirst({ where: { id: documentId, tenantId } });
+  if (!doc) throw new Error('Document not found');
+
+  const chunks = await prisma.documentChunk.findMany({
+    where: { documentId },
+    select: { id: true, vectorId: true },
+  });
+
+  const vectorIds = chunks.map(c => c.vectorId).filter(Boolean);
+  if (vectorIds.length) {
+    await qdrant.delete(COLLECTION, { points: vectorIds }).catch(() => {});
+  }
+
+  await prisma.documentChunk.deleteMany({ where: { documentId } });
+  await prisma.document.delete({ where: { id: documentId } });
+
+  return { deleted: true };
+}
+
+/** Re-run embedding on a failed document (chunks already exist). */
+export async function retryDocument(tenantId, documentId) {
+  const doc = await prisma.document.findFirst({ where: { id: documentId, tenantId } });
+  if (!doc) throw new Error('Document not found');
+
+  await prisma.document.update({ where: { id: documentId }, data: { status: 'processing' } });
+  try {
+    await embedDocument(documentId, tenantId);
+    return { documentId, status: 'ready' };
+  } catch (err) {
+    await prisma.document.update({ where: { id: documentId }, data: { status: 'failed' } });
+    throw err;
+  }
+}
+
+export default { ingestDocument, embedDocument, search, listDocuments, retryDocument };

@@ -1,9 +1,8 @@
 // @owner Dev 3 — AI & Knowledge Engine
 import { getEmbeddingProvider } from '../../ai/providers/index.js';
 
-// Vector dimensions for the configured embedding model.
-// text-embedding-3-small = 1536, text-embedding-3-large = 3072.
-export const EMBED_DIM = 1536;
+// Vector dimensions: jina-embeddings-v3 = 1024, OpenAI text-embedding-3-small = 1536
+export const EMBED_DIM = process.env.AI_EMBEDDING_PROVIDER === 'openai' ? 1536 : 1024;
 
 // Keep batches modest to stay under provider request limits.
 const BATCH_SIZE = 96;

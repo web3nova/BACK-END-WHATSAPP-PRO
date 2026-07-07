@@ -18,7 +18,10 @@ function withTimeout(promise, ms) {
 }
 
 async function loadBusinessContext(tenantId) {
-  const business = await prisma.business.findUnique({ where: { tenantId } });
+  const business = await withTimeout(
+    prisma.business.findUnique({ where: { tenantId } }),
+    8000
+  ).catch(() => null);
   return {
     displayName: business?.displayName,
     description: business?.description,
@@ -44,8 +47,11 @@ export async function chat({ tenantId, conversationId, customerId, message }) {
   const history = await memory.load(conversationId);
   history.push({ role: 'user', content: message });
 
+  logger.info({ tenantId, conversationId, model: provider.name }, '[ai] calling provider');
   for (let step = 0; step < MAX_STEPS; step++) {
+    const t0 = Date.now();
     const res = await withTimeout(provider.chat({ system, messages: history, tools }), PROVIDER_TIMEOUT_MS);
+    logger.info({ tenantId, step, ms: Date.now() - t0 }, '[ai] provider responded');
 
     if (res.toolCalls?.length) {
       history.push({ role: 'assistant', content: res.text || '', toolCalls: res.toolCalls });
