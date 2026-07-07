@@ -1,6 +1,7 @@
 import { claudeProvider } from './claude.provider.js';
 import { openaiProvider } from './openai.provider.js';
 import { geminiProvider } from './gemini.provider.js';
+import { deepseekProvider } from './deepseek.provider.js';
 import { config } from '../../../config/index.js';
 
 /**
@@ -23,6 +24,7 @@ const chatProviders = {
   anthropic: claudeProvider,
   openai: openaiProvider,
   gemini: geminiProvider,
+  deepseek: deepseekProvider,
 };
 
 export function getChatProvider() {
@@ -34,5 +36,5 @@ export function getEmbeddingProvider() {
   return openaiProvider;
 }
 
-export { claudeProvider, openaiProvider, geminiProvider };
+export { claudeProvider, openaiProvider, geminiProvider, deepseekProvider };
 
