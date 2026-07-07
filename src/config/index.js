@@ -2,51 +2,35 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// Hard required — server cannot function without these
 const required = [
-  // Core
   'DATABASE_URL',
   'JWT_SECRET',
   'JWT_REFRESH_SECRET',
   'FRONTEND_URL',
-
-  // Redis / BullMQ (Upstash)
   'REDIS_URL',
-
-  // Vector DB (Qdrant Cloud)
-  'QDRANT_URL',
-  'QDRANT_API_KEY',
-
-  // WhatsApp Cloud API
-  'META_APP_ID',
-  'META_APP_SECRET',
-  'WHATSAPP_VERIFY_TOKEN',
-  'WHATSAPP_ACCESS_TOKEN',
-
-  // Payment gateway (Paystack)
-  'PAYMENT_SECRET_KEY',
-
-  // Monnify (subscription billing)
-  'MONNIFY_API_KEY',
-  'MONNIFY_SECRET_KEY',
-  'MONNIFY_CONTRACT_CODE',
-
-  // Lenco (account verification / transfers)
-  'LENCO_API_KEY',
-
-  // Email (Nodemailer)
-  'EMAIL_USER',
-  'EMAIL_PASSWORD',
-
-  // Object storage (S3-compatible)
-  'STORAGE_ENDPOINT',
-  'STORAGE_BUCKET',
-  'STORAGE_ACCESS_KEY',
-  'STORAGE_SECRET_KEY',
 ];
 
 for (const key of required) {
   if (!process.env[key]) {
     throw new Error(`[config] Missing required env var: ${key}. Set it in .env or your deployment environment.`);
+  }
+}
+
+// Soft required — warn but don't crash; individual features will fail gracefully
+const softRequired = [
+  'QDRANT_URL', 'QDRANT_API_KEY',
+  'META_APP_ID', 'META_APP_SECRET', 'WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_ACCESS_TOKEN',
+  'PAYMENT_SECRET_KEY',
+  'MONNIFY_API_KEY', 'MONNIFY_SECRET_KEY', 'MONNIFY_CONTRACT_CODE',
+  'LENCO_API_KEY',
+  'EMAIL_USER', 'EMAIL_PASSWORD',
+  'STORAGE_ENDPOINT', 'STORAGE_BUCKET', 'STORAGE_ACCESS_KEY', 'STORAGE_SECRET_KEY',
+];
+
+for (const key of softRequired) {
+  if (!process.env[key]) {
+    console.warn(`[config] Warning: optional env var "${key}" is not set — related features will be unavailable.`);
   }
 }
 
