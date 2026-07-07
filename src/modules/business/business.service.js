@@ -13,7 +13,7 @@ async function withFreshLogoUrl(business) {
 
 export async function getProfile(tenantId) {
   const business = await prisma.business.findUnique({ where: { tenantId } });
-  if (!business) throw new NotFoundError('Business profile not found.');
+  if (!business) return null;
   return withFreshLogoUrl(business);
 }
 
