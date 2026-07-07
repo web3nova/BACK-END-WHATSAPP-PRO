@@ -1,5 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { BadRequestError } from '../../common/errors/index.js';
+import { logger } from '../../config/logger.js';
 
 const GRAPH_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v20.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
@@ -59,13 +60,28 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
   // 3. Fetch the human-readable display phone number from Meta
   let phoneNumber = null;
   try {
+    // Try direct phone number ID lookup first
     const phoneRes = await fetch(
-      `${GRAPH_BASE}/${phoneNumberId}?fields=display_phone_number&access_token=${accessToken}`
+      `${GRAPH_BASE}/${phoneNumberId}?fields=display_phone_number,verified_name&access_token=${accessToken}`
     );
     const phoneJson = await phoneRes.json().catch(() => ({}));
-    phoneNumber = phoneJson.display_phone_number ?? null;
-  } catch {
-    // non-fatal — phoneNumber stays null
+    if (phoneJson.display_phone_number) {
+      phoneNumber = phoneJson.display_phone_number;
+    } else {
+      logger.warn({ phoneJson }, '[whatsapp] direct phone number lookup returned no display_phone_number');
+      // Fallback: list all phone numbers on the WABA and match by ID
+      const wabaPhoneRes = await fetch(
+        `${GRAPH_BASE}/${wabaId}/phone_numbers?fields=id,display_phone_number&access_token=${accessToken}`
+      );
+      const wabaPhoneJson = await wabaPhoneRes.json().catch(() => ({}));
+      const match = wabaPhoneJson.data?.find(p => p.id === phoneNumberId);
+      phoneNumber = match?.display_phone_number ?? null;
+      if (!phoneNumber) {
+        logger.warn({ wabaPhoneJson }, '[whatsapp] WABA phone number list lookup also failed');
+      }
+    }
+  } catch (err) {
+    logger.warn({ err: err?.message }, '[whatsapp] could not fetch display phone number');
   }
 
   // 4. Persist all identifiers — tenant can now send/receive WhatsApp messages
