@@ -16,7 +16,8 @@ import {
 import { sendMail } from '../../config/mailer.js';
 import { startTrial } from '../billing/billing.service.js';
 
-const INACTIVITY_MS = 10 * 60 * 1000;
+const INACTIVITY_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+const OTP_TTL_MINS = 10;
 
 const buildTokenPayload = (user) => ({
   sub: user.id,
@@ -93,7 +94,42 @@ export const login = async ({ email, password }) => {
   const valid = await comparePassword(password, user.passwordHash);
   if (!valid) throw new UnauthorizedError('Invalid credentials');
 
-  // Fetch subscription so the frontend can restore state across browsers
+  // Invalidate any prior unused OTPs for this user
+  await prisma.otpToken.updateMany({ where: { userId: user.id, used: false }, data: { used: true } });
+
+  const code = String(Math.floor(100000 + Math.random() * 900000)); // 6-digit
+  const expiresAt = new Date(Date.now() + OTP_TTL_MINS * 60 * 1000);
+  await prisma.otpToken.create({ data: { userId: user.id, code, expiresAt } });
+
+  await sendMail({
+    to: user.email,
+    subject: 'Your BizIQ login code',
+    html: `
+      <div style="font-family:sans-serif;max-width:400px;margin:0 auto">
+        <h2 style="color:#1e293b">Your login code</h2>
+        <p style="color:#475569">Use this code to complete your sign-in. It expires in ${OTP_TTL_MINS} minutes.</p>
+        <div style="font-size:36px;font-weight:700;letter-spacing:8px;color:#4166F5;margin:24px 0">${code}</div>
+        <p style="color:#94a3b8;font-size:13px">If you didn't try to sign in, you can ignore this email.</p>
+      </div>
+    `,
+  });
+
+  return { requiresOtp: true, userId: user.id, email: user.email };
+};
+
+export const verifyOtp = async ({ userId, code }) => {
+  const record = await prisma.otpToken.findFirst({
+    where: { userId, code, used: false, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!record) throw new UnauthorizedError('Invalid or expired code. Request a new one.');
+
+  await prisma.otpToken.update({ where: { id: record.id }, data: { used: true } });
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new NotFoundError('User not found');
+
   const subscription = await prisma.subscription.findUnique({
     where: { tenantId: user.tenantId },
     select: { id: true, plan: true, status: true, trialEndsAt: true },
@@ -205,4 +241,29 @@ export const resetPassword = async ({ token, password }) => {
   return { message: 'Password reset successfully' };
 };
 
-export default { register, login, refresh, logout, forgotPassword, resetPassword };
+export const resendOtp = async ({ userId }) => {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new NotFoundError('User not found');
+
+  await prisma.otpToken.updateMany({ where: { userId, used: false }, data: { used: true } });
+
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  const expiresAt = new Date(Date.now() + OTP_TTL_MINS * 60 * 1000);
+  await prisma.otpToken.create({ data: { userId, code, expiresAt } });
+
+  await sendMail({
+    to: user.email,
+    subject: 'Your new BizIQ login code',
+    html: `
+      <div style="font-family:sans-serif;max-width:400px;margin:0 auto">
+        <h2 style="color:#1e293b">New login code</h2>
+        <p style="color:#475569">Here is your new sign-in code. It expires in ${OTP_TTL_MINS} minutes.</p>
+        <div style="font-size:36px;font-weight:700;letter-spacing:8px;color:#4166F5;margin:24px 0">${code}</div>
+      </div>
+    `,
+  });
+
+  return { sent: true };
+};
+
+export default { register, login, verifyOtp, resendOtp, refresh, logout, forgotPassword, resetPassword };

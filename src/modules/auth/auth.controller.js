@@ -23,6 +23,16 @@ export const logoutHandler = asyncHandler(async (req, res) => {
   return ok(res, { message: 'Logged out successfully' });
 });
 
+export const verifyOtpHandler = asyncHandler(async (req, res) => {
+  const result = await authService.verifyOtp(req.body);
+  return ok(res, result);
+});
+
+export const resendOtpHandler = asyncHandler(async (req, res) => {
+  const result = await authService.resendOtp(req.body);
+  return ok(res, result);
+});
+
 export const forgotPasswordHandler = asyncHandler(async (req, res) => {
   await authService.forgotPassword(req.body);
   return ok(res, { message: 'If that email exists, a reset link has been sent' });

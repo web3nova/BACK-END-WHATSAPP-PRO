@@ -3,6 +3,8 @@ import { Router } from 'express';
 import {
   registerHandler,
   loginHandler,
+  verifyOtpHandler,
+  resendOtpHandler,
   refreshHandler,
   logoutHandler,
   forgotPasswordHandler,
@@ -12,6 +14,8 @@ import { validate } from '../../middleware/validate.middleware.js';
 import {
   registerSchema,
   loginSchema,
+  verifyOtpSchema,
+  resendOtpSchema,
   refreshSchema,
   logoutSchema,
   forgotPasswordSchema,
@@ -123,6 +127,8 @@ router.post('/register', validate(registerSchema, 'body'), registerHandler);
  *         description: Invalid credentials or banned account
  */
 router.post('/login', validate(loginSchema, 'body'), loginHandler);
+router.post('/verify-otp', validate(verifyOtpSchema, 'body'), verifyOtpHandler);
+router.post('/resend-otp', validate(resendOtpSchema, 'body'), resendOtpHandler);
 
 /**
  * @openapi

@@ -14,8 +14,12 @@ export const loginSchema = z.object({
 });
 
 export const verifyOtpSchema = z.object({
-  email: z.string().email(),
-  otp: z.string().length(6, 'OTP must be 6 digits'),
+  userId: z.string().min(1),
+  code: z.string().length(6, 'Code must be 6 digits'),
+});
+
+export const resendOtpSchema = z.object({
+  userId: z.string().min(1),
 });
 
 export const refreshSchema = z.object({
