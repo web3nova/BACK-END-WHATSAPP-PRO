@@ -6,9 +6,13 @@ import * as websiteController from './website.controller.js';
 import {
   createPageSchema,
   deleteImageSchema,
+  listMediaSchema,
   listPagesSchema,
+  listRevisionsSchema,
+  mediaParamsSchema,
   pageParamsSchema,
   publishPageSchema,
+  revisionParamsSchema,
   storefrontQuerySchema,
   updateWebsiteSettingsSchema,
   updatePageSchema,
@@ -81,6 +85,41 @@ router.delete(
 
 /**
  * @openapi
+ * /website/media:
+ *   get:
+ *     tags: [Website]
+ *     summary: List this tenant's uploaded website images (media library), newest first
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200: { description: Paginated media list }
+ */
+router.get('/media', validate(listMediaSchema, 'query'), websiteController.listMedia);
+
+/**
+ * @openapi
+ * /website/media/{id}:
+ *   delete:
+ *     tags: [Website]
+ *     summary: Delete a media library item
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       204: { description: Deleted }
+ *       404: { description: Not found }
+ */
+router.delete('/media/:id', validate(mediaParamsSchema, 'params'), websiteController.deleteMedia);
+
+/**
+ * @openapi
  * /website/settings:
  *   put:
  *     tags: [Website]
@@ -107,6 +146,41 @@ router.put(
   validate(updateWebsiteSettingsSchema, 'body'),
   websiteController.updateSettings,
 );
+
+/**
+ * @openapi
+ * /website/settings/revisions:
+ *   get:
+ *     tags: [Website]
+ *     summary: List saved revisions of this tenant's website settings, newest first
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200: { description: Paginated revision list }
+ */
+router.get('/settings/revisions', validate(listRevisionsSchema, 'query'), websiteController.listRevisions);
+
+/**
+ * @openapi
+ * /website/settings/revisions/{id}/restore:
+ *   post:
+ *     tags: [Website]
+ *     summary: Restore website settings to a previous revision (itself creates a new revision of the current state)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Restored settings }
+ *       404: { description: Revision not found }
+ */
+router.post('/settings/revisions/:id/restore', validate(revisionParamsSchema, 'params'), websiteController.restoreRevision);
 
 /**
  * @openapi

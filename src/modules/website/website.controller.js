@@ -63,8 +63,28 @@ export const deleteImage = asyncHandler(async (req, res) => {
   return noContent(res);
 });
 
+export const listMedia = asyncHandler(async (req, res) => {
+  const result = await websiteService.listMedia(getTenantId(req), req.query);
+  return ok(res, result.items, result.meta);
+});
+
+export const deleteMedia = asyncHandler(async (req, res) => {
+  await websiteService.deleteMedia(getTenantId(req), req.params.id);
+  return noContent(res);
+});
+
 export const updateSettings = asyncHandler(async (req, res) => {
   const data = await websiteService.updateSettings(getTenantId(req), req.body);
+  return ok(res, data);
+});
+
+export const listRevisions = asyncHandler(async (req, res) => {
+  const result = await websiteService.listRevisions(getTenantId(req), req.query);
+  return ok(res, result.items, result.meta);
+});
+
+export const restoreRevision = asyncHandler(async (req, res) => {
+  const data = await websiteService.restoreRevision(getTenantId(req), req.params.id);
   return ok(res, data);
 });
 
@@ -74,5 +94,14 @@ export const getStorefront = asyncHandler(async (req, res) => {
   const domain =
     req.query.domain || normalizeHost(req.headers['x-forwarded-host'] || req.headers.host);
   const data = await websiteService.getStorefront({ tenantId, slug, domain });
+  // Fire-and-forget: a real visitor just loaded the storefront. Never let a
+  // logging failure affect (or slow down) the actual response.
+  websiteService
+    .recordVisit({
+      tenantId: data.tenant.id,
+      referrer: req.headers.referer || req.headers.referrer,
+      host: req.headers['x-forwarded-host'] || req.headers.host,
+    })
+    .catch(() => {});
   return ok(res, data);
 });

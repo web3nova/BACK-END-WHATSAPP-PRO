@@ -43,6 +43,24 @@ export const deleteImageSchema = z.object({
   storageKey: z.string().trim().min(1),
 });
 
+export const listMediaSchema = z.object({
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+export const mediaParamsSchema = z.object({
+  id: z.string().uuid(),
+});
+
+export const listRevisionsSchema = z.object({
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+export const revisionParamsSchema = z.object({
+  id: z.string().uuid(),
+});
+
 export const storefrontQuerySchema = z
   .object({
     tenantId: z.string().uuid().optional(),
