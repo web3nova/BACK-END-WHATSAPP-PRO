@@ -40,8 +40,22 @@ model Tenant {
   onboardingProgress  OnboardingProgress?
   paymentConfig       PaymentConfig?
   notifications       Notification[]
+  websiteVisits       WebsiteVisit[]
 
   @@map("tenants")
+}
+
+model WebsiteVisit {
+  id        String   @id @default(uuid())
+  tenantId  String
+  source    String // whatsapp | website | referral | direct
+  referrer  String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@map("website_visits")
 }
 
 model Notification {
@@ -220,9 +234,11 @@ model Business {
   openingTime     String?          // ← new (e.g. "08:00")
   closingTime     String?          // ← new (e.g. "18:00")
 
-  website         WebsitePage[]
-  websiteSettings WebsiteSettings?
-  tenant          Tenant @relation(fields: [tenantId], references: [id])
+  website             WebsitePage[]
+  websiteSettings     WebsiteSettings?
+  websiteMedia        WebsiteMedia[]
+  websiteSettingsRevisions WebsiteSettingsRevision[]
+  tenant              Tenant @relation(fields: [tenantId], references: [id])
 
   @@map("businesses")
 }
@@ -241,6 +257,32 @@ model WebsiteSettings {
   business Business @relation(fields: [businessId], references: [id])
 
   @@map("website_settings")
+}
+
+model WebsiteSettingsRevision {
+  id         String   @id @default(uuid())
+  businessId String
+  snapshot   Json
+  createdAt  DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, createdAt])
+  @@map("website_settings_revisions")
+}
+
+model WebsiteMedia {
+  id         String   @id @default(uuid())
+  businessId String
+  storageKey String
+  mimeType   String?
+  size       Int?
+  createdAt  DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId])
+  @@map("website_media")
 }
 
 model Product {
@@ -433,6 +475,8 @@ model Conversation {
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
   customer Customer  @relation(fields: [customerId], references: [id])
   messages Message[]
+  orders   Order[]
+  quotes   Quote[]
 
   @@index([tenantId])
   @@map("conversations")
@@ -498,37 +542,43 @@ model OutboxMessage {
 }
 
 model Order {
-  id           String   @id @default(uuid())
-  tenantId     String
-  customerId   String?
-  status       String   @default("pending")
-  totalMinor   Int      @default(0)
-  currency     String   @default("NGN")
-  items        Json     @default("[]")
-  measurements Json     @default("{}")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String   @id @default(uuid())
+  tenantId       String
+  customerId     String?
+  conversationId String?
+  status         String   @default("pending")
+  totalMinor     Int      @default(0)
+  currency       String   @default("NGN")
+  items          Json     @default("[]")
+  measurements   Json     @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  tenant   Tenant    @relation(fields: [tenantId], references: [id])
-  payments Payment[]
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  conversation Conversation? @relation(fields: [conversationId], references: [id])
+  payments     Payment[]
 
   @@index([tenantId])
+  @@index([conversationId])
   @@map("orders")
 }
 
 model Quote {
-  id          String   @id @default(uuid())
-  tenantId    String
-  customerId  String?
-  status      String   @default("draft")
-  amountMinor Int      @default(0)
-  currency    String   @default("NGN")
-  details     Json     @default("{}")
-  createdAt   DateTime @default(now())
+  id             String   @id @default(uuid())
+  tenantId       String
+  customerId     String?
+  conversationId String?
+  status         String   @default("draft")
+  amountMinor    Int      @default(0)
+  currency       String   @default("NGN")
+  details        Json     @default("{}")
+  createdAt      DateTime @default(now())
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  conversation Conversation? @relation(fields: [conversationId], references: [id])
 
   @@index([tenantId])
+  @@index([conversationId])
   @@map("quotes")
 }
 
