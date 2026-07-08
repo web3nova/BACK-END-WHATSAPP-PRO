@@ -11,6 +11,7 @@ import {
   resetPasswordHandler,
 } from './auth.controller.js';
 import { validate } from '../../middleware/validate.middleware.js';
+import { ipRateLimiter } from '../../middleware/rateLimiter.middleware.js';
 import {
   registerSchema,
   loginSchema,
@@ -126,9 +127,12 @@ router.post('/register', validate(registerSchema, 'body'), registerHandler);
  *       401:
  *         description: Invalid credentials or banned account
  */
-router.post('/login', validate(loginSchema, 'body'), loginHandler);
-router.post('/verify-otp', validate(verifyOtpSchema, 'body'), verifyOtpHandler);
-router.post('/resend-otp', validate(resendOtpSchema, 'body'), resendOtpHandler);
+const loginLimiter = ipRateLimiter({ windowMs: 15 * 60_000, max: 10, message: 'Too many login attempts — wait 15 minutes and try again.' });
+const otpLimiter = ipRateLimiter({ windowMs: 15 * 60_000, max: 5, message: 'Too many OTP requests — wait 15 minutes.' });
+
+router.post('/login', loginLimiter, validate(loginSchema, 'body'), loginHandler);
+router.post('/verify-otp', loginLimiter, validate(verifyOtpSchema, 'body'), verifyOtpHandler);
+router.post('/resend-otp', otpLimiter, validate(resendOtpSchema, 'body'), resendOtpHandler);
 
 /**
  * @openapi
@@ -233,7 +237,8 @@ router.post('/logout', validate(logoutSchema, 'body'), logoutHandler);
  *                   properties:
  *                     message: { type: string, example: "If that email exists, a reset link has been sent" }
  */
-router.post('/forgot-password', validate(forgotPasswordSchema, 'body'), forgotPasswordHandler);
+const forgotLimiter = ipRateLimiter({ windowMs: 15 * 60_000, max: 5, message: 'Too many password reset requests — wait 15 minutes.' });
+router.post('/forgot-password', forgotLimiter, validate(forgotPasswordSchema, 'body'), forgotPasswordHandler);
 
 /**
  * @openapi
