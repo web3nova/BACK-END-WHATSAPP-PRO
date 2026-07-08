@@ -26,6 +26,7 @@ const softRequired = [
   'LENCO_API_KEY',
   'RESEND_API_KEY',
   'STORAGE_ENDPOINT', 'STORAGE_BUCKET', 'STORAGE_ACCESS_KEY', 'STORAGE_SECRET_KEY',
+  'VERCEL_TOKEN', 'VERCEL_PROJECT_ID',
 ];
 
 for (const key of softRequired) {

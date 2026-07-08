@@ -1,4 +1,5 @@
 import * as tenantService from './tenant.service.js';
+import * as domainService from './domain.service.js';
 import { ok, noContent } from '../../common/utils/apiResponse.js';
 import { asyncHandler } from '../../common/utils/asyncHandler.js';
 
@@ -36,4 +37,15 @@ export const getOwn = asyncHandler(async (req, res) => {
 export const updateOwn = asyncHandler(async (req, res) => {
   const tenant = await tenantService.updateOwnTenant(req.tenant.id, req.body);
   return ok(res, tenant);
+});
+
+export const setDomain = asyncHandler(async (req, res) => {
+  const { domain } = req.body;
+  const result = await domainService.setCustomDomain(req.tenant.id, domain);
+  return ok(res, result);
+});
+
+export const removeDomain = asyncHandler(async (req, res) => {
+  await domainService.removeCustomDomain(req.tenant.id);
+  return ok(res, { removed: true });
 });

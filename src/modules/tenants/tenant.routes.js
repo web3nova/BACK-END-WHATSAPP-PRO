@@ -64,6 +64,11 @@ router.get('/me', controller.getOwn);
  */
 router.patch('/me', validate(updateTenantSchema, 'body'), controller.updateOwn);
 
+// Custom domain management (owner only — no requireOwner middleware needed,
+// tenantMiddleware already scopes to the authenticated tenant)
+router.put('/domain', controller.setDomain);
+router.delete('/domain', controller.removeDomain);
+
 /**
  * @openapi
  * /tenant:

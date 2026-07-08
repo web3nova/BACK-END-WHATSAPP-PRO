@@ -12,9 +12,13 @@ async function withFreshLogoUrl(business) {
 }
 
 export async function getProfile(tenantId) {
-  const business = await prisma.business.findUnique({ where: { tenantId } });
+  const [business, tenant] = await Promise.all([
+    prisma.business.findUnique({ where: { tenantId } }),
+    prisma.tenant.findUnique({ where: { id: tenantId }, select: { domain: true, slug: true } }),
+  ]);
   if (!business) return null;
-  return withFreshLogoUrl(business);
+  const fresh = await withFreshLogoUrl(business);
+  return { ...fresh, domain: tenant?.domain ?? null, slug: tenant?.slug ?? null };
 }
 
 export async function createProfile(tenantId, data) {
