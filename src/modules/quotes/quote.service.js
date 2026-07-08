@@ -5,6 +5,7 @@ const quoteSelect = {
   id: true,
   tenantId: true,
   customerId: true,
+  conversationId: true,
   status: true,
   amountMinor: true,
   currency: true,

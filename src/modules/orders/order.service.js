@@ -6,6 +6,7 @@ const orderSelect = {
   id: true,
   tenantId: true,
   customerId: true,
+  conversationId: true,
   status: true,
   totalMinor: true,
   currency: true,

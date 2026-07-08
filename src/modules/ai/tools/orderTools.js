@@ -35,6 +35,7 @@ export const createQuote = {
       data: {
         tenantId: ctx.tenantId,
         customerId: ctx.customerId ?? null,
+        conversationId: ctx.conversationId ?? null,
         status: 'sent',
         amountMinor,
         currency,
@@ -75,6 +76,7 @@ export const createOrder = {
       data: {
         tenantId: ctx.tenantId,
         customerId: ctx.customerId ?? null,
+        conversationId: ctx.conversationId ?? null,
         status: 'pending',
         totalMinor,
         currency,
