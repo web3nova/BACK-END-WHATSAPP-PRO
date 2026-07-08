@@ -2,6 +2,7 @@ import { prisma } from '../../config/prisma.js';
 import { logger } from '../../config/logger.js';
 import aiService from '../../modules/ai/ai.service.js';
 import * as whatsappService from '../../modules/whatsapp/whatsapp.service.js';
+import { notify } from '../../modules/notifications/notification.service.js';
 
 export default async function processAiReply(job) {
   const { tenantId, conversationId, messageId } = job.data;
@@ -73,6 +74,15 @@ export default async function processAiReply(job) {
       logger.error({ err: updErr?.message }, '[aiReply] failed to escalate conversation');
     }
 
+    const customerName = conversation.customer?.name || conversation.customer?.phone || 'A customer';
+    notify(tenantId, {
+      type: 'escalation',
+      title: `Human needed — AI couldn't handle ${customerName}`,
+      body: `The AI failed to respond to a message from ${customerName}. The conversation has been escalated and needs your attention.`,
+      emailSubject: `Action needed: AI escalation from ${customerName}`,
+      metadata: { conversationId },
+    }).catch(() => {});
+
     return; // treat job as handled to avoid retry storms
   }
 
@@ -88,6 +98,19 @@ export default async function processAiReply(job) {
 
   // 4. Send response back to customer via WhatsApp
   await whatsappService.sendMessage(tenantId, conversation.customer.phone, aiResponse.reply);
+
+  // If AI hit max steps it gave up — escalate and notify
+  if (aiResponse.truncated) {
+    await prisma.conversation.update({ where: { id: conversationId }, data: { status: 'escalated' } }).catch(() => {});
+    const customerName = conversation.customer?.name || conversation.customer?.phone || 'A customer';
+    notify(tenantId, {
+      type: 'escalation',
+      title: `Human needed — AI couldn't resolve ${customerName}'s query`,
+      body: `The AI reached its limit trying to help ${customerName}. The conversation has been escalated and needs your attention.`,
+      emailSubject: `Action needed: AI escalation from ${customerName}`,
+      metadata: { conversationId },
+    }).catch(() => {});
+  }
 
   logger.info({ conversationId }, '[aiReply] AI response delivered');
 }
