@@ -58,7 +58,24 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
 
   const accessToken = longTokenJson.access_token;
 
-  // 3. Fetch the human-readable display phone number from Meta
+  // 3. Register the phone number via Cloud API (moves status from Pending → Active)
+  try {
+    const regRes = await fetch(`${GRAPH_BASE}/${phoneNumberId}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', pin: '123456' }),
+    });
+    const regJson = await regRes.json().catch(() => ({}));
+    if (!regRes.ok) {
+      logger.warn({ status: regRes.status, body: regJson }, '[whatsapp] phone number registration failed — number may stay pending');
+    } else {
+      logger.info({ phoneNumberId }, '[whatsapp] phone number registered successfully');
+    }
+  } catch (err) {
+    logger.warn({ err: err?.message }, '[whatsapp] phone number registration request failed');
+  }
+
+  // 4. Fetch the human-readable display phone number from Meta
   let phoneNumber = null;
   try {
     // Try direct phone number ID lookup first
@@ -85,7 +102,7 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
     logger.warn({ err: err?.message }, '[whatsapp] could not fetch display phone number');
   }
 
-  // 4. Persist all identifiers — tenant can now send/receive WhatsApp messages
+  // 5. Persist all identifiers — tenant can now send/receive WhatsApp messages
   await prisma.whatsappAccount.upsert({
     where: { tenantId },
     update: { accessToken, wabaId, phoneNumberId, phoneNumber, verified: true },
