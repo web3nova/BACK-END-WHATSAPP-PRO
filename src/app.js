@@ -14,6 +14,9 @@ import { swaggerSpec } from './config/swagger.js';
 export function createApp() {
   const app = express();
 
+  // Trust the first proxy (Render's load balancer) so req.ip is the real client IP
+  app.set('trust proxy', 1);
+
   app.use(helmet({
   contentSecurityPolicy: false,
 }));
