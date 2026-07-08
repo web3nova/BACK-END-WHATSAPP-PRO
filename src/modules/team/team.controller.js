@@ -14,7 +14,8 @@ export const invite = asyncHandler(async (req, res) => {
 });
 
 export const remove = asyncHandler(async (req, res) => {
-  await teamService.removeMember(req.tenant.id, req.params.userId, req.user.id);
+  const requesterName = req.user?.name || req.user?.email;
+  await teamService.removeMember(req.tenant.id, req.params.userId, req.user.id, requesterName);
   res.json({ success: true });
 });
 
