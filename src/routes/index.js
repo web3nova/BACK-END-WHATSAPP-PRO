@@ -56,7 +56,8 @@ router.get('/', (_req, res) =>
 router.use('/auth', authRoutes);
 
 // Team invite acceptance — public endpoint (token-based, no JWT needed)
-router.post('/team/accept-invite', acceptInviteHandler);
+// Registered here alongside /auth so it is definitively before authMiddleware
+router.post('/auth/accept-invite', acceptInviteHandler);
 
 // WhatsApp webhook (verified by Meta signature, not JWT)
 router.use('/webhook', whatsappRoutes);
