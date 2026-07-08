@@ -38,9 +38,8 @@ redis.on('connect', () => {
   if (!_connected) {
     logger.info(`[redis] Connected to ${maskedUrl}`);
     _connected = true;
-  } else {
-    logger.debug(`[redis] Reconnected to ${maskedUrl}`);
   }
+  // reconnects are silent — noise at INFO level every 30s serves no purpose
 });
 redis.on('close', () => { _connected = false; });
 redis.on('error', (err) => {
@@ -53,5 +52,18 @@ redis.on('error', (err) => {
 setInterval(() => {
   redis.ping().catch(() => { /* reconnect handled by ioredis */ });
 }, 10_000).unref();
+
+// BullMQ calls redis.duplicate() for its internal blocking connections.
+// Duplicated instances inherit options but NOT event listeners, so ECONNRESET would
+// print as raw unhandled errors. Patch duplicate() to propagate our error handler.
+const _origDuplicate = redis.duplicate.bind(redis);
+redis.duplicate = (...args) => {
+  const dup = _origDuplicate(...args);
+  dup.on('error', (err) => {
+    if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED') return;
+    logger.error(`[redis] Error on internal connection (${err.code || err.name}) — ${err.message?.replace(url, maskedUrl)}`);
+  });
+  return dup;
+};
 
 export default redis;
