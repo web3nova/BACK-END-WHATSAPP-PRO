@@ -31,6 +31,7 @@ export const rateLimiter = ({ windowMs = 60_000, max = 120 } = {}) =>
  */
 export const ipRateLimiter = ({ windowMs = 15 * 60_000, max = 5, message = 'Too many attempts — please try again later.' } = {}) =>
   async (req, res, next) => {
+    if (process.env.NODE_ENV !== 'production') return next();
     const ip = req.ip || req.socket?.remoteAddress || 'unknown';
     const key = `rl:ip:${ip}:${req.path}:${Math.floor(Date.now() / windowMs)}`;
     try {
