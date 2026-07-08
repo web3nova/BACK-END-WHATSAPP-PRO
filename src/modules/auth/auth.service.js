@@ -14,6 +14,7 @@ import {
   NotFoundError,
 } from '../../common/errors/index.js';
 import { sendMail } from '../../config/mailer.js';
+import { logger } from '../../config/logger.js';
 import { startTrial } from '../billing/billing.service.js';
 
 const INACTIVITY_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
@@ -101,7 +102,8 @@ export const login = async ({ email, password }) => {
   const expiresAt = new Date(Date.now() + OTP_TTL_MINS * 60 * 1000);
   await prisma.otpToken.create({ data: { userId: user.id, code, expiresAt } });
 
-  await sendMail({
+  // Fire-and-forget — don't block the response waiting for Resend
+  sendMail({
     to: user.email,
     subject: 'Your BizIQ login code',
     html: `
@@ -112,7 +114,7 @@ export const login = async ({ email, password }) => {
         <p style="color:#94a3b8;font-size:13px">If you didn't try to sign in, you can ignore this email.</p>
       </div>
     `,
-  });
+  }).catch((err) => logger.error(`[auth] OTP email failed for ${user.email}: ${err.message}`));
 
   return { requiresOtp: true, userId: user.id, email: user.email };
 };
@@ -203,7 +205,7 @@ export const forgotPassword = async ({ email }) => {
 
   const resetUrl = `${config.frontendUrl}/reset-password?token=${token}`;
 
-  await sendMail({
+  sendMail({
     to:      email,
     subject: 'Reset your password',
     html: `
@@ -212,7 +214,7 @@ export const forgotPassword = async ({ email }) => {
       <a href="${resetUrl}">${resetUrl}</a>
       <p>If you did not request this, please ignore this email.</p>
     `,
-  });
+  }).catch((err) => logger.error(`[auth] Password reset email failed for ${email}: ${err.message}`));
 };
 
 export const resetPassword = async ({ token, password }) => {
@@ -251,7 +253,7 @@ export const resendOtp = async ({ userId }) => {
   const expiresAt = new Date(Date.now() + OTP_TTL_MINS * 60 * 1000);
   await prisma.otpToken.create({ data: { userId, code, expiresAt } });
 
-  await sendMail({
+  sendMail({
     to: user.email,
     subject: 'Your new BizIQ login code',
     html: `
@@ -261,7 +263,7 @@ export const resendOtp = async ({ userId }) => {
         <div style="font-size:36px;font-weight:700;letter-spacing:8px;color:#4166F5;margin:24px 0">${code}</div>
       </div>
     `,
-  });
+  }).catch((err) => logger.error(`[auth] Resend OTP email failed for ${user.email}: ${err.message}`));
 
   return { sent: true };
 };
