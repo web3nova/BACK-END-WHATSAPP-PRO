@@ -1,6 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { logger } from '../../config/logger.js';
-import { BadRequestError, ConflictError } from '../../common/errors/index.js';
+import { BadRequestError } from '../../common/errors/index.js';
 
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
 const VERCEL_PROJECT_ID = process.env.VERCEL_PROJECT_ID;
@@ -55,7 +55,7 @@ export async function setCustomDomain(tenantId, domain) {
   // Check uniqueness
   const conflict = await prisma.tenant.findUnique({ where: { domain: normalized } });
   if (conflict && conflict.id !== tenantId) {
-    throw new ConflictError('That domain is already connected to another account.');
+    throw new BadRequestError('That domain is already connected to another account.');
   }
 
   // Register with Vercel
