@@ -38,6 +38,7 @@ import paymentConfigRoutes from '../modules/payments/payment-config.routes.js';
 import notificationRoutes from '../modules/notifications/notification.routes.js';
 import teamRoutes from '../modules/team/team.routes.js';
 import { accept as acceptInviteHandler } from '../modules/team/team.controller.js';
+import demoChatRoutes from '../modules/chat/demo.routes.js';
 
 const router = Router();
 
@@ -67,6 +68,9 @@ router.use('/website', publicWebsiteRoutes);
 
 // Billing: plans list + Monnify webhook are public (no JWT).
 router.use('/billing', billingPublicRoutes);
+
+// Landing page demo chat — public, IP rate limited.
+router.use('/chat', demoChatRoutes);
 
 // ── Protected (JWT + tenant) ───────────────────────────
 // All routes below require a valid access token and an active tenant.
