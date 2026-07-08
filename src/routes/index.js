@@ -37,6 +37,7 @@ import paymentRoutes from '../modules/payments/payment.routes.js';
 import paymentConfigRoutes from '../modules/payments/payment-config.routes.js';
 import notificationRoutes from '../modules/notifications/notification.routes.js';
 import teamRoutes from '../modules/team/team.routes.js';
+import { accept as acceptInviteHandler } from '../modules/team/team.controller.js';
 
 const router = Router();
 
@@ -54,8 +55,8 @@ router.get('/', (_req, res) =>
 // Auth (public — no JWT required)
 router.use('/auth', authRoutes);
 
-// Team invite acceptance (public — token-based, no JWT)
-router.use('/team', teamRoutes);
+// Team invite acceptance — public endpoint (token-based, no JWT needed)
+router.post('/team/accept-invite', acceptInviteHandler);
 
 // WhatsApp webhook (verified by Meta signature, not JWT)
 router.use('/webhook', whatsappRoutes);
@@ -100,5 +101,6 @@ router.use('/quotes', quoteRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/payment-config', paymentConfigRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/team', teamRoutes);
 
 export default router;
