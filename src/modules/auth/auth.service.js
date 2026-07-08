@@ -22,6 +22,7 @@ const buildTokenPayload = (user) => ({
   sub: user.id,
   tenantId: user.tenantId,
   isSuperAdmin: user.isSuperAdmin,
+  teamRole: user.teamRole ?? 'owner',
   roleId: user.roleId,
 });
 
@@ -43,7 +44,12 @@ const sanitizeUser = (user) => {
 
 export const register = async ({ email, password, name, tenantName }) => {
   const existing = await prisma.user.findFirst({ where: { email } });
-  if (existing) throw new BadRequestError('Email already in use');
+  if (existing) {
+    const msg = existing.teamRole !== 'owner'
+      ? 'This email is already a team member in another business. Use a different email to create your own account.'
+      : 'Email already in use';
+    throw new BadRequestError(msg);
+  }
 
   const passwordHash = await hashPassword(password);
   const baseSlug = tenantName.toLowerCase().trim().replace(/\s+/g, '-');

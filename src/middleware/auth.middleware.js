@@ -18,6 +18,7 @@ export const authMiddleware = (req, res, next) => {
       id: payload.sub,
       tenantId: payload.tenantId,
       isSuperAdmin: payload.isSuperAdmin,
+      teamRole: payload.teamRole ?? 'owner',
       roleId: payload.roleId,
     };
     return next();

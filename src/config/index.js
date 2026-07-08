@@ -24,7 +24,7 @@ const softRequired = [
   'PAYMENT_SECRET_KEY',
   'MONNIFY_API_KEY', 'MONNIFY_SECRET_KEY', 'MONNIFY_CONTRACT_CODE',
   'LENCO_API_KEY',
-  'EMAIL_USER', 'EMAIL_PASSWORD',
+  'RESEND_API_KEY',
   'STORAGE_ENDPOINT', 'STORAGE_BUCKET', 'STORAGE_ACCESS_KEY', 'STORAGE_SECRET_KEY',
 ];
 
@@ -115,12 +115,8 @@ export const config = {
   },
 
   email: {
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: Number(process.env.EMAIL_PORT || 587),
-    secure: process.env.EMAIL_SECURE === 'true',
-    user: process.env.EMAIL_USER,
-    password: process.env.EMAIL_PASSWORD,
-    from: process.env.EMAIL_FROM || 'no-reply@whatsapppro.com',
+    resendApiKey: process.env.RESEND_API_KEY,
+    from: process.env.EMAIL_FROM || 'BizIQ <no-reply@biziq.online>',
   },
 
   frontendUrl: process.env.FRONTEND_URL,

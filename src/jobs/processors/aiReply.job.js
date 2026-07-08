@@ -26,6 +26,14 @@ export default async function processAiReply(job) {
     return;
   }
 
+  // Respect the tenant's AI auto-reply toggle
+  const business = await prisma.business.findUnique({ where: { tenantId }, select: { settings: true } });
+  const autoReply = business?.settings?.ai?.autoReply;
+  if (autoReply === false) {
+    logger.info({ tenantId }, '[aiReply] auto-reply disabled by tenant settings, skipping');
+    return;
+  }
+
   // Idempotency: if an AI reply for this message already exists, skip
   if (messageId) {
     const existingAi = await prisma.message.findFirst({

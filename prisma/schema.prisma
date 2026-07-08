@@ -23,6 +23,7 @@ model Tenant {
   updatedAt DateTime     @updatedAt
 
   users           User[]
+  invites         Invite[]
   subscription    Subscription?
   business        Business?
   products        Product[]
@@ -71,6 +72,7 @@ model User {
   email        String
   passwordHash String
   name         String?
+  teamRole     String   @default("owner") // owner | admin | member
   roleId       String?
   isSuperAdmin Boolean  @default(false)
   isBanned     Boolean  @default(false)
@@ -364,7 +366,6 @@ model Document {
   mimeType  String
   size      Int?
   status       String   @default("pending")
-  errorMessage String?
   createdAt    DateTime @default(now())
 
   tenant Tenant          @relation(fields: [tenantId], references: [id])
@@ -607,4 +608,20 @@ model OnboardingStepData {
   @@unique([tenantId, step])
   @@index([tenantId])
   @@map("onboarding_step_data")
+}
+model Invite {
+  id         String    @id @default(uuid())
+  tenantId   String
+  email      String
+  role       String    @default("member") // owner | member
+  token      String    @unique @default(uuid())
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("invites")
 }

@@ -97,8 +97,13 @@ export const updateBusinessProfile = async (tenantId, fields) => {
   );
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err = new Error(json?.error?.message || 'Failed to update WhatsApp Business Profile');
-    err.statusCode = res.status;
+    const metaMsg = json?.error?.message || '';
+    const isUnknown = !metaMsg || metaMsg.toLowerCase().includes('unknown error');
+    const message = isUnknown
+      ? 'WhatsApp profile update failed. This usually happens while your number is pending Meta\'s review — try again once the number status changes to Connected.'
+      : metaMsg;
+    const err = new Error(message);
+    err.statusCode = 400;
     throw err;
   }
   return { success: true };

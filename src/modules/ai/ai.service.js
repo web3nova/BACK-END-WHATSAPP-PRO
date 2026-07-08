@@ -22,10 +22,15 @@ async function loadBusinessContext(tenantId) {
     prisma.business.findUnique({ where: { tenantId } }),
     8000
   ).catch(() => null);
+  const ai = business?.settings?.ai || {};
   return {
     displayName: business?.displayName,
     description: business?.description,
     currency: business?.settings?.currency || 'NGN',
+    aiPersona: ai.persona || '',
+    tone: ai.tone || 'Friendly',
+    collectMeasurements: ai.collectMeasurements !== false,
+    generateQuotes: ai.generateQuotes !== false,
   };
 }
 

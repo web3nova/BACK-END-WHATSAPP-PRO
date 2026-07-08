@@ -36,6 +36,7 @@ import quoteRoutes from '../modules/quotes/quote.routes.js';
 import paymentRoutes from '../modules/payments/payment.routes.js';
 import paymentConfigRoutes from '../modules/payments/payment-config.routes.js';
 import notificationRoutes from '../modules/notifications/notification.routes.js';
+import teamRoutes from '../modules/team/team.routes.js';
 
 const router = Router();
 
@@ -52,6 +53,9 @@ router.get('/', (_req, res) =>
 
 // Auth (public — no JWT required)
 router.use('/auth', authRoutes);
+
+// Team invite acceptance (public — token-based, no JWT)
+router.use('/team', teamRoutes);
 
 // WhatsApp webhook (verified by Meta signature, not JWT)
 router.use('/webhook', whatsappRoutes);
