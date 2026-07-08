@@ -37,6 +37,7 @@ import paymentRoutes from '../modules/payments/payment.routes.js';
 import paymentConfigRoutes from '../modules/payments/payment-config.routes.js';
 import notificationRoutes from '../modules/notifications/notification.routes.js';
 import teamRoutes from '../modules/team/team.routes.js';
+import analyticsRoutes from '../modules/analytics/analytics.routes.js';
 import { accept as acceptInviteHandler } from '../modules/team/team.controller.js';
 import demoChatRoutes from '../modules/chat/demo.routes.js';
 
@@ -107,5 +108,8 @@ router.use('/payments', paymentRoutes);
 router.use('/payment-config', paymentConfigRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/team', teamRoutes);
+
+// Analytics — spans website (Dev 2) + customers/conversations (Dev 4) data
+router.use('/analytics', analyticsRoutes);
 
 export default router;
