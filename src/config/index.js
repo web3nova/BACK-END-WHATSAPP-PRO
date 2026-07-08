@@ -20,7 +20,7 @@ for (const key of required) {
 // Soft required — warn but don't crash; individual features will fail gracefully
 const softRequired = [
   'QDRANT_URL', 'QDRANT_API_KEY',
-  'META_APP_ID', 'META_APP_SECRET', 'WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_ACCESS_TOKEN',
+  'META_APP_ID', 'META_APP_SECRET', 'WHATSAPP_VERIFY_TOKEN',
   'PAYMENT_SECRET_KEY',
   'MONNIFY_API_KEY', 'MONNIFY_SECRET_KEY', 'MONNIFY_CONTRACT_CODE',
   'LENCO_API_KEY',
@@ -91,7 +91,7 @@ export const config = {
     metaAppSecret: process.env.META_APP_SECRET,
     metaConfigId: process.env.META_CONFIG_ID,
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN,
-    accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
+
     apiVersion: process.env.WHATSAPP_API_VERSION || 'v20.0',
   },
 
