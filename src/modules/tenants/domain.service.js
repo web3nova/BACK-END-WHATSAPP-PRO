@@ -22,11 +22,26 @@ async function vercelAddDomain(domain) {
     body: JSON.stringify({ name: domain }),
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok && res.status !== 409) {
-    // 409 = domain already on this project, which is fine
+
+  if (res.status === 409) {
+    // 409 means domain already exists somewhere on Vercel — confirm it's on OUR project
+    const check = await fetch(`${VERCEL_API}/v9/projects/${VERCEL_PROJECT_ID}/domains/${domain}`, {
+      headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
+    });
+    if (!check.ok) {
+      // Domain belongs to a different Vercel project — cannot claim it
+      throw new BadRequestError(
+        'This domain is already registered on another platform. Update your DNS to point to BizIQ first, then try again.'
+      );
+    }
+    return json; // already on our project — fine
+  }
+
+  if (!res.ok) {
     logger.error({ domain, status: res.status, error: json }, '[domain] Vercel add domain failed');
     throw new BadRequestError(`Could not register domain with Vercel: ${json?.error?.message || 'unknown error'}`);
   }
+
   return json;
 }
 
