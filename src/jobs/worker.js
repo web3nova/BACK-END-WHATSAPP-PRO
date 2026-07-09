@@ -5,8 +5,21 @@ import processOutbox from './processors/outbox.job.js';
 import processNotification from './processors/notification.job.js';
 import processAutoRelease from './processors/autoRelease.job.js';
 
-// pg-boss wraps handlers: job = { id, name, data, ... }
-// Our processors already expect { data } so this is a direct match.
+// pg-boss v10: work() handlers receive an ARRAY of jobs (batch), not a single
+// job. Our processors expect a single { data } job, so unwrap the batch here.
+// Handler errors are also logged explicitly — pg-boss records failures on the
+// job row but does not print them, which makes silent failures invisible.
+const wrap = (name, processor) => async (jobs) => {
+  for (const job of jobs) {
+    logger.info({ queue: name, jobId: job.id }, '[worker] job received');
+    try {
+      await processor(job);
+    } catch (err) {
+      logger.error({ queue: name, jobId: job.id, err: err.message }, '[worker] job failed');
+      throw err; // rethrow so pg-boss records the failure and retries
+    }
+  }
+};
 
 let started = false;
 
@@ -18,10 +31,10 @@ export const startWorker = async () => {
   const queues = ['aiReply', 'sendOutbox', 'sendNotification', 'autoRelease'];
   await Promise.all(queues.map(q => boss.createQueue(q)));
 
-  await boss.work('aiReply', { teamSize: 2, teamConcurrency: 2 }, processAiReply);
-  await boss.work('sendOutbox', { teamSize: 5, teamConcurrency: 5 }, processOutbox);
-  await boss.work('sendNotification', { teamSize: 2, teamConcurrency: 2 }, processNotification);
-  await boss.work('autoRelease', { teamSize: 1, teamConcurrency: 1 }, processAutoRelease);
+  await boss.work('aiReply', { batchSize: 2 }, wrap('aiReply', processAiReply));
+  await boss.work('sendOutbox', { batchSize: 5 }, wrap('sendOutbox', processOutbox));
+  await boss.work('sendNotification', { batchSize: 2 }, wrap('sendNotification', processNotification));
+  await boss.work('autoRelease', { batchSize: 1 }, wrap('autoRelease', processAutoRelease));
 
   started = true;
   logger.info('[worker] pg-boss worker started — listening for aiReply, sendOutbox, sendNotification, autoRelease');
