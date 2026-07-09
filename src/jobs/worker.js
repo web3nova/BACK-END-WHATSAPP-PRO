@@ -14,6 +14,10 @@ export const startWorker = async () => {
   if (started) return;
   await startBoss();
 
+  // pg-boss v10 requires explicit queue creation (no longer auto-created on work/send)
+  const queues = ['aiReply', 'sendOutbox', 'sendNotification', 'autoRelease'];
+  await Promise.all(queues.map(q => boss.createQueue(q)));
+
   await boss.work('aiReply', { teamSize: 2, teamConcurrency: 2 }, processAiReply);
   await boss.work('sendOutbox', { teamSize: 5, teamConcurrency: 5 }, processOutbox);
   await boss.work('sendNotification', { teamSize: 2, teamConcurrency: 2 }, processNotification);
