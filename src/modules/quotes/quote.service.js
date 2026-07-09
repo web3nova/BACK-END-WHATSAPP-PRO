@@ -1,5 +1,7 @@
 import { prisma } from '../../config/prisma.js';
 import { NotFoundError } from '../../common/errors/index.js';
+import { sendMessage } from '../whatsapp/whatsapp.service.js';
+import { logger } from '../../config/logger.js';
 
 const quoteSelect = {
   id: true,
@@ -92,7 +94,8 @@ export const createQuote = async (tenantId, data) => {
     data: {
       tenantId,
       customerId,
-      status: data.status,
+      conversationId: data.conversationId ?? null,
+      status: 'draft',
       amountMinor: data.amountMinor,
       currency: data.currency,
       details: data.details ?? {},
@@ -101,7 +104,31 @@ export const createQuote = async (tenantId, data) => {
   });
 
   const customerMap = await loadCustomers(tenantId, [quote.customerId]);
-  return attachCustomer(quote, customerMap);
+  const result = attachCustomer(quote, customerMap);
+
+  // Send quote to customer via WhatsApp if we have their phone
+  const phone = result.customer?.phone;
+  if (phone) {
+    const ref = quote.id.slice(0, 8).toUpperCase();
+    const major = (quote.amountMinor / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 });
+    const desc = quote.details?.item || quote.details?.description || '';
+    const lines = [
+      `📋 *Quotation #${ref}*`,
+      ...(desc ? [desc] : []),
+      `Amount: *${quote.currency} ${major}*`,
+      '',
+      'Reply *YES* to confirm this order, or ask any questions.',
+    ];
+    try {
+      await sendMessage(tenantId, phone, lines.join('\n'));
+      await prisma.quote.update({ where: { id: quote.id }, data: { status: 'sent' } });
+      result.status = 'sent';
+    } catch (err) {
+      logger.warn({ err: err.message, quoteId: quote.id }, '[quote] WhatsApp delivery failed — quote saved as draft');
+    }
+  }
+
+  return result;
 };
 
 export const updateQuoteStatus = async (tenantId, id, status) => {
