@@ -106,7 +106,23 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
     logger.warn({ err: err?.message }, '[whatsapp] could not fetch display phone number');
   }
 
-  // 5. Persist all identifiers — tenant can now send/receive WhatsApp messages
+  // 5. Subscribe app to this WABA's webhook events
+  try {
+    const subRes = await fetch(`${GRAPH_BASE}/${wabaId}/subscribed_apps`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const subJson = await subRes.json().catch(() => ({}));
+    if (!subRes.ok) {
+      logger.warn({ wabaId, body: subJson }, '[whatsapp] WABA webhook subscription failed');
+    } else {
+      logger.info({ wabaId }, '[whatsapp] WABA webhook subscribed successfully');
+    }
+  } catch (err) {
+    logger.warn({ err: err?.message }, '[whatsapp] WABA webhook subscription request failed');
+  }
+
+  // 6. Persist all identifiers — tenant can now send/receive WhatsApp messages
   await prisma.whatsappAccount.upsert({
     where: { tenantId },
     update: { accessToken, wabaId, phoneNumberId, phoneNumber, verified: true },
