@@ -1,6 +1,7 @@
 import * as conversationService from '../conversations/conversation.service.js';
 import { prisma } from '../../config/prisma.js';
 import { mainQueue } from '../../jobs/queue.js';
+import { isQueueReady } from '../../config/redis.js';
 import { logger } from '../../config/logger.js';
 import { fetchAndStoreMedia } from './media.service.js';
 import processOutbox from '../../jobs/processors/outbox.job.js';
@@ -410,14 +411,22 @@ export const sendMessage = async (tenantId, toPhone, payloadOrText) => {
     }
   });
 
-  // Enqueue delivery job; fall back to in-process if Upstash is unavailable
-  try {
-    await Promise.race([
-      mainQueue.add('sendOutbox', { outboxId: outbox.id }, { jobId: outbox.id, removeOnComplete: true, attempts: 5, backoff: { type: 'exponential', delay: 5000 } }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('enqueue timeout')), 800)),
-    ]);
-  } catch (err) {
-    logger.warn({ err: err.message, outboxId: outbox.id }, '[whatsapp] sendOutbox enqueue failed — delivering in-process');
+  // Enqueue delivery job via BullMQ if Redis is ready; otherwise deliver in-process
+  if (isQueueReady()) {
+    try {
+      await Promise.race([
+        mainQueue.add('sendOutbox', { outboxId: outbox.id }, { jobId: outbox.id, removeOnComplete: true, attempts: 5, backoff: { type: 'exponential', delay: 5000 } }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('enqueue timeout')), 800)),
+      ]);
+    } catch (err) {
+      logger.warn({ err: err.message, outboxId: outbox.id }, '[whatsapp] sendOutbox enqueue failed — delivering in-process');
+      setImmediate(() => {
+        processOutbox({ data: { outboxId: outbox.id } }).catch(e =>
+          logger.error({ err: e.message, outboxId: outbox.id }, '[whatsapp] in-process sendOutbox failed')
+        );
+      });
+    }
+  } else {
     setImmediate(() => {
       processOutbox({ data: { outboxId: outbox.id } }).catch(e =>
         logger.error({ err: e.message, outboxId: outbox.id }, '[whatsapp] in-process sendOutbox failed')

@@ -75,13 +75,23 @@ export const redisForQueue = new IORedis(url, {
 
 redisForQueue.on('error', makeErrorHandler('Queue'));
 
+// ─── Queue readiness helper ───────────────────────────────────────────────────
+// Lets callers skip BullMQ entirely when the queue connection is known to be
+// down, avoiding the enqueue timeout delay.
+export const isQueueReady = () => redisForQueue.status === 'ready';
+
 // ─── Global safety net ────────────────────────────────────────────────────────
-// Catches ECONNRESET/EPIPE that slip past EventEmitter error handlers (e.g.
-// BullMQ internals before our listeners attach). Silences them; anything else
-// re-throws so real crashes still surface.
+const TRANSIENT = new Set(['ECONNRESET', 'ECONNREFUSED', 'EPIPE']);
 process.on('uncaughtException', (err) => {
-  if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'EPIPE') return;
+  if (TRANSIENT.has(err.code)) return;
   throw err;
+});
+// ioredis sometimes rejects pending commands with EPIPE/ECONNRESET instead of
+// emitting on the error event — suppress those too.
+process.on('unhandledRejection', (reason) => {
+  if (reason && TRANSIENT.has(reason.code)) return;
+  // Let other unhandled rejections surface normally
+  throw reason;
 });
 
 export default redis;

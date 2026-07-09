@@ -1,5 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { mainQueue } from '../../jobs/queue.js';
+import { isQueueReady } from '../../config/redis.js';
 import { NotFoundError } from '../../common/errors/index.js';
 import { logger } from '../../config/logger.js';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
@@ -13,20 +14,25 @@ const enqueueOrRunAiReply = async (data, jobId) => {
   const opts = jobId
     ? { jobId, removeOnComplete: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } }
     : { removeOnComplete: true };
-  try {
-    await Promise.race([
-      mainQueue.add('aiReply', data, opts),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('enqueue timeout')), 800)),
-    ]);
-    logger.info({ conversationId: data.conversationId }, '[conversation] aiReply enqueued via BullMQ');
-  } catch (err) {
-    logger.warn({ err: err.message, conversationId: data.conversationId }, '[conversation] BullMQ enqueue failed — running aiReply in-process');
-    setImmediate(() => {
-      processAiReply({ data }).catch(e =>
-        logger.error({ err: e.message, conversationId: data.conversationId }, '[conversation] in-process aiReply failed')
-      );
-    });
+
+  if (isQueueReady()) {
+    try {
+      await Promise.race([
+        mainQueue.add('aiReply', data, opts),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('enqueue timeout')), 800)),
+      ]);
+      logger.info({ conversationId: data.conversationId }, '[conversation] aiReply enqueued via BullMQ');
+      return;
+    } catch (err) {
+      logger.warn({ err: err.message, conversationId: data.conversationId }, '[conversation] BullMQ enqueue failed — running aiReply in-process');
+    }
   }
+
+  setImmediate(() => {
+    processAiReply({ data }).catch(e =>
+      logger.error({ err: e.message, conversationId: data.conversationId }, '[conversation] in-process aiReply failed')
+    );
+  });
 };
 
 // Normalize phone to E.164 when possible; fall back to digits-preserving format.
