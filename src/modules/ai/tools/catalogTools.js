@@ -1,6 +1,5 @@
 // @owner Dev 3 — AI & Knowledge Engine
 import { prisma } from '../../../config/prisma.js';
-import { retrieve } from '../../knowledge/pipeline/retriever.js';
 
 const money = (minor, currency) => ({ amountMinor: minor, currency, display: `${minor / 100}` });
 
@@ -67,25 +66,10 @@ export const fetchCatalog = {
   },
 };
 
-// Tool: semantic search over uploaded knowledge documents (RAG bridge).
-export const searchKnowledge = {
-  name: 'search_knowledge',
-  description:
-    'Search uploaded business documents (pricing sheets, policies, FAQs) for an answer. Use for questions not covered by the structured catalog.',
-  parameters: {
-    type: 'object',
-    properties: {
-      query: { type: 'string', description: 'The question or topic to look up' },
-    },
-    required: ['query'],
-  },
-  async handler({ query }, ctx) {
-    const chunks = await retrieve({ tenantId: ctx.tenantId, query, topK: 5 });
-    if (!chunks.length) return { matches: [], message: 'No relevant documents found.' };
-    return { matches: chunks.map((c) => ({ content: c.content, score: c.score })) };
-  },
-};
+// NOTE: search_knowledge lives in knowledgeTools.js — do not redeclare it here.
+// Duplicate tool names make Google/Gemini providers reject the whole request
+// with "Duplicate function declaration found".
 
-export const catalogTools = [searchProducts, getPrice, fetchCatalog, searchKnowledge];
+export const catalogTools = [searchProducts, getPrice, fetchCatalog];
 
 export default catalogTools;
