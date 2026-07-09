@@ -49,3 +49,8 @@ export const removeDomain = asyncHandler(async (req, res) => {
   await domainService.removeCustomDomain(req.tenant.id);
   return ok(res, { removed: true });
 });
+
+export const domainStatus = asyncHandler(async (req, res) => {
+  const result = await domainService.getDomainStatus(req.tenant.id);
+  return ok(res, result);
+});

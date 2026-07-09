@@ -68,6 +68,7 @@ router.patch('/me', validate(updateTenantSchema, 'body'), controller.updateOwn);
 // tenantMiddleware already scopes to the authenticated tenant)
 router.put('/domain', controller.setDomain);
 router.delete('/domain', controller.removeDomain);
+router.get('/domain/status', controller.domainStatus);
 
 /**
  * @openapi
