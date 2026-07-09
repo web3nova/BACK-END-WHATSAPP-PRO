@@ -34,13 +34,12 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
   }
 
   // Deduplicate by external message id using Redis lock to guard against webhook retries
-  if (messageId) {
+  const dedupLockKey = messageId ? `whatsapp:msg:${phoneNumberId}:${messageId}` : null;
+  if (dedupLockKey) {
     try {
-      const lockKey = `whatsapp:msg:${phoneNumberId}:${messageId}`;
-      // NX = set if not exists, EX = expire seconds
-      const locked = await redis.set(lockKey, '1', 'EX', 60, 'NX');
+      const locked = await redis.set(dedupLockKey, '1', 'EX', 60, 'NX');
       if (!locked) {
-        logger.debug({ messageId }, '[conversation] duplicate message, skipping');
+        logger.info({ messageId }, '[conversation] duplicate message — already processing, skipping');
         return;
       }
     } catch (err) {
@@ -130,8 +129,13 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
       const msg = await createMessageAndAssets(prisma, existing.id, text, messageId, media);
 
       const jobId = messageId ? `aiReply:${messageId}` : undefined;
-      await mainQueue.add('aiReply', { tenantId, conversationId: existing.id, messageId: msg.id }, jobId ? { jobId, removeOnComplete: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } } : { removeOnComplete: true });
-
+      try {
+        await mainQueue.add('aiReply', { tenantId, conversationId: existing.id, messageId: msg.id }, jobId ? { jobId, removeOnComplete: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } } : { removeOnComplete: true });
+      } catch (enqueueErr) {
+        // Release dedup lock so Meta's next retry can reprocess
+        if (dedupLockKey) redis.del(dedupLockKey).catch(() => {});
+        throw enqueueErr;
+      }
       logger.info({ conversationId: existing.id }, '[conversation] message saved, aiReply enqueued (existing conversation)');
       return;
     }
@@ -170,7 +174,12 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
       });
 
       const jobId = messageId ? `aiReply:${messageId}` : undefined;
-      await mainQueue.add('aiReply', { tenantId: result.tenantId, conversationId: result.conversationId, messageId: result.messageId }, jobId ? { jobId, removeOnComplete: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } } : { removeOnComplete: true });
+      try {
+        await mainQueue.add('aiReply', { tenantId: result.tenantId, conversationId: result.conversationId, messageId: result.messageId }, jobId ? { jobId, removeOnComplete: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } } : { removeOnComplete: true });
+      } catch (enqueueErr) {
+        if (dedupLockKey) redis.del(dedupLockKey).catch(() => {});
+        throw enqueueErr;
+      }
 
       const displayName = senderName || senderPhone || 'A customer';
       const preview = text ? (text.length > 60 ? text.slice(0, 57) + '…' : text) : 'Media message';
@@ -233,7 +242,12 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
   });
 
   const fallbackJobId = messageId ? `aiReply:${messageId}` : undefined;
-  await mainQueue.add('aiReply', { tenantId: fallbackResult.tenantId, conversationId: fallbackResult.conversationId, messageId: fallbackResult.messageId }, fallbackJobId ? { jobId: fallbackJobId, removeOnComplete: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } } : { removeOnComplete: true });
+  try {
+    await mainQueue.add('aiReply', { tenantId: fallbackResult.tenantId, conversationId: fallbackResult.conversationId, messageId: fallbackResult.messageId }, fallbackJobId ? { jobId: fallbackJobId, removeOnComplete: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } } : { removeOnComplete: true });
+  } catch (enqueueErr) {
+    if (dedupLockKey) redis.del(dedupLockKey).catch(() => {});
+    throw enqueueErr;
+  }
   logger.info({ conversationId: fallbackResult.conversationId }, '[conversation] message saved (fallback), aiReply enqueued');
 };
 
