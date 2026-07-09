@@ -61,7 +61,11 @@ export default async function processAiReply(job) {
     logger.error({ err: err?.message, conversationId }, '[aiReply] AI service failed, escalating');
 
     const fallback = 'Sorry, I could not process your message right now. A human will reply shortly.';
-    await prisma.message.create({ data: { conversationId, role: 'ai', content: fallback, meta: { aiForMessageId: messageId } } });
+    const fallbackMessage = await prisma.message.create({ data: { conversationId, role: 'ai', content: fallback, meta: { aiForMessageId: messageId } } });
+    pushEvent(tenantId, 'ai_message', {
+      conversationId,
+      message: { id: fallbackMessage.id, role: 'ai', content: fallback, createdAt: fallbackMessage.createdAt },
+    });
 
     try {
       await whatsappService.sendMessage(tenantId, conversation.customer.phone, fallback);

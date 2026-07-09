@@ -16,10 +16,11 @@ export const listOrdersQuerySchema = z.object({
 
 export const createOrderSchema = z.object({
   customerId: z.string().uuid().optional().nullable(),
+  conversationId: z.string().uuid().optional().nullable(),
   status: orderStatusSchema.default('pending'),
   totalMinor: z.coerce.number().int().min(0).default(0),
-  currency: moneyCodeSchema.default('NGN'),
   items: jsonArraySchema,
+  currency: moneyCodeSchema.default('NGN'),
   measurements: jsonObjectSchema,
 });
 

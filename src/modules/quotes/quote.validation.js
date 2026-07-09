@@ -14,6 +14,7 @@ export const listQuotesQuerySchema = z.object({
 
 export const createQuoteSchema = z.object({
   customerId: z.string().uuid().optional().nullable(),
+  conversationId: z.string().uuid().optional().nullable(),
   status: quoteStatusSchema.default('draft'),
   amountMinor: z.coerce.number().int().min(0).default(0),
   currency: moneyCodeSchema.default('NGN'),
