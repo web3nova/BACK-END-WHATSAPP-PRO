@@ -5,15 +5,9 @@ import * as controller from './conversation.controller.js';
 
 const router = Router();
 
-// SSE must be registered BEFORE router.use(authMiddleware) so the global auth
-// layer doesn't reject it before our token-from-query-param injection runs.
-// EventSource cannot set custom headers, so the JWT is passed as ?token=.
-router.get('/events', (req, res, next) => {
-  if (req.query.token && !req.headers.authorization) {
-    req.headers.authorization = `Bearer ${req.query.token}`;
-  }
-  next();
-}, authMiddleware, tenantMiddleware, controller.streamEvents);
+// SSE: EventSource cannot set custom headers — auth is handled inline inside
+// streamEvents using the ?token= query param. No middleware here.
+router.get('/events', controller.streamEvents);
 
 router.use(authMiddleware, tenantMiddleware);
 

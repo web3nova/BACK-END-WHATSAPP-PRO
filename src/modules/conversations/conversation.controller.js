@@ -4,6 +4,7 @@ import { ok } from '../../common/utils/apiResponse.js';
 import { BadRequestError } from '../../common/errors/index.js';
 import * as conversationService from './conversation.service.js';
 import { addClient, removeClient } from '../sse/sse.service.js';
+import { verifyAccessToken } from '../../common/utils/token.js';
 
 // Tenant helper similar to other controllers. Falls back to header for early testing.
 function tenantId(req) {
@@ -69,7 +70,23 @@ export const staffMessage = asyncHandler(async (req, res) => {
 });
 
 export const streamEvents = (req, res) => {
-  const tenant = tenantId(req);
+  // EventSource cannot set custom headers, so auth uses ?token= query param.
+  // We verify the JWT inline here rather than relying on middleware.
+  const raw = req.query.token;
+  if (!raw) {
+    res.status(401).json({ message: 'Missing token' });
+    return;
+  }
+  let tenant;
+  try {
+    const payload = verifyAccessToken(raw);
+    tenant = payload.tenantId;
+    if (!tenant) throw new Error('no tenant in token');
+  } catch {
+    res.status(401).json({ message: 'Invalid or expired token' });
+    return;
+  }
+
   res.set({
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
