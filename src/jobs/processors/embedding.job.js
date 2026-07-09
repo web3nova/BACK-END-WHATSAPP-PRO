@@ -5,11 +5,11 @@ import { logger } from '../../config/logger.js';
 export const EMBEDDING_JOB = 'document.embed';
 
 /**
- * BullMQ processor for async document embedding.
- * Enqueue with: queue.add(EMBEDDING_JOB, { documentId, tenantId })
+ * Background processor for async document embedding (pg-boss).
+ * Enqueue with: mainQueue.add(EMBEDDING_JOB, { documentId, tenantId })
  * Wire into the worker in src/jobs/worker.js.
  *
- * @param {import('bullmq').Job} job
+ * @param {{ data: { documentId: string, tenantId: string } }} job
  */
 export async function embeddingProcessor(job) {
   const { documentId, tenantId } = job.data;

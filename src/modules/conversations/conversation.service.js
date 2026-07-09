@@ -141,7 +141,7 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
     senderName,
   });
 
-  // 5. Trigger AI reply (BullMQ with in-process fallback)
+  // 5. Trigger AI reply (pg-boss with in-process fallback)
   const jobId = messageId ? `aiReply:${messageId}` : undefined;
   await enqueueOrRunAiReply(result, jobId);
 

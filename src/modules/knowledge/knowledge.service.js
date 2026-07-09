@@ -12,7 +12,7 @@ import { retrieve } from './pipeline/retriever.js';
  * embed -> upsert vectors to Qdrant -> mark ready.
  *
  * Runs the embedding step inline. For large files, call embedDocument()
- * from the BullMQ embedding job instead (see jobs/processors/embedding.job.js).
+ * from the background embedding job instead (see jobs/processors/embedding.job.js).
  *
  * @param {object} params
  * @param {string} params.tenantId

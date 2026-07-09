@@ -1,42 +1,36 @@
-import { redis } from '../../../config/redis.js';
-
-// Short-term AI memory: normalized message history per conversation, in Redis.
-const TTL_SECONDS = 60 * 60 * 24; // 24h sliding window
+// Short-term AI memory: normalized message history per conversation, in-process.
+// The app runs as a single instance (Render, WEB_CONCURRENCY=1), so an in-memory
+// Map is sufficient — no external store needed. Entries expire after 24h.
+const TTL_MS = 60 * 60 * 24 * 1000; // 24h sliding window
 const MAX_MESSAGES = 40; // keep the loop bounded / token-safe
 
-const key = (conversationId) => `ai:mem:${conversationId}`;
+const store = new Map(); // conversationId → { messages, expiresAt }
 
-const REDIS_TIMEOUT_MS = 3000;
-
-function withRedisTimeout(promise) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error('redis timeout')), REDIS_TIMEOUT_MS)),
-  ]);
-}
+// Periodically sweep expired entries so memory doesn't grow unbounded.
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, entry] of store) {
+    if (entry.expiresAt <= now) store.delete(id);
+  }
+}, 10 * 60 * 1000).unref();
 
 export async function load(conversationId) {
-  try {
-    const raw = await withRedisTimeout(redis.get(key(conversationId)));
-    if (!raw) return [];
-    return JSON.parse(raw);
-  } catch {
-    return []; // Redis down or slow — start with empty history
+  const entry = store.get(conversationId);
+  if (!entry || entry.expiresAt <= Date.now()) {
+    store.delete(conversationId);
+    return [];
   }
+  return entry.messages;
 }
 
 export async function save(conversationId, messages) {
   const trimmed = messages.slice(-MAX_MESSAGES);
-  try {
-    await withRedisTimeout(redis.set(key(conversationId), JSON.stringify(trimmed), 'EX', TTL_SECONDS));
-  } catch {
-    // non-fatal — memory just won't persist this turn
-  }
+  store.set(conversationId, { messages: trimmed, expiresAt: Date.now() + TTL_MS });
   return trimmed;
 }
 
 export async function clear(conversationId) {
-  await redis.del(key(conversationId));
+  store.delete(conversationId);
 }
 
 export default { load, save, clear };

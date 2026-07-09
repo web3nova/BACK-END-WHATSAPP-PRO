@@ -8,7 +8,6 @@ const required = [
   'JWT_SECRET',
   'JWT_REFRESH_SECRET',
   'FRONTEND_URL',
-  'REDIS_URL',
 ];
 
 for (const key of required) {
@@ -49,7 +48,6 @@ export const config = {
   },
 
   databaseUrl: process.env.DATABASE_URL,
-  redisUrl: process.env.REDIS_URL,
 
   qdrant: {
     url: process.env.QDRANT_URL,
