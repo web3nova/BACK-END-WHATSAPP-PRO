@@ -13,6 +13,20 @@ export function buildSystemPrompt(business = {}) {
     generateQuotes: business.generateQuotes,
   });
 
+  // Current date/time in the business's timezone — the model's own sense of
+  // "today" is stale (training cutoff), so this is the authoritative clock.
+  const timeZone = process.env.BUSINESS_TIMEZONE || 'Africa/Lagos';
+  let now;
+  try {
+    now = new Intl.DateTimeFormat('en-GB', {
+      timeZone,
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(new Date());
+  } catch {
+    now = new Date().toISOString();
+  }
+
   const lines = [
     persona,
     '',
@@ -20,6 +34,7 @@ export function buildSystemPrompt(business = {}) {
     business.aiPersona ? `Your name is ${business.aiPersona}.` : null,
     business.description ? `About: ${business.description}` : null,
     `Default currency: ${currency}.`,
+    `Current date and time (${timeZone}): ${now}. Trust this over your own sense of the date — use it for anything time-related (deadlines, delivery estimates, receipt dates, greetings).`,
     'Always rely on tools (search_products, get_price, fetch_catalog, search_knowledge) for facts.',
   ].filter(Boolean);
 
