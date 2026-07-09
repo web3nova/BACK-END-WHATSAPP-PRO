@@ -52,11 +52,16 @@ export const openrouterProvider = {
 
   async chat({ system, messages, tools, maxTokens = 1024 }) {
     const model = process.env.OPENROUTER_CHAT_MODEL || 'openrouter/free';
+    // Comma-separated fallback models — OpenRouter tries them in order when the
+    // primary errors (rate limit, downtime, provider 400s).
+    const fallbacks = (process.env.OPENROUTER_FALLBACK_MODELS || '')
+      .split(',').map((s) => s.trim()).filter(Boolean);
 
     let res;
     try {
       res = await getClient().chat.completions.create({
         model,
+        ...(fallbacks.length && { models: fallbacks }),
         max_tokens: maxTokens,
         messages: toMessages(system, messages),
         ...(tools?.length && {
@@ -81,6 +86,11 @@ export const openrouterProvider = {
         body: err.error ?? null,
       }, '[openrouter] API call failed');
       throw err;
+    }
+
+    // res.model is the model that actually served the request (may be a fallback)
+    if (res.model && res.model !== model) {
+      logger.info({ requested: model, served: res.model }, '[openrouter] fallback model used');
     }
 
     const msg = res.choices[0].message;
