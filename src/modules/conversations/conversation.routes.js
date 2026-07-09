@@ -5,25 +5,17 @@ import * as controller from './conversation.controller.js';
 
 const router = Router();
 
-router.use(authMiddleware, tenantMiddleware);
-
-/**
- * @openapi
- * /conversations/events:
- *   get:
- *     tags: [Conversations]
- *     summary: SSE stream for real-time conversation events (new_message, ai_message)
- *     description: Pass JWT as ?token= since EventSource cannot set Authorization headers.
- *     responses:
- *       200: { description: text/event-stream }
- */
-// SSE clients cannot set custom headers — accept JWT as query param before auth runs
+// SSE must be registered BEFORE router.use(authMiddleware) so the global auth
+// layer doesn't reject it before our token-from-query-param injection runs.
+// EventSource cannot set custom headers, so the JWT is passed as ?token=.
 router.get('/events', (req, res, next) => {
   if (req.query.token && !req.headers.authorization) {
     req.headers.authorization = `Bearer ${req.query.token}`;
   }
   next();
 }, authMiddleware, tenantMiddleware, controller.streamEvents);
+
+router.use(authMiddleware, tenantMiddleware);
 
 /**
  * @openapi
