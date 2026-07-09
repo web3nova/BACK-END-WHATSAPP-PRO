@@ -6,6 +6,30 @@ import { logger } from '../../config/logger.js';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import crypto from 'crypto';
 import { notify } from '../notifications/notification.service.js';
+import processAiReply from '../../jobs/processors/aiReply.job.js';
+
+// Try to enqueue via BullMQ; if Redis is unavailable, run directly in-process.
+// Upstash drops idle TCP connections every ~20s which can make BullMQ BLMOVE
+// never return, so a direct fallback ensures replies still go out.
+const enqueueOrRunAiReply = async (data, jobId) => {
+  const opts = jobId
+    ? { jobId, removeOnComplete: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } }
+    : { removeOnComplete: true };
+  try {
+    await Promise.race([
+      mainQueue.add('aiReply', data, opts),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('enqueue timeout')), 3000)),
+    ]);
+    logger.info({ conversationId: data.conversationId }, '[conversation] aiReply enqueued via BullMQ');
+  } catch (err) {
+    logger.warn({ err: err.message, conversationId: data.conversationId }, '[conversation] BullMQ enqueue failed — running aiReply in-process');
+    setImmediate(() => {
+      processAiReply({ data }).catch(e =>
+        logger.error({ err: e.message, conversationId: data.conversationId }, '[conversation] in-process aiReply failed')
+      );
+    });
+  }
+};
 
 // Normalize phone to E.164 when possible; fall back to digits-preserving format.
 const normalizePhone = (phone) => {
@@ -131,14 +155,8 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
       const msg = await createMessageAndAssets(prisma, existing.id, text, messageId, media);
 
       const jobId = messageId ? `aiReply:${messageId}` : undefined;
-      try {
-        await mainQueue.add('aiReply', { tenantId, conversationId: existing.id, messageId: msg.id }, jobId ? { jobId, removeOnComplete: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } } : { removeOnComplete: true });
-      } catch (enqueueErr) {
-        // Release dedup lock so Meta's next retry can reprocess
-        if (dedupLockKey) redis.del(dedupLockKey).catch(() => {});
-        throw enqueueErr;
-      }
-      logger.info({ conversationId: existing.id }, '[conversation] message saved, aiReply enqueued (existing conversation)');
+      await enqueueOrRunAiReply({ tenantId, conversationId: existing.id, messageId: msg.id }, jobId);
+      logger.info({ conversationId: existing.id }, '[conversation] message saved, aiReply triggered (existing conversation)');
       return;
     }
     // If no existing conversation found, try to acquire lock with retries
@@ -176,12 +194,7 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
       });
 
       const jobId = messageId ? `aiReply:${messageId}` : undefined;
-      try {
-        await mainQueue.add('aiReply', { tenantId: result.tenantId, conversationId: result.conversationId, messageId: result.messageId }, jobId ? { jobId, removeOnComplete: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } } : { removeOnComplete: true });
-      } catch (enqueueErr) {
-        if (dedupLockKey) redis.del(dedupLockKey).catch(() => {});
-        throw enqueueErr;
-      }
+      await enqueueOrRunAiReply({ tenantId: result.tenantId, conversationId: result.conversationId, messageId: result.messageId }, jobId);
 
       const displayName = senderName || senderPhone || 'A customer';
       const preview = text ? (text.length > 60 ? text.slice(0, 57) + '…' : text) : 'Media message';
@@ -244,13 +257,8 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
   });
 
   const fallbackJobId = messageId ? `aiReply:${messageId}` : undefined;
-  try {
-    await mainQueue.add('aiReply', { tenantId: fallbackResult.tenantId, conversationId: fallbackResult.conversationId, messageId: fallbackResult.messageId }, fallbackJobId ? { jobId: fallbackJobId, removeOnComplete: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } } : { removeOnComplete: true });
-  } catch (enqueueErr) {
-    if (dedupLockKey) redis.del(dedupLockKey).catch(() => {});
-    throw enqueueErr;
-  }
-  logger.info({ conversationId: fallbackResult.conversationId }, '[conversation] message saved (fallback), aiReply enqueued');
+  await enqueueOrRunAiReply({ tenantId: fallbackResult.tenantId, conversationId: fallbackResult.conversationId, messageId: fallbackResult.messageId }, fallbackJobId);
+  logger.info({ conversationId: fallbackResult.conversationId }, '[conversation] message saved (fallback), aiReply triggered');
 };
 
 /**

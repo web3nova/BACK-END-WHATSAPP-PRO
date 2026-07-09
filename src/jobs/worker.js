@@ -36,6 +36,13 @@ export const startWorker = () => {
     logger.error({ jobId: job.id, jobName: job.name, err: err.message }, '[worker] job failed');
   });
 
+  // Without this listener, BullMQ re-emits Redis ECONNRESET/EPIPE errors on the
+  // worker EventEmitter which become unhandled rejections and can crash the process.
+  worker.on('error', (err) => {
+    if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'EPIPE') return;
+    logger.error({ err: err.message }, '[worker] connection error');
+  });
+
   workerInstance = worker;
   return workerInstance;
 };
