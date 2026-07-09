@@ -49,8 +49,27 @@ export async function chat({ tenantId, conversationId, customerId, message }) {
   const system = buildSystemPrompt(await loadBusinessContext(tenantId));
   const ctx = { tenantId, conversationId, customerId };
 
-  const history = await memory.load(conversationId);
-  history.push({ role: 'user', content: message });
+  // Build history from the DB — the single source of truth. This includes
+  // staff replies, order/quote confirmations, and anything sent while a human
+  // had taken over, so the AI always has full conversation context.
+  const dbMessages = await prisma.message.findMany({
+    where: { conversationId },
+    orderBy: { createdAt: 'desc' },
+    take: 30,
+  });
+  const history = dbMessages.reverse().map((m) => {
+    const content = m.content?.trim() || '[media attachment]';
+    if (m.role === 'customer') return { role: 'user', content };
+    if (m.role === 'staff') return { role: 'assistant', content: `[Sent by human staff] ${content}` };
+    return { role: 'assistant', content }; // ai
+  });
+
+  // The incoming message is normally already saved to the DB before this runs;
+  // only append it if it isn't the last customer turn (defensive).
+  const lastUser = [...history].reverse().find((m) => m.role === 'user');
+  if (!lastUser || lastUser.content !== message) {
+    history.push({ role: 'user', content: message });
+  }
 
   logger.info({ tenantId, conversationId, model: provider.name }, '[ai] calling provider');
   for (let step = 0; step < MAX_STEPS; step++) {
@@ -73,13 +92,10 @@ export async function chat({ tenantId, conversationId, customerId, message }) {
     }
 
     const reply = res.text?.trim() || 'I\'m not sure how to help with that. Could you rephrase your question?';
-    history.push({ role: 'assistant', content: reply });
-    await memory.save(conversationId, history);
     return { reply, steps: step + 1 };
   }
 
   logger.warn({ tenantId, conversationId }, 'AI loop hit MAX_STEPS');
-  await memory.save(conversationId, history);
   const lastText = [...history].reverse().find((m) => m.role === 'assistant' && m.content)?.content;
   return {
     reply: lastText || 'Let me get a human to help you with that.',
