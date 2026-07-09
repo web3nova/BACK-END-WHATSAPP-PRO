@@ -40,6 +40,7 @@ import teamRoutes from '../modules/team/team.routes.js';
 import analyticsRoutes from '../modules/analytics/analytics.routes.js';
 import { accept as acceptInviteHandler } from '../modules/team/team.controller.js';
 import demoChatRoutes from '../modules/chat/demo.routes.js';
+import { streamEvents } from '../modules/conversations/conversation.controller.js';
 
 const router = Router();
 
@@ -72,6 +73,10 @@ router.use('/billing', billingPublicRoutes);
 
 // Landing page demo chat — public, IP rate limited.
 router.use('/chat', demoChatRoutes);
+
+// SSE stream — EventSource cannot set custom headers, so auth is handled
+// inline via ?token= query param. Must live before the global authMiddleware.
+router.get('/conversations/events', streamEvents);
 
 // ── Protected (JWT + tenant) ───────────────────────────
 // All routes below require a valid access token and an active tenant.

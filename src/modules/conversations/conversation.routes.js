@@ -5,10 +5,6 @@ import * as controller from './conversation.controller.js';
 
 const router = Router();
 
-// SSE: EventSource cannot set custom headers — auth is handled inline inside
-// streamEvents using the ?token= query param. No middleware here.
-router.get('/events', controller.streamEvents);
-
 router.use(authMiddleware, tenantMiddleware);
 
 /**
