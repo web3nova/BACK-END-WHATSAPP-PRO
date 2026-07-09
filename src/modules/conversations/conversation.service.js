@@ -1,38 +1,29 @@
 import { prisma } from '../../config/prisma.js';
 import { mainQueue } from '../../jobs/queue.js';
-import { isQueueReady } from '../../config/redis.js';
 import { NotFoundError } from '../../common/errors/index.js';
 import { logger } from '../../config/logger.js';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { notify } from '../notifications/notification.service.js';
+import { pushEvent } from '../sse/sse.service.js';
 import processAiReply from '../../jobs/processors/aiReply.job.js';
 
-// Try to enqueue via BullMQ; if Redis is unavailable, run directly in-process.
-// Upstash drops idle TCP connections every ~20s which can make BullMQ BLMOVE
-// never return, so a direct fallback ensures replies still go out.
+// Enqueue via pg-boss (Postgres-backed, always available). Falls back to
+// in-process only if the enqueue itself fails (e.g. DB unreachable).
 const enqueueOrRunAiReply = async (data, jobId) => {
   const opts = jobId
-    ? { jobId, removeOnComplete: true, attempts: 3, backoff: { type: 'exponential', delay: 5000 } }
-    : { removeOnComplete: true };
-
-  if (isQueueReady()) {
-    try {
-      await Promise.race([
-        mainQueue.add('aiReply', data, opts),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('enqueue timeout')), 800)),
-      ]);
-      logger.info({ conversationId: data.conversationId }, '[conversation] aiReply enqueued via BullMQ');
-      return;
-    } catch (err) {
-      logger.warn({ err: err.message, conversationId: data.conversationId }, '[conversation] BullMQ enqueue failed — running aiReply in-process');
-    }
+    ? { jobId, attempts: 3, backoff: { type: 'exponential', delay: 5000 } }
+    : {};
+  try {
+    await mainQueue.add('aiReply', data, opts);
+    logger.info({ conversationId: data.conversationId }, '[conversation] aiReply enqueued via pg-boss');
+  } catch (err) {
+    logger.warn({ err: err.message, conversationId: data.conversationId }, '[conversation] pg-boss enqueue failed — running aiReply in-process');
+    setImmediate(() => {
+      processAiReply({ data }).catch(e =>
+        logger.error({ err: e.message, conversationId: data.conversationId }, '[conversation] in-process aiReply failed')
+      );
+    });
   }
-
-  setImmediate(() => {
-    processAiReply({ data }).catch(e =>
-      logger.error({ err: e.message, conversationId: data.conversationId }, '[conversation] in-process aiReply failed')
-    );
-  });
 };
 
 // Normalize phone to E.164 when possible; fall back to digits-preserving format.
@@ -92,13 +83,20 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
   // 4. Create conversation (if needed) + message in a single transaction.
   // The transaction is atomic so concurrent webhooks can't create duplicate conversations.
   const result = await prisma.$transaction(async (tx) => {
+    // Find the most recent conversation regardless of status.
+    // If closed/escalated, reopen it so the same customer never gets a duplicate chat.
     let conversation = await tx.conversation.findFirst({
-      where: { tenantId, customerId: customer.id, status: 'open' },
+      where: { tenantId, customerId: customer.id },
       orderBy: { updatedAt: 'desc' }
     });
     if (!conversation) {
       conversation = await tx.conversation.create({
         data: { tenantId, customerId: customer.id, channel: 'whatsapp', status: 'open' }
+      });
+    } else if (conversation.status !== 'open') {
+      conversation = await tx.conversation.update({
+        where: { id: conversation.id },
+        data: { status: 'open' }
       });
     }
 
@@ -132,6 +130,14 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
   });
 
   logger.info({ conversationId: result.conversationId }, '[conversation] message saved');
+
+  // Push live update to any connected dashboard tabs for this tenant
+  pushEvent(tenantId, 'new_message', {
+    conversationId: result.conversationId,
+    message: { id: result.messageId, role: 'customer', content: text, createdAt: new Date().toISOString() },
+    senderPhone,
+    senderName,
+  });
 
   // 5. Trigger AI reply (BullMQ with in-process fallback)
   const jobId = messageId ? `aiReply:${messageId}` : undefined;

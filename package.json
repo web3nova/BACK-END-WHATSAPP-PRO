@@ -44,6 +44,7 @@
     "node-cron": "^4.5.0",
     "openai": "^4.52.0",
     "pdf-parse": "^2.4.5",
+    "pg-boss": "^12.25.1",
     "pino": "^9.1.0",
     "pino-pretty": "^11.1.0",
     "swagger-jsdoc": "^6.2.8",

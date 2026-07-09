@@ -1,60 +1,36 @@
-import { Worker } from 'bullmq';
-import { redis } from '../config/redis.js';
+import { boss, startBoss } from '../config/pgboss.js';
 import { logger } from '../config/logger.js';
 import processAiReply from './processors/aiReply.job.js';
 import processOutbox from './processors/outbox.job.js';
 import processNotification from './processors/notification.job.js';
 
-let workerInstance = null;
+// pg-boss wraps handlers: job = { id, name, data, ... }
+// Our processors already expect { data } so this is a direct match.
 
-export const startWorker = () => {
-  if (workerInstance) return workerInstance;
+let started = false;
 
-  logger.info('[worker] starting background worker');
+export const startWorker = async () => {
+  if (started) return;
+  await startBoss();
 
-  const worker = new Worker('main', async (job) => {
-    switch (job.name) {
-      case 'aiReply':
-        await processAiReply(job);
-        break;
-      case 'sendOutbox':
-        await processOutbox(job);
-        break;
-      case 'sendNotification':
-        await processNotification(job);
-        break;
-      default:
-        logger.warn({ jobName: job.name }, '[worker] unknown job name');
-    }
-  }, { connection: redis, checkCompatibility: false });
+  await boss.work('aiReply', { teamSize: 2, teamConcurrency: 2 }, processAiReply);
+  await boss.work('sendOutbox', { teamSize: 5, teamConcurrency: 5 }, processOutbox);
+  await boss.work('sendNotification', { teamSize: 2, teamConcurrency: 2 }, processNotification);
 
-  worker.on('completed', (job) => {
-    logger.info({ jobId: job.id, jobName: job.name }, '[worker] job completed');
-  });
-
-  worker.on('failed', (job, err) => {
-    logger.error({ jobId: job.id, jobName: job.name, err: err.message }, '[worker] job failed');
-  });
-
-  // Without this listener, BullMQ re-emits Redis ECONNRESET/EPIPE errors on the
-  // worker EventEmitter which become unhandled rejections and can crash the process.
-  worker.on('error', (err) => {
-    if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'EPIPE') return;
-    logger.error({ err: err.message }, '[worker] connection error');
-  });
-
-  workerInstance = worker;
-  return workerInstance;
+  started = true;
+  logger.info('[worker] pg-boss worker started — listening for aiReply, sendOutbox, sendNotification');
 };
 
-// When run as a standalone process (`npm run worker`), handle shutdown here.
-// When embedded inside server.js, server.js owns the shutdown lifecycle.
 if (process.argv[1].endsWith('worker.js') || process.argv[1].endsWith('worker.ts')) {
-  const worker = startWorker();
+  startWorker().catch((err) => {
+    logger.error({ err: err.message }, '[worker] failed to start');
+    process.exit(1);
+  });
+
   const shutdown = async (signal) => {
     logger.info({ signal }, '[worker] shutting down');
     try {
-      await worker.close();
+      await boss.stop();
       logger.info('[worker] graceful shutdown complete');
       process.exit(0);
     } catch (err) {

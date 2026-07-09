@@ -3,6 +3,7 @@ import { logger } from '../../config/logger.js';
 import aiService from '../../modules/ai/ai.service.js';
 import * as whatsappService from '../../modules/whatsapp/whatsapp.service.js';
 import { notify } from '../../modules/notifications/notification.service.js';
+import { pushEvent } from '../../modules/sse/sse.service.js';
 
 export default async function processAiReply(job) {
   const { tenantId, conversationId, messageId } = job.data;
@@ -87,13 +88,19 @@ export default async function processAiReply(job) {
   }
 
   // 3. Save AI's response to database
-  await prisma.message.create({
+  const aiMessage = await prisma.message.create({
     data: {
       conversationId,
       role: 'ai',
       content: aiResponse.reply,
       meta: { aiForMessageId: messageId }
     }
+  });
+
+  // Push AI reply to connected dashboard tabs so it appears without a refresh
+  pushEvent(tenantId, 'ai_message', {
+    conversationId,
+    message: { id: aiMessage.id, role: 'ai', content: aiResponse.reply, createdAt: aiMessage.createdAt },
   });
 
   // 4. Send response back to customer via WhatsApp

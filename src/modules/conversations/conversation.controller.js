@@ -3,6 +3,7 @@ import { asyncHandler } from '../../common/utils/asyncHandler.js';
 import { ok } from '../../common/utils/apiResponse.js';
 import { BadRequestError } from '../../common/errors/index.js';
 import * as conversationService from './conversation.service.js';
+import { addClient, removeClient } from '../sse/sse.service.js';
 
 // Tenant helper similar to other controllers. Falls back to header for early testing.
 function tenantId(req) {
@@ -50,4 +51,27 @@ export const resolve = asyncHandler(async (req, res) => {
     return ok(res, { resolved: true, conversation: updated });
 });
 
-export default { getAll, getHistory, resolve };
+export const streamEvents = (req, res) => {
+  const tenant = tenantId(req);
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders();
+  res.write('event: connected\ndata: {}\n\n');
+
+  addClient(tenant, res);
+
+  const heartbeat = setInterval(() => {
+    try { res.write(':ping\n\n'); } catch { clearInterval(heartbeat); }
+  }, 25_000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    removeClient(tenant, res);
+  });
+};
+
+export default { getAll, getHistory, resolve, streamEvents };

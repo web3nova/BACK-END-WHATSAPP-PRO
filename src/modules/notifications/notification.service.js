@@ -3,6 +3,7 @@ import { sendWhatsApp } from './channels/whatsapp.channel.js';
 import { sendSMS } from './channels/sms.channel.js';
 import { logger } from '../../config/logger.js';
 import { mainQueue } from '../../jobs/queue.js';
+// mainQueue now backed by pg-boss — no Redis dependency
 import { prisma } from '../../config/prisma.js';
 
 /**
