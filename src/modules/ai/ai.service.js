@@ -27,6 +27,7 @@ async function loadBusinessContext(tenantId) {
     displayName: business?.displayName,
     description: business?.description,
     currency: business?.settings?.currency || 'NGN',
+    timezone: business?.settings?.timezone,
     aiPersona: ai.persona || '',
     tone: ai.tone || 'Friendly',
     collectMeasurements: ai.collectMeasurements !== false,

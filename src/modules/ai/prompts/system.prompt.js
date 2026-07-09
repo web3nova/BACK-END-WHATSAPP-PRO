@@ -15,7 +15,8 @@ export function buildSystemPrompt(business = {}) {
 
   // Current date/time in the business's timezone — the model's own sense of
   // "today" is stale (training cutoff), so this is the authoritative clock.
-  const timeZone = process.env.BUSINESS_TIMEZONE || 'Africa/Lagos';
+  // Per-business setting first, then platform default.
+  const timeZone = business.timezone || process.env.BUSINESS_TIMEZONE || 'Africa/Lagos';
   let now;
   try {
     now = new Intl.DateTimeFormat('en-GB', {
