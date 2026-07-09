@@ -60,10 +60,14 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
 
   // 3. Register the phone number via Cloud API (moves status from Pending → Active)
   try {
+    const regBody = new URLSearchParams({ messaging_product: 'whatsapp', pin: '123456' });
     const regRes = await fetch(`${GRAPH_BASE}/${phoneNumberId}/register`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messaging_product: 'whatsapp', pin: '123456' }),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: regBody.toString(),
     });
     const regJson = await regRes.json().catch(() => ({}));
     if (!regRes.ok) {
