@@ -37,7 +37,14 @@ export function createApp() {
     }
   }));
   app.use(express.urlencoded({ extended: true }));
-  if (config.env !== 'test') app.use(morgan('dev'));
+  if (config.env !== 'test') {
+    // Redact ?token= from logged URLs so JWTs never appear in logs
+    morgan.token('safe-url', (req) => {
+      const url = req.originalUrl || req.url;
+      return url.replace(/([?&]token=)[^&]*/gi, '$1[REDACTED]');
+    });
+    app.use(morgan(':method :safe-url :status :response-time ms - :res[content-length]'));
+  }
 
   // Serve locally stored files (media) at /storage
   app.use('/storage', express.static(path.join(process.cwd(), 'storage')));
