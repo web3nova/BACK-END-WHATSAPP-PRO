@@ -15,7 +15,8 @@ export const geminiProvider = {
       throw new Error('Gemini API key is not configured (set GOOGLE_GEMINI_API_KEY or GEMINI_API_KEY)');
     }
 
-    const modelName = process.env.GEMINI_CHAT_MODEL || 'gemini-2.5-pro';
+    // Default to flash: 2.5-pro has NO free-tier quota and 429s immediately
+    const modelName = process.env.GEMINI_CHAT_MODEL || 'gemini-2.0-flash';
 
     // Map system to instructions
     const systemInstruction = system;

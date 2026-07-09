@@ -1,6 +1,7 @@
 import { prisma } from '../../config/prisma.js';
 import { NotFoundError } from '../../common/errors/index.js';
 import { sendMessage } from '../whatsapp/whatsapp.service.js';
+import { pushEvent } from '../sse/sse.service.js';
 import { logger } from '../../config/logger.js';
 
 const quoteSelect = {
@@ -120,9 +121,27 @@ export const createQuote = async (tenantId, data) => {
       'Reply *YES* to confirm this order, or ask any questions.',
     ];
     try {
-      await sendMessage(tenantId, phone, lines.join('\n'));
+      const text = lines.join('\n');
+      await sendMessage(tenantId, phone, text);
       await prisma.quote.update({ where: { id: quote.id }, data: { status: 'sent' } });
       result.status = 'sent';
+
+      // Save the quote message into the conversation so it shows in the chat
+      // like any other message, and push it live over SSE.
+      if (quote.conversationId) {
+        const message = await prisma.message.create({
+          data: {
+            conversationId: quote.conversationId,
+            role: 'staff',
+            content: text,
+            meta: { quoteId: quote.id },
+          },
+        });
+        pushEvent(tenantId, 'staff_message', {
+          conversationId: quote.conversationId,
+          message: { id: message.id, role: 'staff', content: text, createdAt: message.createdAt },
+        });
+      }
     } catch (err) {
       logger.warn({ err: err.message, quoteId: quote.id }, '[quote] WhatsApp delivery failed — quote saved as draft');
     }

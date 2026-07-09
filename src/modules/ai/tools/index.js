@@ -1,9 +1,10 @@
 import { catalogTools } from './catalogTools.js';
 import { orderTools } from './orderTools.js';
 import { knowledgeTools } from './knowledgeTools.js';
+import { paymentTools } from './paymentTools.js';
 import { logger } from '../../../config/logger.js';
 
-const allTools = [...knowledgeTools, ...catalogTools, ...orderTools];
+const allTools = [...knowledgeTools, ...catalogTools, ...orderTools, ...paymentTools];
 const toolMap = new Map(allTools.map((t) => [t.name, t]));
 
 // Definitions handed to the LLM (no handlers — provider-agnostic shape).
