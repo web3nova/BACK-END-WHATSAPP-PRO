@@ -56,25 +56,48 @@ export async function chat({ tenantId, conversationId, customerId, message }) {
     where: { conversationId },
     orderBy: { createdAt: 'desc' },
     take: 30,
-    include: { mediaAssets: { select: { mimeType: true } } },
+    include: { mediaAssets: { select: { mimeType: true, storageKey: true } } },
   });
-  const history = dbMessages.reverse().map((m) => {
+  const ordered = dbMessages.reverse();
+
+  // Vision: images on the LATEST customer message are passed to the model so
+  // it can read receipts / identify products. Older images become text notes.
+  let lastCustomerIdx = -1;
+  for (let i = ordered.length - 1; i >= 0; i--) {
+    if (ordered[i].role === 'customer') { lastCustomerIdx = i; break; }
+  }
+  const { storage } = await import('../../config/storage.js');
+
+  const history = await Promise.all(ordered.map(async (m, idx) => {
     let content = m.content?.trim() || '';
-    if (m.mediaAssets?.length) {
-      const kinds = m.mediaAssets.map((a) => {
-        const mime = a.mimeType || '';
-        if (mime.startsWith('image/')) return 'an image';
-        if (mime.startsWith('video/')) return 'a video';
-        if (mime.startsWith('audio/')) return 'a voice note';
-        return 'a document';
-      });
-      content = `${content ? content + ' ' : ''}[attached ${kinds.join(', ')} — you cannot view it; if it looks like a payment receipt or something needing verification, tell the customer a staff member will review it]`;
+    let images;
+    const assets = m.mediaAssets || [];
+    const imgAssets = assets.filter((a) => a.mimeType?.startsWith('image/'));
+    const otherAssets = assets.filter((a) => !a.mimeType?.startsWith('image/'));
+
+    if (m.role === 'customer' && idx === lastCustomerIdx && imgAssets.length) {
+      images = (await Promise.all(
+        imgAssets.slice(0, 3).map((a) => storage.getSignedUrl(a.storageKey).catch(() => null)),
+      )).filter(Boolean);
+      if (images.length) {
+        content = `${content ? content + ' ' : ''}[customer attached ${images.length > 1 ? `${images.length} images` : 'an image'} — you can see ${images.length > 1 ? 'them' : 'it'}]`;
+      }
+    } else if (imgAssets.length) {
+      content = `${content ? content + ' ' : ''}[attached ${imgAssets.length > 1 ? `${imgAssets.length} images` : 'an image'} earlier in the conversation]`;
+    }
+    if (otherAssets.length) {
+      const kinds = otherAssets.map((a) =>
+        a.mimeType?.startsWith('video/') ? 'a video'
+          : a.mimeType?.startsWith('audio/') ? 'a voice note'
+          : 'a document');
+      content = `${content ? content + ' ' : ''}[attached ${kinds.join(', ')} — you cannot view it]`;
     }
     if (!content) content = '[empty message]';
-    if (m.role === 'customer') return { role: 'user', content };
+
+    if (m.role === 'customer') return { role: 'user', content, ...(images?.length ? { images } : {}) };
     if (m.role === 'staff') return { role: 'assistant', content: `[Sent by human staff] ${content}` };
     return { role: 'assistant', content }; // ai
-  });
+  }));
 
   // The incoming message is normally already saved to the DB before this runs;
   // only append it if it isn't the last customer turn (defensive).

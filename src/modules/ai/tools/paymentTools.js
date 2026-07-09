@@ -143,6 +143,40 @@ export const createPaymentLink = {
   },
 };
 
-export const paymentTools = [getPaymentDetails, createPaymentLink];
+// Tool: flag a customer-submitted payment receipt for manual verification.
+// The AI reads the receipt image but NEVER confirms payment itself — the
+// business always verifies manual transfers before fulfilling.
+export const reportPaymentReceipt = {
+  name: 'report_payment_receipt',
+  description:
+    'Alert the business team that the customer sent a payment receipt (bank transfer proof) that needs manual verification. Call this every time you see a receipt image, whether it looks correct or suspicious. Include everything you could read from it.',
+  parameters: {
+    type: 'object',
+    properties: {
+      orderId: { type: 'string', description: 'Related order id if known' },
+      summary: {
+        type: 'string',
+        description: 'What the receipt shows: amount, sender, recipient bank/account, date/time — and whether it matches the expected payment details and order total, or any concerns (mismatch, unclear, possibly edited).',
+      },
+    },
+    required: ['summary'],
+  },
+  async handler({ orderId, summary }, ctx) {
+    const { notify } = await import('../../notifications/notification.service.js');
+    await notify(ctx.tenantId, {
+      type: 'payment_received',
+      title: 'Payment receipt needs verification',
+      body: summary.slice(0, 400),
+      emailSubject: 'Customer sent a payment receipt — please verify',
+      metadata: { conversationId: ctx.conversationId, ...(orderId ? { orderId } : {}) },
+    }).catch(() => {});
+    return {
+      reported: true,
+      note: 'Team notified. Tell the customer their payment will be confirmed shortly once the team verifies the transfer. Do not mark anything as paid.',
+    };
+  },
+};
+
+export const paymentTools = [getPaymentDetails, createPaymentLink, reportPaymentReceipt];
 
 export default paymentTools;

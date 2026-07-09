@@ -42,6 +42,17 @@ function toMessages(system, messages) {
       });
       continue;
     }
+    // Vision: user turns may carry image URLs (receipts, product photos)
+    if (m.role === 'user' && m.images?.length) {
+      out.push({
+        role: 'user',
+        content: [
+          { type: 'text', text: m.content || '' },
+          ...m.images.map((url) => ({ type: 'image_url', image_url: { url } })),
+        ],
+      });
+      continue;
+    }
     out.push({ role: m.role, content: m.content });
   }
   return out;
