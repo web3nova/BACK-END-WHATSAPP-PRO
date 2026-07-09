@@ -25,7 +25,12 @@ export function pushEvent(tenantId, event, data) {
   if (!set?.size) return;
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const res of set) {
-    try { res.write(payload); }
-    catch { set.delete(res); }
+    try {
+      res.write(payload);
+      // compression middleware buffers writes — flush forces immediate delivery
+      if (typeof res.flush === 'function') res.flush();
+    } catch {
+      set.delete(res);
+    }
   }
 }

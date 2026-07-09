@@ -78,11 +78,15 @@ export const streamEvents = (req, res) => {
   });
   res.flushHeaders();
   res.write('event: connected\ndata: {}\n\n');
+  if (typeof res.flush === 'function') res.flush();
 
   addClient(tenant, res);
 
   const heartbeat = setInterval(() => {
-    try { res.write(':ping\n\n'); } catch { clearInterval(heartbeat); }
+    try {
+      res.write(':ping\n\n');
+      if (typeof res.flush === 'function') res.flush();
+    } catch { clearInterval(heartbeat); }
   }, 25_000);
 
   req.on('close', () => {
