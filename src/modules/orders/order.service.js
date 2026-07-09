@@ -89,7 +89,8 @@ export const getOrder = async (tenantId, id) => {
   return attachCustomer(order, customerMap);
 };
 
-export const createOrder = async (tenantId, data) => {
+// notify=true only when customer places via storefront/AI; staff-created orders skip it
+export const createOrder = async (tenantId, data, { notify: sendNotify = false } = {}) => {
   const customerId = await ensureCustomerExists(tenantId, data.customerId ?? null);
   const order = await prisma.order.create({
     data: {
@@ -107,16 +108,18 @@ export const createOrder = async (tenantId, data) => {
   const customerMap = await loadCustomers(tenantId, [order.customerId]);
   const result = attachCustomer(order, customerMap);
 
-  const amount = order.totalMinor ? `₦${(order.totalMinor / 100).toLocaleString()}` : '';
-  const customerName = result.customer?.name || result.customer?.phone || 'A customer';
-  notify(tenantId, {
-    type: 'new_order',
-    title: `New order from ${customerName}`,
-    body: `Order ${amount ? `for ${amount} ` : ''}has been placed and is awaiting fulfillment.`,
-    emailSubject: `New order received — ${amount || 'check your dashboard'}`,
-    metadata: { orderId: order.id },
-    outbound: true,
-  }).catch(() => {});
+  if (sendNotify) {
+    const amount = order.totalMinor ? `₦${(order.totalMinor / 100).toLocaleString()}` : '';
+    const customerName = result.customer?.name || result.customer?.phone || 'A customer';
+    notify(tenantId, {
+      type: 'new_order',
+      title: `New order from ${customerName}`,
+      body: `Order ${amount ? `for ${amount} ` : ''}has been placed and is awaiting fulfillment.`,
+      emailSubject: `New order received — ${amount || 'check your dashboard'}`,
+      metadata: { orderId: order.id },
+      outbound: true,
+    }).catch(() => {});
+  }
 
   return result;
 };
