@@ -2,17 +2,17 @@ import { GoogleGenAI } from '@google/genai';
 import { config } from '../../../config/index.js';
 import { logger } from '../../../config/logger.js';
 
-// Requires GOOGLE_GEMINI_API_KEY environment variable. If missing, this will throw on init.
-// For now, instantiate it lazily or check if the key exists to prevent crashing if unused.
+// Accepts GOOGLE_GEMINI_API_KEY or GEMINI_API_KEY. If missing, chat() throws.
+const geminiKey = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 let ai;
-if (process.env.GOOGLE_GEMINI_API_KEY) {
-  ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY });
+if (geminiKey) {
+  ai = new GoogleGenAI({ apiKey: geminiKey });
 }
 
 export const geminiProvider = {
   async chat({ system, messages, tools = [], maxTokens = 1024 }) {
     if (!ai) {
-      throw new Error('Gemini API key is not configured (GOOGLE_GEMINI_API_KEY)');
+      throw new Error('Gemini API key is not configured (set GOOGLE_GEMINI_API_KEY or GEMINI_API_KEY)');
     }
 
     const modelName = process.env.GEMINI_CHAT_MODEL || 'gemini-2.5-pro';
