@@ -2,16 +2,21 @@ import { PgBoss } from 'pg-boss';
 import { config } from './index.js';
 import { logger } from './logger.js';
 
+// pg-boss requires a direct (non-pooled) Postgres connection because it uses
+// LISTEN/NOTIFY for real-time job dispatch. Neon's pgBouncer pooler (the URL
+// containing '-pooler') runs in transaction mode and drops session-level commands
+// like LISTEN, making workers deaf. Strip '-pooler' to get the direct endpoint.
+const pgbossUrl = (process.env.DIRECT_DATABASE_URL || config.databaseUrl).replace(
+  /-pooler(\.[^/]+)/,
+  '$1',
+);
+
 const boss = new PgBoss({
-  connectionString: config.databaseUrl,
-  // Keep completed/failed jobs for 3 days so we can inspect them
+  connectionString: pgbossUrl,
   deleteAfterDays: 3,
-  // Retry failed jobs up to 3 times with exponential backoff
   retryLimit: 3,
   retryBackoff: true,
-  // Monitor interval — how often to check for jobs (ms)
   monitorStateIntervalSeconds: 30,
-  // Suppress pg-boss internal error logs for connection hiccups — we handle those
   noSupervisor: false,
 });
 
