@@ -56,9 +56,21 @@ export async function chat({ tenantId, conversationId, customerId, message }) {
     where: { conversationId },
     orderBy: { createdAt: 'desc' },
     take: 30,
+    include: { mediaAssets: { select: { mimeType: true } } },
   });
   const history = dbMessages.reverse().map((m) => {
-    const content = m.content?.trim() || '[media attachment]';
+    let content = m.content?.trim() || '';
+    if (m.mediaAssets?.length) {
+      const kinds = m.mediaAssets.map((a) => {
+        const mime = a.mimeType || '';
+        if (mime.startsWith('image/')) return 'an image';
+        if (mime.startsWith('video/')) return 'a video';
+        if (mime.startsWith('audio/')) return 'a voice note';
+        return 'a document';
+      });
+      content = `${content ? content + ' ' : ''}[attached ${kinds.join(', ')} — you cannot view it; if it looks like a payment receipt or something needing verification, tell the customer a staff member will review it]`;
+    }
+    if (!content) content = '[empty message]';
     if (m.role === 'customer') return { role: 'user', content };
     if (m.role === 'staff') return { role: 'assistant', content: `[Sent by human staff] ${content}` };
     return { role: 'assistant', content }; // ai
