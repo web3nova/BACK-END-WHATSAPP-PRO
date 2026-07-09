@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { logger } from '../../../config/logger.js';
 
 const CALL_TIMEOUT_MS = 20_000;
 
@@ -52,22 +53,35 @@ export const openrouterProvider = {
   async chat({ system, messages, tools, maxTokens = 1024 }) {
     const model = process.env.OPENROUTER_CHAT_MODEL || 'openrouter/free';
 
-    const res = await getClient().chat.completions.create({
-      model,
-      max_tokens: maxTokens,
-      messages: toMessages(system, messages),
-      ...(tools?.length && {
-        tools: tools.map((t) => ({
-          type: 'function',
-          function: { name: t.name, description: t.description, parameters: t.parameters },
-        })),
-        tool_choice: 'auto',
-      }),
-      provider: {
-        sort: 'throughput',
-        require_parameters: true, // only route to providers that support tools
-      },
-    });
+    let res;
+    try {
+      res = await getClient().chat.completions.create({
+        model,
+        max_tokens: maxTokens,
+        messages: toMessages(system, messages),
+        ...(tools?.length && {
+          tools: tools.map((t) => ({
+            type: 'function',
+            function: { name: t.name, description: t.description, parameters: t.parameters },
+          })),
+          tool_choice: 'auto',
+        }),
+        provider: {
+          sort: 'throughput',
+          require_parameters: true, // only route to providers that support tools
+        },
+      });
+    } catch (err) {
+      // OpenRouter buries the upstream provider's real error in error.metadata —
+      // log everything so failures are diagnosable from Render logs.
+      logger.error({
+        model,
+        status: err.status,
+        message: err.message,
+        body: err.error ?? null,
+      }, '[openrouter] API call failed');
+      throw err;
+    }
 
     const msg = res.choices[0].message;
     const toolCalls = (msg.tool_calls ?? []).map((tc) => ({
