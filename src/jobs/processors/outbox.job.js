@@ -1,24 +1,28 @@
 import { prisma } from '../../config/prisma.js';
 import { storage } from '../../config/storage.js';
+import { logger } from '../../config/logger.js';
 
 export default async function processOutbox(job) {
     const { outboxId } = job.data;
     if (!outboxId) throw new Error('Missing outboxId');
 
+    logger.info({ outboxId }, '[outbox] processing');
+
     const outbox = await prisma.outboxMessage.findUnique({ where: { id: outboxId } });
     if (!outbox) throw new Error('Outbox entry not found');
-    if (outbox.status === 'sent') return;
+    if (outbox.status === 'sent') { logger.info({ outboxId }, '[outbox] already sent — skipping'); return; }
 
-    // bump attempts and mark in-progress
     await prisma.outboxMessage.update({ where: { id: outboxId }, data: { attempts: outbox.attempts + 1, status: 'in_progress' } });
 
     const account = await prisma.whatsappAccount.findUnique({ where: { tenantId: outbox.tenantId } });
     if (!account || !account.accessToken || !account.phoneNumberId) {
         await prisma.outboxMessage.update({ where: { id: outboxId }, data: { status: 'failed', lastError: 'Missing whatsapp account config' } });
+        logger.error({ outboxId, tenantId: outbox.tenantId }, '[outbox] missing WhatsApp account config');
         throw new Error('Missing whatsapp account config');
     }
 
     const url = `https://graph.facebook.com/${process.env.WHATSAPP_API_VERSION || 'v20.0'}/${account.phoneNumberId}/messages`;
+    logger.info({ outboxId, to: outbox.to, type: outbox.payload?.type }, '[outbox] calling WhatsApp API');
 
     const payload = outbox.payload;
     let body;
@@ -28,12 +32,10 @@ export default async function processOutbox(job) {
         const mediaType = payload.mediaType || 'image';
         let link = payload.url;
         if (!link && payload.storageKey) link = await storage.getSignedUrl(payload.storageKey);
-
         if (!link) {
             await prisma.outboxMessage.update({ where: { id: outboxId }, data: { status: 'failed', lastError: 'Missing media URL' } });
             throw new Error('Missing media URL for outbox media payload');
         }
-
         body = { messaging_product: 'whatsapp', to: outbox.to, type: mediaType, [mediaType]: { link, caption: payload.caption } };
     } else {
         await prisma.outboxMessage.update({ where: { id: outboxId }, data: { status: 'failed', lastError: 'Unsupported outbox payload type' } });
@@ -45,18 +47,20 @@ export default async function processOutbox(job) {
 
     if (response.ok) {
         await prisma.outboxMessage.update({ where: { id: outboxId }, data: { status: 'sent', providerResponse: data, sentAt: new Date() } });
+        logger.info({ outboxId, to: outbox.to }, '[outbox] delivered');
         return data;
     }
 
     const lastError = JSON.stringify(data);
     const attempts = outbox.attempts + 1;
     const maxAttempts = 5;
+    logger.error({ outboxId, to: outbox.to, status: response.status, err: lastError }, '[outbox] WhatsApp API error');
+
     if (attempts >= maxAttempts) {
         await prisma.outboxMessage.update({ where: { id: outboxId }, data: { status: 'failed', lastError, providerResponse: data } });
         throw new Error(`Outbox delivery failed after ${attempts} attempts`);
     }
 
-    // mark pending and let the queue retry
     await prisma.outboxMessage.update({ where: { id: outboxId }, data: { status: 'pending', lastError, providerResponse: data } });
     throw new Error('Outbox delivery failed, will retry');
 }
