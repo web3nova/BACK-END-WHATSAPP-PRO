@@ -43,8 +43,7 @@ redis.on('connect', () => {
 });
 redis.on('close', () => { _connected = false; });
 redis.on('error', (err) => {
-  // ECONNRESET from Upstash idle timeout is normal — only log once per disconnect cycle
-  if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED') return;
+  if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'EPIPE') return;
   logger.error(`[redis] Error (${err.code || err.name}) — ${err.message?.replace(url, maskedUrl)}`);
 });
 
@@ -60,7 +59,7 @@ const _origDuplicate = redis.duplicate.bind(redis);
 redis.duplicate = (...args) => {
   const dup = _origDuplicate(...args);
   dup.on('error', (err) => {
-    if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED') return;
+    if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'EPIPE') return;
     logger.error(`[redis] Error on internal connection (${err.code || err.name}) — ${err.message?.replace(url, maskedUrl)}`);
   });
   return dup;
@@ -70,8 +69,7 @@ redis.duplicate = (...args) => {
 // without an error listener (e.g. from BullMQ internals). Without this,
 // Node.js prints the raw error to stderr and may crash.
 process.on('uncaughtException', (err) => {
-  if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED') return;
-  // Re-throw anything else so it still crashes as expected
+  if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'EPIPE') return;
   throw err;
 });
 
