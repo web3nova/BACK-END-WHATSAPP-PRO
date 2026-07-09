@@ -48,12 +48,14 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
   }
 
   // 1. Tenant Resolution
+  logger.info({ phoneNumberId }, '[conversation] resolving tenant');
   const whatsappAccount = await prisma.whatsappAccount.findFirst({ where: { phoneNumberId } });
   if (!whatsappAccount) {
     logger.error({ phoneNumberId }, '[conversation] no tenant found for phoneNumberId');
     return;
   }
   const tenantId = whatsappAccount.tenantId;
+  logger.info({ tenantId }, '[conversation] tenant resolved');
 
   // Normalize phone for lookups and storage
   const normalizedPhone = normalizePhone(senderPhone);

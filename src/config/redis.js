@@ -66,4 +66,13 @@ redis.duplicate = (...args) => {
   return dup;
 };
 
+// Global safety net — catches any Redis/ioredis ECONNRESET that slips through
+// without an error listener (e.g. from BullMQ internals). Without this,
+// Node.js prints the raw error to stderr and may crash.
+process.on('uncaughtException', (err) => {
+  if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED') return;
+  // Re-throw anything else so it still crashes as expected
+  throw err;
+});
+
 export default redis;
