@@ -1,4 +1,5 @@
 import { prisma } from '../../config/prisma.js';
+import { randomInt } from 'crypto';
 import { BadRequestError } from '../../common/errors/index.js';
 import { logger } from '../../config/logger.js';
 import { notify } from '../notifications/notification.service.js';
@@ -59,8 +60,10 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
   const accessToken = longTokenJson.access_token;
 
   // 3. Register the phone number via Cloud API (moves status from Pending → Active)
+  let twoStepPin = null;
   try {
-    const regBody = new URLSearchParams({ messaging_product: 'whatsapp', pin: '123456' });
+    twoStepPin = String(randomInt(100000, 999999));
+    const regBody = new URLSearchParams({ messaging_product: 'whatsapp', pin: twoStepPin });
     const regRes = await fetch(`${GRAPH_BASE}/${phoneNumberId}/register`, {
       method: 'POST',
       headers: {
@@ -125,8 +128,8 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
   // 6. Persist all identifiers — tenant can now send/receive WhatsApp messages
   await prisma.whatsappAccount.upsert({
     where: { tenantId },
-    update: { accessToken, wabaId, phoneNumberId, phoneNumber, verified: true },
-    create: { tenantId, accessToken, wabaId, phoneNumberId, phoneNumber, verified: true },
+    update: { accessToken, wabaId, phoneNumberId, phoneNumber, ...(twoStepPin && { twoStepPin }), verified: true },
+    create: { tenantId, accessToken, wabaId, phoneNumberId, phoneNumber, ...(twoStepPin && { twoStepPin }), verified: true },
   });
 
   notify(tenantId, {

@@ -364,7 +364,8 @@ export const processIncoming = async (payload) => {
         const senderName = contact?.profile?.name || '';
         const { text } = parseMessage(message);
 
-        logger.info({ senderPhone, phoneNumberId }, '[whatsapp] incoming message');
+        const maskedPhone = senderPhone ? senderPhone.slice(0, 6) + '*'.repeat(Math.max(0, senderPhone.length - 6)) : 'unknown';
+        logger.info({ senderPhone: maskedPhone, phoneNumberId }, '[whatsapp] incoming message');
 
         const mediaAssets = [];
         try {

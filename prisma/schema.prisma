@@ -441,6 +441,7 @@ model WhatsappAccount {
   phoneNumberId String?
   phoneNumber   String?
   accessToken   String?
+  twoStepPin    String?
   verified      Boolean @default(false)
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
