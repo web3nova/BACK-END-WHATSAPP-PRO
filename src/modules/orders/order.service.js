@@ -1,6 +1,9 @@
 import { prisma } from '../../config/prisma.js';
 import { NotFoundError } from '../../common/errors/index.js';
 import { notify } from '../notifications/notification.service.js';
+import { sendMessage } from '../whatsapp/whatsapp.service.js';
+import { pushEvent } from '../sse/sse.service.js';
+import { logger } from '../../config/logger.js';
 
 const orderSelect = {
   id: true,
@@ -96,6 +99,7 @@ export const createOrder = async (tenantId, data, { notify: sendNotify = false }
     data: {
       tenantId,
       customerId,
+      conversationId: data.conversationId ?? null,
       status: data.status,
       totalMinor: data.totalMinor,
       currency: data.currency,
@@ -108,6 +112,39 @@ export const createOrder = async (tenantId, data, { notify: sendNotify = false }
   const customerMap = await loadCustomers(tenantId, [order.customerId]);
   const result = attachCustomer(order, customerMap);
 
+  // Send order confirmation to the customer's WhatsApp and record it in the
+  // conversation so it appears in chat history like any other message.
+  const phone = result.customer?.phone;
+  if (phone) {
+    const ref = order.id.slice(0, 8).toUpperCase();
+    const amountMajor = (order.totalMinor / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 });
+    const itemLines = (order.items || [])
+      .map((it) => `• ${it.name}${it.qty ? ` x${it.qty}` : ''}${it.size ? ` (${it.size})` : ''}`);
+    const lines = [
+      `🛒 *Order #${ref}*`,
+      ...itemLines,
+      `Total: *${order.currency} ${amountMajor}*`,
+      `Status: ${order.status}`,
+      '',
+      'We will keep you updated on your order.',
+    ];
+    const text = lines.join('\n');
+    try {
+      await sendMessage(tenantId, phone, text);
+      if (order.conversationId) {
+        const message = await prisma.message.create({
+          data: { conversationId: order.conversationId, role: 'staff', content: text, meta: { orderId: order.id } },
+        });
+        pushEvent(tenantId, 'staff_message', {
+          conversationId: order.conversationId,
+          message: { id: message.id, role: 'staff', content: text, createdAt: message.createdAt },
+        });
+      }
+    } catch (err) {
+      logger.warn({ err: err.message, orderId: order.id }, '[order] WhatsApp confirmation failed');
+    }
+  }
+
   if (sendNotify) {
     const amount = order.totalMinor ? `₦${(order.totalMinor / 100).toLocaleString()}` : '';
     const customerName = result.customer?.name || result.customer?.phone || 'A customer';
@@ -116,7 +153,7 @@ export const createOrder = async (tenantId, data, { notify: sendNotify = false }
       title: `New order from ${customerName}`,
       body: `Order ${amount ? `for ${amount} ` : ''}has been placed and is awaiting fulfillment.`,
       emailSubject: `New order received — ${amount || 'check your dashboard'}`,
-      metadata: { orderId: order.id },
+      metadata: { orderId: order.id, conversationId: order.conversationId ?? undefined },
       outbound: true,
     }).catch(() => {});
   }

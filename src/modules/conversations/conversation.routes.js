@@ -1,7 +1,11 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { authMiddleware } from '../../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../../middleware/tenant.middleware.js';
 import * as controller from './conversation.controller.js';
+
+// WhatsApp caps: image 5MB, video/audio/document 16MB — allow 16MB
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 16 * 1024 * 1024 } });
 
 const router = Router();
 
@@ -58,5 +62,6 @@ router.get('/:id/messages', controller.getHistory);
 router.patch('/:id/take-over', controller.takeOver);
 router.patch('/:id/release', controller.release);
 router.post('/:id/messages', controller.staffMessage);
+router.post('/:id/media', upload.single('file'), controller.staffMedia);
 
 export default router;

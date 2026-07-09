@@ -136,7 +136,13 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
   // Push live update to any connected dashboard tabs for this tenant
   pushEvent(tenantId, 'new_message', {
     conversationId: result.conversationId,
-    message: { id: result.messageId, role: 'customer', content: text, createdAt: new Date().toISOString() },
+    message: {
+      id: result.messageId,
+      role: 'customer',
+      content: text,
+      createdAt: new Date().toISOString(),
+      media: (media || []).map((m) => ({ mimeType: m.mimeType, url: m.url })),
+    },
     senderPhone,
     senderName,
   });
@@ -194,10 +200,29 @@ export const getConversationHistory = async (conversationId, tenantId, { page = 
 
   const [total, messages] = await prisma.$transaction([
     prisma.message.count({ where: { conversationId } }),
-    prisma.message.findMany({ where: { conversationId }, orderBy: { createdAt: 'asc' }, skip, take }),
+    prisma.message.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: 'asc' },
+      skip,
+      take,
+      include: { mediaAssets: true },
+    }),
   ]);
 
-  return { data: messages, meta: { total, page, limit: take } };
+  // Stored media URLs are signed with a 1h expiry — re-sign on every read so
+  // images/videos in chat history never break.
+  const { storage } = await import('../../config/storage.js');
+  const data = await Promise.all(messages.map(async (m) => {
+    if (!m.mediaAssets?.length) return m;
+    const media = await Promise.all(m.mediaAssets.map(async (a) => {
+      let url = a.url;
+      try { url = await storage.getSignedUrl(a.storageKey); } catch { /* keep stored url */ }
+      return { id: a.id, mimeType: a.mimeType, url };
+    }));
+    return { ...m, media };
+  }));
+
+  return { data, meta: { total, page, limit: take } };
 };
 
 const STAFF_INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
@@ -264,4 +289,71 @@ export const sendStaffMessage = async (conversationId, tenantId, text) => {
   });
 
   return message;
+};
+
+/**
+ * Staff sends an image/video/document inside a conversation.
+ * Uploads to storage, delivers via WhatsApp media message, records in chat.
+ */
+export const sendStaffMedia = async (conversationId, tenantId, file, caption = '') => {
+  const conv = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: { customer: true },
+  });
+  if (!conv || conv.tenantId !== tenantId) throw new NotFoundError('Conversation not found');
+
+  const { storage } = await import('../../config/storage.js');
+  const mime = file.mimetype || 'application/octet-stream';
+  const mediaType = mime.startsWith('image/') ? 'image'
+    : mime.startsWith('video/') ? 'video'
+    : mime.startsWith('audio/') ? 'audio'
+    : 'document';
+
+  const extMap = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'video/mp4': 'mp4', 'audio/mpeg': 'mp3', 'application/pdf': 'pdf' };
+  const ext = extMap[mime] || (mime.split('/')[1] || 'bin');
+  const key = `whatsapp/${tenantId}/outbound/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+  await storage.put(key, file.buffer, mime);
+  // WhatsApp needs a long enough validity to fetch the media
+  const url = await storage.getSignedUrl(key, 60 * 60 * 24);
+
+  const message = await prisma.message.create({
+    data: { conversationId, role: 'staff', content: caption || '' },
+  });
+  await prisma.mediaAsset.create({
+    data: {
+      tenantId,
+      messageId: message.id,
+      provider: 'upload',
+      mimeType: mime,
+      size: file.size,
+      storageKey: key,
+      url,
+    },
+  });
+
+  const { sendMessage } = await import('../whatsapp/whatsapp.service.js');
+  await sendMessage(tenantId, conv.customer.phone, {
+    type: 'media',
+    mediaType,
+    url,
+    storageKey: key,
+    caption: caption || undefined,
+  });
+
+  await mainQueue.add('autoRelease', { conversationId }, {
+    jobId: `autoRelease:${conversationId}`,
+    startAfterMs: STAFF_INACTIVITY_MS,
+  });
+
+  const payload = {
+    id: message.id,
+    role: 'staff',
+    content: caption || '',
+    createdAt: message.createdAt,
+    media: [{ mimeType: mime, url }],
+  };
+  pushEvent(tenantId, 'staff_message', { conversationId, message: payload });
+
+  return payload;
 };

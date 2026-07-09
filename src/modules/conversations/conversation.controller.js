@@ -69,6 +69,16 @@ export const staffMessage = asyncHandler(async (req, res) => {
     return ok(res, { message });
 });
 
+export const staffMedia = asyncHandler(async (req, res) => {
+    const tenant = tenantId(req);
+    const parsedParams = idParam.safeParse(req.params);
+    if (!parsedParams.success) throw new BadRequestError('Invalid conversation id', parsedParams.error.flatten());
+    if (!req.file) throw new BadRequestError('file is required');
+    const caption = (req.body?.caption || '').trim();
+    const message = await conversationService.sendStaffMedia(parsedParams.data.id, tenant, req.file, caption);
+    return ok(res, { message });
+});
+
 export const streamEvents = (req, res) => {
   // EventSource cannot set custom headers, so auth uses ?token= query param.
   // We verify the JWT inline here rather than relying on middleware.
@@ -112,4 +122,4 @@ export const streamEvents = (req, res) => {
   });
 };
 
-export default { getAll, getHistory, takeOver, release, staffMessage, streamEvents };
+export default { getAll, getHistory, takeOver, release, staffMessage, staffMedia, streamEvents };
