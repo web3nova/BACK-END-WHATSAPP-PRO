@@ -158,23 +158,21 @@ export async function deleteMedia(tenantId, id) {
 
 const MAX_REVISIONS_PER_BUSINESS = 20;
 
-export async function updateSettings(tenantId, data) {
-  const business = await requireBusiness(tenantId);
-
-  // Snapshot what settings looked like *before* this change, so it can be
-  // restored later. Nothing to snapshot on the very first save (no prior
-  // state exists yet). Best-effort: revision history is a convenience
-  // feature, not core to saving settings — a failure here (e.g. the
-  // revisions table being briefly unavailable) must never block the actual
-  // save the user is waiting on.
+// Snapshot what live settings look like *right now*, so it can be restored
+// later. Nothing to snapshot on the very first save (no prior state exists
+// yet). Best-effort: revision history is a convenience feature, not core to
+// saving settings — a failure here (e.g. the revisions table being briefly
+// unavailable) must never block the actual save the user is waiting on.
+// `existing` is the current WebsiteSettings row (or null); pass it in so
+// callers that already fetched it don't do it twice.
+async function snapshotCurrentLive(businessId, existing) {
   try {
-    const existing = await prisma.websiteSettings.findUnique({ where: { businessId: business.id } });
     if (existing) {
-      const { id, businessId, updatedAt, ...snapshot } = existing;
-      await prisma.websiteSettingsRevision.create({ data: { businessId: business.id, snapshot } });
+      const { id, businessId: _businessId, updatedAt, draft, ...snapshot } = existing;
+      await prisma.websiteSettingsRevision.create({ data: { businessId, snapshot } });
 
       const overflow = await prisma.websiteSettingsRevision.findMany({
-        where: { businessId: business.id },
+        where: { businessId },
         orderBy: { createdAt: 'desc' },
         skip: MAX_REVISIONS_PER_BUSINESS,
         select: { id: true },
@@ -184,8 +182,89 @@ export async function updateSettings(tenantId, data) {
       }
     }
   } catch (err) {
-    logger.warn({ tenantId, err: err.message }, '[website] Failed to snapshot settings revision — continuing with save');
+    logger.warn({ businessId, err: err.message }, '[website] Failed to snapshot settings revision — continuing with save');
   }
+}
+
+// The editable fields that live inside `draft` (and get promoted to the live
+// columns on publish). `published` is a live-only concept — a draft never
+// carries its own publish flag.
+const DRAFT_FIELDS = ['theme', 'navigation', 'seo', 'social', 'sections'];
+
+// PUT /website/settings: stages edits into `draft` instead of writing the
+// live columns directly, so every keystroke-triggered save is no longer
+// instantly visible on the public storefront. `published` bypasses draft
+// entirely and still writes straight to the live column, same as before —
+// it's an existing "publish" toggle flow that data.draft never modeled.
+export async function updateSettings(tenantId, data) {
+  const business = await requireBusiness(tenantId);
+  const existing = await prisma.websiteSettings.findUnique({ where: { businessId: business.id } });
+
+  await snapshotCurrentLive(business.id, existing);
+
+  const { published, ...draftData } = data;
+  const hasDraftFields = Object.keys(draftData).length > 0;
+
+  const baseForDraft = existing?.draft
+    ? existing.draft
+    : DRAFT_FIELDS.reduce((acc, key) => {
+        acc[key] = existing ? existing[key] : defaultSettings[key];
+        return acc;
+      }, {});
+
+  const nextDraft = hasDraftFields ? { ...baseForDraft, ...draftData } : existing?.draft ?? null;
+
+  const updateData = {};
+  if (hasDraftFields) updateData.draft = nextDraft;
+  if (published !== undefined) updateData.published = published;
+
+  return prisma.websiteSettings.upsert({
+    where: { businessId: business.id },
+    create: {
+      businessId: business.id,
+      ...defaultSettings,
+      ...(hasDraftFields ? { draft: nextDraft } : {}),
+      ...(published !== undefined ? { published } : {}),
+    },
+    update: updateData,
+  });
+}
+
+// Promotes the staged `draft` to the live columns. No-op (returns the row
+// unchanged) if there is nothing staged.
+export async function publishSettings(tenantId) {
+  const business = await requireBusiness(tenantId);
+  const existing = await prisma.websiteSettings.upsert({
+    where: { businessId: business.id },
+    create: { businessId: business.id, ...defaultSettings },
+    update: {},
+  });
+
+  if (!existing.draft) {
+    return existing;
+  }
+
+  await snapshotCurrentLive(business.id, existing);
+
+  const liveFields = DRAFT_FIELDS.reduce((acc, key) => {
+    if (existing.draft[key] !== undefined) acc[key] = existing.draft[key];
+    return acc;
+  }, {});
+
+  return prisma.websiteSettings.update({
+    where: { businessId: business.id },
+    data: { ...liveFields, draft: null },
+  });
+}
+
+// Writes settings directly to the live columns, bypassing draft — used only
+// by restoreRevision, where restoring a specific, deliberate past state
+// should take effect immediately rather than requiring a follow-up publish.
+async function updateLiveSettings(tenantId, data) {
+  const business = await requireBusiness(tenantId);
+  const existing = await prisma.websiteSettings.findUnique({ where: { businessId: business.id } });
+
+  await snapshotCurrentLive(business.id, existing);
 
   return prisma.websiteSettings.upsert({
     where: { businessId: business.id },
@@ -205,16 +284,19 @@ export async function listRevisions(tenantId, query) {
   return paginatedResponse(items, total, page, limit);
 }
 
-// Restoring goes through updateSettings() itself, so the current
-// (pre-restore) state gets snapshotted as a new revision too — a restore is
-// always itself undoable, same as any other save.
+// Restoring writes straight to the live columns (bypassing draft) via
+// updateLiveSettings(), so the current (pre-restore) state gets snapshotted
+// as a new revision too — a restore is always itself undoable, same as any
+// other save. It also takes effect immediately: a merchant restoring a
+// specific, known-good past state shouldn't need a follow-up publish click
+// to get back to it.
 export async function restoreRevision(tenantId, id) {
   const business = await requireBusiness(tenantId);
   const revision = await prisma.websiteSettingsRevision.findUnique({ where: { id } });
   if (!revision || revision.businessId !== business.id) {
     throw new NotFoundError('Revision not found.');
   }
-  return updateSettings(tenantId, revision.snapshot);
+  return updateLiveSettings(tenantId, revision.snapshot);
 }
 
 // Public storefront: tenant + business info + published pages + in-stock products.
@@ -223,6 +305,9 @@ export async function getStorefront({ tenantId, slug, domain }) {
   const tenant = await resolveStorefrontTenant({ tenantId, slug, domain });
   const business = await requireBusiness(tenant.id);
   const [settings, pages, products] = await Promise.all([
+    // Explicit whitelist select — never includes `draft`. In-progress draft
+    // edits must never leak to the public storefront API response, even by
+    // accident if new fields get added to the model later.
     prisma.websiteSettings.findUnique({
       where: { businessId: business.id },
       select: { theme: true, navigation: true, seo: true, social: true, sections: true, published: true },

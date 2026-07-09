@@ -149,6 +149,17 @@ router.put(
 
 /**
  * @openapi
+ * /website/settings/publish:
+ *   post:
+ *     tags: [Website]
+ *     summary: Publish staged draft changes to the live website settings
+ *     responses:
+ *       200: { description: Published (live) website settings }
+ */
+router.post('/settings/publish', websiteController.publishSettings);
+
+/**
+ * @openapi
  * /website/settings/revisions:
  *   get:
  *     tags: [Website]

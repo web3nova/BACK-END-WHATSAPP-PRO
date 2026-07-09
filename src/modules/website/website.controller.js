@@ -45,8 +45,16 @@ export const setPublished = asyncHandler(async (req, res) => {
   return ok(res, data);
 });
 
+// The editor needs the merged (draft-if-present-else-live) view to edit, plus
+// whether there's a pending draft at all. `draft` itself is dropped from the
+// response — its fields are already flattened onto the top level.
 export const getSettings = asyncHandler(async (req, res) => {
-  const data = await websiteService.getSettings(getTenantId(req));
+  const { draft, ...settings } = await websiteService.getSettings(getTenantId(req));
+  const data = {
+    ...settings,
+    ...(draft ?? {}),
+    hasUnpublishedChanges: Boolean(draft),
+  };
   return ok(res, data);
 });
 
@@ -75,6 +83,11 @@ export const deleteMedia = asyncHandler(async (req, res) => {
 
 export const updateSettings = asyncHandler(async (req, res) => {
   const data = await websiteService.updateSettings(getTenantId(req), req.body);
+  return ok(res, data);
+});
+
+export const publishSettings = asyncHandler(async (req, res) => {
+  const data = await websiteService.publishSettings(getTenantId(req));
   return ok(res, data);
 });
 

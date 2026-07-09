@@ -252,6 +252,7 @@ model WebsiteSettings {
   social     Json     @default("{}")
   sections   Json     @default("[]")
   published  Boolean  @default(false)
+  draft      Json?
   updatedAt  DateTime @updatedAt
 
   business Business @relation(fields: [businessId], references: [id])
