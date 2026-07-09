@@ -17,17 +17,31 @@ function withTimeout(promise, ms) {
   ]);
 }
 
+// Primary business timezone per country (ISO2) — captured during onboarding.
+// Multi-timezone countries get their main commercial zone; an explicit
+// settings.timezone always wins.
+const COUNTRY_TIMEZONES = {
+  NG: 'Africa/Lagos', GH: 'Africa/Accra', KE: 'Africa/Nairobi', ZA: 'Africa/Johannesburg',
+  EG: 'Africa/Cairo', TZ: 'Africa/Dar_es_Salaam', UG: 'Africa/Kampala', RW: 'Africa/Kigali',
+  CI: 'Africa/Abidjan', SN: 'Africa/Dakar', CM: 'Africa/Douala', ET: 'Africa/Addis_Ababa',
+  GB: 'Europe/London', US: 'America/New_York', CA: 'America/Toronto', FR: 'Europe/Paris',
+  DE: 'Europe/Berlin', AE: 'Asia/Dubai', SA: 'Asia/Riyadh', IN: 'Asia/Kolkata',
+  CN: 'Asia/Shanghai', BR: 'America/Sao_Paulo', AU: 'Australia/Sydney',
+};
+
 async function loadBusinessContext(tenantId) {
   const business = await withTimeout(
     prisma.business.findUnique({ where: { tenantId } }),
     8000
   ).catch(() => null);
-  const ai = business?.settings?.ai || {};
+  const settings = business?.settings || {};
+  const ai = settings.ai || {};
+  const countryIso2 = (settings.countryIso2 || '').toUpperCase();
   return {
     displayName: business?.displayName,
     description: business?.description,
-    currency: business?.settings?.currency || 'NGN',
-    timezone: business?.settings?.timezone,
+    currency: settings.currency || 'NGN',
+    timezone: settings.timezone || COUNTRY_TIMEZONES[countryIso2],
     aiPersona: ai.persona || '',
     tone: ai.tone || 'Friendly',
     collectMeasurements: ai.collectMeasurements !== false,
