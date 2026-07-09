@@ -91,4 +91,4 @@ export const streamEvents = (req, res) => {
   });
 };
 
-export default { getAll, getHistory, resolve, streamEvents };
+export default { getAll, getHistory, takeOver, release, staffMessage, streamEvents };
