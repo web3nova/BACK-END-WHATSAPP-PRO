@@ -1,4 +1,7 @@
-import PgBoss from 'pg-boss';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const PgBoss = require('pg-boss');
+
 import { config } from './index.js';
 import { logger } from './logger.js';
 
