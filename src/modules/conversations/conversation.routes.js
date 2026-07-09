@@ -73,6 +73,8 @@ router.get('/:id/messages', controller.getHistory);
  *     responses:
  *       200: { description: Conversation resolved }
  */
-router.patch('/:id/resolve', controller.resolve);
+router.patch('/:id/take-over', controller.takeOver);
+router.patch('/:id/release', controller.release);
+router.post('/:id/messages', controller.staffMessage);
 
 export default router;

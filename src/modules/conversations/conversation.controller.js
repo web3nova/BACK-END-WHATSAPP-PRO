@@ -42,13 +42,30 @@ export const getHistory = asyncHandler(async (req, res) => {
     return ok(res, messages.data, messages.meta);
 });
 
-export const resolve = asyncHandler(async (req, res) => {
+export const takeOver = asyncHandler(async (req, res) => {
     const tenant = tenantId(req);
     const parsedParams = idParam.safeParse(req.params);
     if (!parsedParams.success) throw new BadRequestError('Invalid conversation id', parsedParams.error.flatten());
+    const updated = await conversationService.takeOver(parsedParams.data.id, tenant);
+    return ok(res, { conversation: updated });
+});
 
-    const updated = await conversationService.resolveConversation(parsedParams.data.id, tenant);
-    return ok(res, { resolved: true, conversation: updated });
+export const release = asyncHandler(async (req, res) => {
+    const tenant = tenantId(req);
+    const parsedParams = idParam.safeParse(req.params);
+    if (!parsedParams.success) throw new BadRequestError('Invalid conversation id', parsedParams.error.flatten());
+    const updated = await conversationService.release(parsedParams.data.id, tenant);
+    return ok(res, { conversation: updated });
+});
+
+export const staffMessage = asyncHandler(async (req, res) => {
+    const tenant = tenantId(req);
+    const parsedParams = idParam.safeParse(req.params);
+    if (!parsedParams.success) throw new BadRequestError('Invalid conversation id', parsedParams.error.flatten());
+    const { text } = req.body;
+    if (!text?.trim()) throw new BadRequestError('text is required');
+    const message = await conversationService.sendStaffMessage(parsedParams.data.id, tenant, text.trim());
+    return ok(res, { message });
 });
 
 export const streamEvents = (req, res) => {

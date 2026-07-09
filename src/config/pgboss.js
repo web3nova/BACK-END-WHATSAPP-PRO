@@ -1,9 +1,4 @@
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const _pgBoss = require('pg-boss');
-// pg-boss may export the class as module.exports or module.exports.default
-const PgBoss = _pgBoss.default ?? _pgBoss;
-
+import { PgBoss } from 'pg-boss';
 import { config } from './index.js';
 import { logger } from './logger.js';
 

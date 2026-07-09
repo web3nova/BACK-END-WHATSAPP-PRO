@@ -93,7 +93,9 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
       conversation = await tx.conversation.create({
         data: { tenantId, customerId: customer.id, channel: 'whatsapp', status: 'open' }
       });
-    } else if (conversation.status !== 'open') {
+    } else if (conversation.status === 'closed' || conversation.status === 'escalated') {
+      // Reopen closed/escalated conversations on new customer message.
+      // 'human' stays as-is — staff is actively handling it.
       conversation = await tx.conversation.update({
         where: { id: conversation.id },
         data: { status: 'open' }
@@ -198,13 +200,68 @@ export const getConversationHistory = async (conversationId, tenantId, { page = 
   return { data: messages, meta: { total, page, limit: take } };
 };
 
+const STAFF_INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
+
 /**
- * Resolve (close) a conversation. Only the owning tenant can resolve.
+ * Staff takes over a conversation — AI will not reply until released.
  */
-export const resolveConversation = async (conversationId, tenantId) => {
+export const takeOver = async (conversationId, tenantId) => {
   const conv = await prisma.conversation.findUnique({ where: { id: conversationId } });
   if (!conv || conv.tenantId !== tenantId) throw new NotFoundError('Conversation not found');
 
-  const updated = await prisma.conversation.update({ where: { id: conversationId }, data: { status: 'closed' } });
+  const updated = await prisma.conversation.update({ where: { id: conversationId }, data: { status: 'human' } });
+
+  // Schedule auto-release after 30 min of inactivity (singleton — one per conversation)
+  await mainQueue.add('autoRelease', { conversationId }, {
+    jobId: `autoRelease:${conversationId}`,
+    startAfterMs: STAFF_INACTIVITY_MS,
+  });
+
+  pushEvent(tenantId, 'conversation_updated', { conversationId, status: 'human' });
   return updated;
+};
+
+/**
+ * Release conversation back to AI.
+ */
+export const release = async (conversationId, tenantId) => {
+  const conv = await prisma.conversation.findUnique({ where: { id: conversationId } });
+  if (!conv || conv.tenantId !== tenantId) throw new NotFoundError('Conversation not found');
+
+  const updated = await prisma.conversation.update({ where: { id: conversationId }, data: { status: 'open' } });
+  pushEvent(tenantId, 'conversation_updated', { conversationId, status: 'open' });
+  return updated;
+};
+
+/**
+ * Staff sends a message inside a conversation.
+ * Saves to DB and sends via WhatsApp. Resets the auto-release timer.
+ */
+export const sendStaffMessage = async (conversationId, tenantId, text) => {
+  const conv = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: { customer: true },
+  });
+  if (!conv || conv.tenantId !== tenantId) throw new NotFoundError('Conversation not found');
+
+  const message = await prisma.message.create({
+    data: { conversationId, role: 'staff', content: text },
+  });
+
+  // Send via WhatsApp
+  const { sendMessage } = await import('../whatsapp/whatsapp.service.js');
+  await sendMessage(tenantId, conv.customer.phone, text);
+
+  // Reset the auto-release timer
+  await mainQueue.add('autoRelease', { conversationId }, {
+    jobId: `autoRelease:${conversationId}`,
+    startAfterMs: STAFF_INACTIVITY_MS,
+  });
+
+  pushEvent(tenantId, 'staff_message', {
+    conversationId,
+    message: { id: message.id, role: 'staff', content: text, createdAt: message.createdAt },
+  });
+
+  return message;
 };
