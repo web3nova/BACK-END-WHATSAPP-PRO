@@ -1,6 +1,9 @@
 import { Router } from 'express';
+import multer from 'multer';
 import * as controller from './whatsapp.controller.js';
 import { verifySignature } from './whatsapp.middleware.js';
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 // ── Public: Meta webhook (no JWT — verified by signature) ──────────────
 const router = Router();
@@ -88,5 +91,7 @@ setupRouter.post('/connect', controller.connect);
 setupRouter.delete('/disconnect', controller.disconnect);
 setupRouter.get('/business-profile', controller.getBusinessProfile);
 setupRouter.put('/business-profile', controller.updateBusinessProfile);
+setupRouter.post('/profile-picture', upload.single('image'), controller.uploadProfilePicture);
+setupRouter.post('/display-name', controller.requestDisplayNameChange);
 
 export default router;

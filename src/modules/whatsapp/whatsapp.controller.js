@@ -80,6 +80,31 @@ export const updateBusinessProfile = asyncHandler(async (req, res) => {
 });
 
 /**
+ * POST /whatsapp/profile-picture — upload and set WhatsApp profile picture
+ */
+export const uploadProfilePicture = asyncHandler(async (req, res) => {
+  if (!req.tenant) throw new BadRequestError('Tenant required');
+  if (!req.file) throw new BadRequestError('Image file is required');
+  const result = await whatsappService.uploadProfilePicture(
+    req.tenant.id,
+    req.file.buffer,
+    req.file.mimetype
+  );
+  return ok(res, result);
+});
+
+/**
+ * POST /whatsapp/display-name — request a display name change (Meta must approve)
+ */
+export const requestDisplayNameChange = asyncHandler(async (req, res) => {
+  if (!req.tenant) throw new BadRequestError('Tenant required');
+  const { displayName } = req.body;
+  if (!displayName?.trim()) throw new BadRequestError('displayName is required');
+  const result = await whatsappService.requestDisplayNameChange(req.tenant.id, displayName.trim());
+  return ok(res, result);
+});
+
+/**
  * Receive incoming messages from WhatsApp
  */
 export const receiveWebhook = (req, res) => {

@@ -109,6 +109,82 @@ export const updateBusinessProfile = async (tenantId, fields) => {
   return { success: true };
 };
 
+/** Upload a profile picture to Meta and update the WhatsApp Business Profile. */
+export const uploadProfilePicture = async (tenantId, fileBuffer, mimeType) => {
+  const account = await prisma.whatsappAccount.findUnique({
+    where: { tenantId },
+    select: { phoneNumberId: true, accessToken: true },
+  });
+  if (!account?.phoneNumberId || !account?.accessToken) {
+    const err = new Error('WhatsApp account not connected'); err.statusCode = 400; throw err;
+  }
+
+  const metaAppId = process.env.META_APP_ID;
+  if (!metaAppId) { const err = new Error('META_APP_ID not configured'); err.statusCode = 500; throw err; }
+
+  // Step 1: Create upload session
+  const sessionRes = await fetch(
+    `${GRAPH_BASE}/${metaAppId}/uploads?file_length=${fileBuffer.length}&file_type=${mimeType}&access_token=${account.accessToken}`,
+    { method: 'POST' }
+  );
+  const sessionJson = await sessionRes.json().catch(() => ({}));
+  if (!sessionRes.ok || !sessionJson.id) {
+    throw new Error(sessionJson?.error?.message || 'Failed to create upload session');
+  }
+  const uploadSessionId = sessionJson.id;
+
+  // Step 2: Upload the binary file
+  const uploadRes = await fetch(`${GRAPH_BASE}/${uploadSessionId}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `OAuth ${account.accessToken}`,
+      file_offset: '0',
+      'Content-Type': mimeType,
+    },
+    body: fileBuffer,
+  });
+  const uploadJson = await uploadRes.json().catch(() => ({}));
+  if (!uploadRes.ok || !uploadJson.h) {
+    throw new Error(uploadJson?.error?.message || 'Failed to upload image to Meta');
+  }
+
+  // Step 3: Set as WhatsApp Business Profile picture
+  const profileRes = await fetch(
+    `${GRAPH_BASE}/${account.phoneNumberId}/whatsapp_business_profile?access_token=${account.accessToken}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', profile_picture_handle: uploadJson.h }),
+    }
+  );
+  const profileJson = await profileRes.json().catch(() => ({}));
+  if (!profileRes.ok) {
+    throw new Error(profileJson?.error?.message || 'Failed to update profile picture');
+  }
+  return { success: true };
+};
+
+/** Request a display name change for the WhatsApp phone number (Meta must approve). */
+export const requestDisplayNameChange = async (tenantId, displayName) => {
+  const account = await prisma.whatsappAccount.findUnique({
+    where: { tenantId },
+    select: { phoneNumberId: true, accessToken: true },
+  });
+  if (!account?.phoneNumberId || !account?.accessToken) {
+    const err = new Error('WhatsApp account not connected'); err.statusCode = 400; throw err;
+  }
+  const res = await fetch(`${GRAPH_BASE}/${account.phoneNumberId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${account.accessToken}` },
+    body: JSON.stringify({ display_name: displayName }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(json?.error?.message || 'Failed to request display name change');
+  }
+  return { success: true, pending: true };
+};
+
 /** Resolve tenantId from phoneNumberId or wabaId — used by account-level webhooks. */
 const resolveTenant = async ({ phoneNumberId, wabaId } = {}) => {
   if (phoneNumberId) {
