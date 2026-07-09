@@ -414,7 +414,7 @@ export const sendMessage = async (tenantId, toPhone, payloadOrText) => {
   try {
     await Promise.race([
       mainQueue.add('sendOutbox', { outboxId: outbox.id }, { jobId: outbox.id, removeOnComplete: true, attempts: 5, backoff: { type: 'exponential', delay: 5000 } }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('enqueue timeout')), 3000)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('enqueue timeout')), 800)),
     ]);
   } catch (err) {
     logger.warn({ err: err.message, outboxId: outbox.id }, '[whatsapp] sendOutbox enqueue failed — delivering in-process');

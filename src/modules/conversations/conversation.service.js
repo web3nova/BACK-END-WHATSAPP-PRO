@@ -16,7 +16,7 @@ const enqueueOrRunAiReply = async (data, jobId) => {
   try {
     await Promise.race([
       mainQueue.add('aiReply', data, opts),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('enqueue timeout')), 3000)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('enqueue timeout')), 800)),
     ]);
     logger.info({ conversationId: data.conversationId }, '[conversation] aiReply enqueued via BullMQ');
   } catch (err) {

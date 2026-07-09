@@ -5,9 +5,6 @@ import { setInterval } from 'node:timers';
 
 const url = config.redisUrl;
 
-// Validate the URL format before handing it to ioredis.
-// ioredis silently falls back to localhost:6379 when it can't parse the URL,
-// which makes misconfigured deployments very hard to diagnose.
 if (!url || (!url.startsWith('redis://') && !url.startsWith('rediss://'))) {
   throw new Error(
     `[redis] REDIS_URL must start with redis:// or rediss://. ` +
@@ -18,56 +15,70 @@ if (!url || (!url.startsWith('redis://') && !url.startsWith('rediss://'))) {
 const maskedUrl = url.replace(/:([^@]+)@/, ':****@');
 logger.info(`[redis] Connecting to ${maskedUrl}`);
 
-let _connected = false;
+function makeErrorHandler(label) {
+  return (err) => {
+    if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'EPIPE') return;
+    logger.error(`[redis] ${label} error (${err.code || err.name}) — ${err.message?.replace(url, maskedUrl)}`);
+  };
+}
 
+// ─── Worker connection ────────────────────────────────────────────────────────
+// maxRetriesPerRequest: null — retries indefinitely so the worker never gives up
+// waiting for a job (BullMQ docs requirement for Worker instances).
 export const redis = new IORedis(url, {
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
-  // TCP keepalive every 8s — beats Upstash free-tier's ~20s idle timeout
+  connectTimeout: 15_000,
+  commandTimeout: 30_000,
   keepAlive: 8_000,
   retryStrategy(times) {
     const delay = Math.min(times * 500, 30_000);
-    if (times === 1) {
-      logger.warn(`[redis] Cannot reach ${maskedUrl} — retrying every ${delay}ms`);
-    }
+    if (times === 1) logger.warn(`[redis] Cannot reach ${maskedUrl} — retrying`);
     return delay;
   },
 });
 
+let _workerConnected = false;
 redis.on('connect', () => {
-  if (!_connected) {
-    logger.info(`[redis] Connected to ${maskedUrl}`);
-    _connected = true;
-  }
-  // reconnects are silent — noise at INFO level every 30s serves no purpose
+  if (!_workerConnected) { logger.info(`[redis] Worker connection ready`); _workerConnected = true; }
 });
-redis.on('close', () => { _connected = false; });
-redis.on('error', (err) => {
-  if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'EPIPE') return;
-  logger.error(`[redis] Error (${err.code || err.name}) — ${err.message?.replace(url, maskedUrl)}`);
-});
+redis.on('close', () => { _workerConnected = false; });
+redis.on('error', makeErrorHandler('Worker'));
 
-// App-level heartbeat at 10s — keeps connection alive if TCP keepalive alone isn't enough
-setInterval(() => {
-  redis.ping().catch(() => { /* reconnect handled by ioredis */ });
-}, 10_000).unref();
+// App-level heartbeat — keeps the worker connection alive past Upstash's idle timeout
+setInterval(() => { redis.ping().catch(() => {}); }, 10_000).unref();
 
 // BullMQ calls redis.duplicate() for its internal blocking connections.
-// Duplicated instances inherit options but NOT event listeners, so ECONNRESET would
-// print as raw unhandled errors. Patch duplicate() to propagate our error handler.
+// Patch to propagate our error handler onto every duplicate.
 const _origDuplicate = redis.duplicate.bind(redis);
 redis.duplicate = (...args) => {
   const dup = _origDuplicate(...args);
-  dup.on('error', (err) => {
-    if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'EPIPE') return;
-    logger.error(`[redis] Error on internal connection (${err.code || err.name}) — ${err.message?.replace(url, maskedUrl)}`);
-  });
+  dup.on('error', makeErrorHandler('Worker/dup'));
   return dup;
 };
 
-// Global safety net — catches any Redis/ioredis ECONNRESET that slips through
-// without an error listener (e.g. from BullMQ internals). Without this,
-// Node.js prints the raw error to stderr and may crash.
+// ─── Queue connection ─────────────────────────────────────────────────────────
+// maxRetriesPerRequest: 1 — queue.add() fails fast (< 500 ms) when Redis is
+// unavailable so our in-process fallback kicks in immediately instead of hanging.
+// BullMQ docs: "Queue instances should use a low maxRetriesPerRequest so callers
+// can get an error quickly and retry later."
+export const redisForQueue = new IORedis(url, {
+  maxRetriesPerRequest: 1,
+  enableReadyCheck: false,
+  connectTimeout: 15_000,
+  commandTimeout: 5_000,
+  keepAlive: 8_000,
+  retryStrategy(times) {
+    return Math.min(times * 500, 30_000);
+  },
+});
+
+redisForQueue.on('error', makeErrorHandler('Queue'));
+
+// ─── Global safety net ────────────────────────────────────────────────────────
+// Catches ECONNRESET/EPIPE that slip past EventEmitter error handlers (e.g.
+// BullMQ internals before our listeners attach). Silences them; anything else
+// re-throws so real crashes still surface.
 process.on('uncaughtException', (err) => {
   if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'EPIPE') return;
   throw err;
