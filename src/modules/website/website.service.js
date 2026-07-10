@@ -257,6 +257,17 @@ export async function publishSettings(tenantId) {
   });
 }
 
+// Throw away staged draft edits, reverting the editor to the live state.
+// The live columns are untouched, so no revision snapshot is taken.
+export async function discardDraft(tenantId) {
+  const business = await requireBusiness(tenantId);
+  return prisma.websiteSettings.upsert({
+    where: { businessId: business.id },
+    create: { businessId: business.id, ...defaultSettings },
+    update: { draft: null },
+  });
+}
+
 // Writes settings directly to the live columns, bypassing draft — used only
 // by restoreRevision, where restoring a specific, deliberate past state
 // should take effect immediately rather than requiring a follow-up publish.

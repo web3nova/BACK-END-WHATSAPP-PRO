@@ -91,6 +91,11 @@ export const publishSettings = asyncHandler(async (req, res) => {
   return ok(res, data);
 });
 
+export const discardDraft = asyncHandler(async (req, res) => {
+  const { draft, ...settings } = await websiteService.discardDraft(getTenantId(req));
+  return ok(res, { ...settings, hasUnpublishedChanges: false });
+});
+
 export const listRevisions = asyncHandler(async (req, res) => {
   const result = await websiteService.listRevisions(getTenantId(req), req.query);
   return ok(res, result.items, result.meta);

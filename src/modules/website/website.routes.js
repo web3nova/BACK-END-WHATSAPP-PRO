@@ -160,6 +160,17 @@ router.post('/settings/publish', websiteController.publishSettings);
 
 /**
  * @openapi
+ * /website/settings/discard:
+ *   post:
+ *     tags: [Website]
+ *     summary: Discard staged draft changes, reverting the editor to the live settings
+ *     responses:
+ *       200: { description: Live website settings (draft cleared) }
+ */
+router.post('/settings/discard', websiteController.discardDraft);
+
+/**
+ * @openapi
  * /website/settings/revisions:
  *   get:
  *     tags: [Website]
