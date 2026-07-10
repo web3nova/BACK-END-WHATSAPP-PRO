@@ -3,6 +3,7 @@ import { NotFoundError, BadRequestError, ForbiddenError } from '../../common/err
 import { paginate, paginatedResponse } from '../../common/utils/pagination.js';
 import { getAssetUrl, uploadAsset, deleteAsset } from '../../common/utils/uploadAsset.js';
 import { logger } from '../../config/logger.js';
+import { config } from '../../config/index.js';
 
 
 async function requireBusiness(tenantId) {
@@ -106,13 +107,25 @@ export async function getSettings(tenantId) {
   });
 }
 
+// Stable app-hosted URL for a website image. Stored in builder JSON instead
+// of a presigned URL (those expire after an hour — the bug this fixes). The
+// route serving this path lives at the app root (see app.js), not under the
+// API prefix, so this must produce exactly `${config.appUrl}/assets/<key>`.
+export function publicAssetUrl(storageKey) {
+  return `${config.appUrl}/assets/${storageKey}`;
+}
+
+export async function getPublicAssetUrl(storageKey) {
+  return getAssetUrl(storageKey);
+}
+
 export async function uploadImage(tenantId, file) {
   const business = await requireBusiness(tenantId);
   const asset = await uploadAsset({ tenantId, folder: 'website-images', file });
   await prisma.websiteMedia.create({
     data: { businessId: business.id, storageKey: asset.storageKey, mimeType: asset.mimeType, size: asset.size },
   });
-  return { url: asset.url, storageKey: asset.storageKey };
+  return { url: publicAssetUrl(asset.storageKey), storageKey: asset.storageKey };
 }
 
 export async function deleteImage(tenantId, storageKey) {
@@ -125,8 +138,9 @@ export async function deleteImage(tenantId, storageKey) {
 }
 
 // Media library: everything this business has ever uploaded via uploadImage,
-// newest first. R2 URLs are signed and time-limited, so only storageKey is
-// persisted — a fresh URL is signed on every read, never stored long-lived.
+// newest first. Media-library picks get stored in builder JSON, so their
+// URLs must be stable (app-hosted redirect), not a presigned URL that
+// expires an hour after this list is fetched.
 export async function listMedia(tenantId, query) {
   const business = await requireBusiness(tenantId);
   const { page, limit, skip } = paginate(query);
@@ -135,15 +149,15 @@ export async function listMedia(tenantId, query) {
     prisma.websiteMedia.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' } }),
     prisma.websiteMedia.count({ where }),
   ]);
-  const signed = await Promise.all(items.map(async (m) => ({
+  const mapped = items.map((m) => ({
     id: m.id,
-    url: await getAssetUrl(m.storageKey),
+    url: publicAssetUrl(m.storageKey),
     storageKey: m.storageKey,
     mimeType: m.mimeType,
     size: m.size,
     createdAt: m.createdAt,
-  })));
-  return paginatedResponse(signed, total, page, limit);
+  }));
+  return paginatedResponse(mapped, total, page, limit);
 }
 
 export async function deleteMedia(tenantId, id) {

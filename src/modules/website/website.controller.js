@@ -106,6 +106,21 @@ export const restoreRevision = asyncHandler(async (req, res) => {
   return ok(res, data);
 });
 
+// Public, unauthenticated. Stored image URLs point here so they never expire —
+// each hit redirects to a fresh short-lived signed URL. Only website-images/*
+// is servable: those are storefront-public by definition. Mounted at the app
+// root (see app.js), not under the API prefix, so the final path matches
+// exactly what websiteService.publicAssetUrl() stores: `/assets/website-images/...`.
+export const getPublicAsset = asyncHandler(async (req, res) => {
+  const key = req.params[0] ? `website-images/${req.params[0]}` : '';
+  if (!key || key.includes('..')) {
+    throw new BadRequestError('Invalid asset key.');
+  }
+  const url = await websiteService.getPublicAssetUrl(key);
+  res.set('Cache-Control', 'public, max-age=1800');
+  return res.redirect(302, url);
+});
+
 export const getStorefront = asyncHandler(async (req, res) => {
   const tenantId = req.query.tenantId || req.headers['x-tenant-id'];
   const slug = req.query.slug;

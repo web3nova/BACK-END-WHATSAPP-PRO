@@ -10,6 +10,7 @@ import { notFoundMiddleware } from './middleware/notFound.middleware.js';
 import path from 'path';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './config/swagger.js';
+import * as websiteController from './modules/website/website.controller.js';
 
 export function createApp() {
   const app = express();
@@ -48,6 +49,13 @@ export function createApp() {
 
   // Serve locally stored files (media) at /storage
   app.use('/storage', express.static(path.join(process.cwd(), 'storage')));
+
+  // Public, unauthenticated website-image redirect. Registered at the app
+  // root (not under config.apiPrefix) so the served path is exactly
+  // `/assets/website-images/...` — matching websiteService.publicAssetUrl(),
+  // which builds `${config.appUrl}/assets/<storageKey>` and is what gets
+  // stored permanently in builder JSON (gallery, hero, About, page images).
+  app.get(/^\/assets\/website-images\/(.+)$/, websiteController.getPublicAsset);
 
   // Swagger UI
   app.use(
