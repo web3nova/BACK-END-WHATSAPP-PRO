@@ -310,7 +310,11 @@ export async function restoreRevision(tenantId, id) {
   // A pending draft would shadow the restored state in the editor (getSettings
   // merges draft over live) and the next publish would overwrite the restore,
   // so restoring — an explicit choice of a whole state — discards the draft.
-  return updateLiveSettings(tenantId, { ...revision.snapshot, draft: null });
+  // Snapshots capture `published` as it was at the time — but whether the
+  // site is online is an operational switch, not part of the design being
+  // restored. Stripping it here also fixes every already-stored snapshot.
+  const { published: _published, ...designFields } = revision.snapshot || {};
+  return updateLiveSettings(tenantId, { ...designFields, draft: null });
 }
 
 // Public storefront: tenant + business info + published pages + in-stock products.
