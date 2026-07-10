@@ -12,14 +12,20 @@ export default [
         process: 'readonly',
         Buffer: 'readonly',
         fetch: 'readonly',
+        URL: 'readonly',
         URLSearchParams: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        setImmediate: 'readonly',
       },
     },
     rules: {
       'no-console': 'off',
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      // `_`-prefixed and rest-sibling destructures are the codebase's idiom
+      // for intentionally-discarded values (e.g. `const { draft, ...rest }`).
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true }],
     },
   },
 ];
