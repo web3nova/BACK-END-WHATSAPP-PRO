@@ -296,7 +296,10 @@ export async function restoreRevision(tenantId, id) {
   if (!revision || revision.businessId !== business.id) {
     throw new NotFoundError('Revision not found.');
   }
-  return updateLiveSettings(tenantId, revision.snapshot);
+  // A pending draft would shadow the restored state in the editor (getSettings
+  // merges draft over live) and the next publish would overwrite the restore,
+  // so restoring — an explicit choice of a whole state — discards the draft.
+  return updateLiveSettings(tenantId, { ...revision.snapshot, draft: null });
 }
 
 // Public storefront: tenant + business info + published pages + in-stock products.
