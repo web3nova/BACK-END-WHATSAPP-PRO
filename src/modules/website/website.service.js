@@ -32,16 +32,31 @@ const defaultSettings = {
 };
 
 async function resolveStorefrontTenant({ tenantId, slug, domain }) {
-  const where = tenantId ? { id: tenantId } : slug ? { slug } : domain ? { domain } : null;
-
-  if (!where) {
+  let where;
+  if (tenantId) {
+    where = { id: tenantId };
+  } else if (slug) {
+    where = { slug };
+  } else if (domain) {
+    where = { domain };
+  } else {
     throw new BadRequestError('Provide tenantId, slug, or domain to load a storefront.');
   }
 
-  const tenant = await prisma.tenant.findFirst({
+  let tenant = await prisma.tenant.findFirst({
     where: { ...where, status: 'ACTIVE' },
     select: { id: true, name: true, slug: true, domain: true },
   });
+
+  // Slug not found — try matching by name (hyphens → spaces, case-insensitive).
+  // This lets users type the business name directly in the URL without needing
+  // to know the exact slug.
+  if (!tenant && slug) {
+    tenant = await prisma.tenant.findFirst({
+      where: { name: { equals: slug.replace(/-/g, ' '), mode: 'insensitive' }, status: 'ACTIVE' },
+      select: { id: true, name: true, slug: true, domain: true },
+    });
+  }
 
   if (!tenant) throw new NotFoundError('Storefront not found.');
   return tenant;
