@@ -52,10 +52,26 @@ async function resolveStorefrontTenant({ tenantId, slug, domain }) {
   // This lets users type the business name directly in the URL without needing
   // to know the exact slug.
   if (!tenant && slug) {
+    const nameGuess = slug.replace(/-/g, ' ');
     tenant = await prisma.tenant.findFirst({
-      where: { name: { equals: slug.replace(/-/g, ' '), mode: 'insensitive' }, status: 'ACTIVE' },
+      where: { name: { equals: nameGuess, mode: 'insensitive' }, status: 'ACTIVE' },
       select: { id: true, name: true, slug: true, domain: true },
     });
+
+    // Still not found — try matching by Business.displayName (the brand name
+    // set during onboarding, which often differs from the tenant name).
+    if (!tenant) {
+      const business = await prisma.business.findFirst({
+        where: { displayName: { equals: nameGuess, mode: 'insensitive' } },
+        select: { tenantId: true },
+      });
+      if (business) {
+        tenant = await prisma.tenant.findFirst({
+          where: { id: business.tenantId, status: 'ACTIVE' },
+          select: { id: true, name: true, slug: true, domain: true },
+        });
+      }
+    }
   }
 
   if (!tenant) throw new NotFoundError('Storefront not found.');
