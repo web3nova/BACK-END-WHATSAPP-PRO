@@ -32,6 +32,11 @@ export const saveStepData = asyncHandler(async (req, res) => {
   return ok(res, record);
 });
 
+export const completeOnboarding = asyncHandler(async (req, res) => {
+  const record = await onboardingService.completeOnboarding(getTenantId(req), req.user.id);
+  return ok(res, record);
+});
+
 export const getProgress = asyncHandler(async (req, res) => {
   const data = await onboardingService.getProgress(getTenantId(req));
   return ok(res, data);

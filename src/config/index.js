@@ -55,6 +55,117 @@ export const config = {
     passkeyAllowedOrigins: (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,https://front-end-whatsapp-pro.vercel.app').split(','),
   },
 
+  checkout: {
+    deliveryOptions: [
+      {
+        id: 'standard',
+        name: 'Standard Delivery',
+        time: '2-3 business days',
+        price: 0,
+        description: 'Reliable delivery within business hours',
+        availableDays: ['mon', 'tue', 'wed', 'thu', 'fri'],
+      },
+      {
+        id: 'express',
+        name: 'Express Delivery',
+        time: '1-2 business days',
+        price: 2000,
+        description: 'Faster delivery for urgent orders',
+        availableDays: ['mon', 'tue', 'wed', 'thu', 'fri'],
+      },
+      {
+        id: 'same-day',
+        name: 'Same Day Delivery',
+        time: 'Within 8 hours',
+        price: 4000,
+        description: 'Delivery within 8 hours (if available)',
+        availableDays: ['mon', 'tue', 'wed', 'thu', 'fri'],
+        rushOrder: true,
+      },
+    ],
+    taxRate: 0.075,
+    freeShippingThreshold: 10000,
+  },
+
+  paymentProviders: {
+    paystack: {
+      name: 'Paystack',
+      apiKey: process.env.PAYSTACK_SECRET_KEY || 'pk_test_abc123',
+      publicKey: process.env.PAYSTACK_PUBLIC_KEY || 'pk_test_xyz789',
+      baseUrl: 'https://api.paystack.co',
+      callbackUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard/payments/callback`,
+    },
+    monnify: {
+      name: 'Monnify',
+      apiKey: process.env.MONNIFY_API_KEY,
+      secretKey: process.env.MONNIFY_SECRET_KEY,
+      contractCode: process.env.MONNIFY_CONTRACT_CODE,
+      baseUrl: process.env.MONNIFY_BASE_URL || 'https://api.monnify.com',
+      callbackUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard/payments/callback`,
+    },
+    payphill: {
+      name: 'Payphill',
+      apiKey: process.env.PAYPHILL_API_KEY,
+      baseUrl: 'https://api.payphill.co',
+    },
+    flutterwave: {
+      name: 'Flutterwave',
+      apiKey: process.env.FLUTTERWAVE_SECRET_KEY,
+      publicKey: process.env.FLUTTERWAVE_PUBLIC_KEY,
+      baseUrl: 'https://api.flutterwave.co/v3',
+    },
+  },
+
+  delivery: {
+    availableDays: ['mon', 'tue', 'wed', 'thu', 'fri'],
+    businessHours: {
+      start: '09:00',
+      end: '18:00',
+    },
+    timeSlots: [
+      { id: 'morning', label: 'Morning (9:00 - 12:00)', start: '09:00', end: '12:00' },
+      { id: 'afternoon', label: 'Afternoon (12:00 - 17:00)', start: '12:00', end: '17:00' },
+      { id: 'evening', label: 'Evening (17:00 - 20:00)', start: '17:00', end: '20:00' },
+    ],
+    deliveryRegions: ['Lagos', 'Abuja', 'Kano', 'Port Harcourt', 'Enugu', 'Kaduna'],
+    weightCategories: [
+      { id: 'light', name: 'Light (under 2kg)', maxWeight: 2 },
+      { id: 'medium', name: 'Medium (2-5kg)', maxWeight: 5 },
+      { id: 'heavy', name: 'Heavy (5-10kg)', maxWeight: 10 },
+      { id: 'oversize', name: 'Oversize (10kg+)', maxWeight: 50 },
+    ],
+  },
+
+  webhooks: {
+    payment: {
+      paystack: process.env.PAYSTACK_WEBHOOK_SECRET || '',
+      monnify: process.env.MONNIFY_WEBHOOK_SECRET || '',
+    },
+    delivery: {
+      endpoint: `${process.env.APP_URL || 'http://localhost:4000'}/api/v1/webhooks/delivery`,
+    },
+  },
+
+  thirdParty: {
+    monnify: {
+      enabled: !!process.env.MONNIFY_API_KEY,
+      apiKey: process.env.MONNIFY_API_KEY,
+      secretKey: process.env.MONNIFY_SECRET_KEY,
+    },
+    lenco: {
+      enabled: !!process.env.LENCO_API_KEY,
+      apiKey: process.env.LENCO_API_KEY,
+    },
+    payphone: {
+      enabled: !!process.env.PAYPHONE_API_KEY,
+      apiKey: process.env.PAYPHONE_API_KEY,
+    },
+    flutterwave: {
+      enabled: !!process.env.FLUTTERWAVE_PUBLIC_KEY,
+      publicKey: process.env.FLUTTERWAVE_PUBLIC_KEY,
+    },
+  },
+
   qdrant: {
     url: process.env.QDRANT_URL,
     apiKey: process.env.QDRANT_API_KEY,
@@ -126,10 +237,120 @@ export const config = {
 
   frontendUrl: process.env.FRONTEND_URL,
 
-  auth: {
-    googleClientId: process.env.GOOGLE_CLIENT_ID || '',
-    rpId: process.env.RP_ID || 'localhost',
-    passkeyAllowedOrigins: (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,https://front-end-whatsapp-pro.vercel.app').split(','),
+  // Checkout configuration for delivery options and payment processing
+  checkout: {
+    deliveryOptions: [
+      {
+        id: 'standard',
+        name: 'Standard Delivery',
+        time: '2-3 business days',
+        price: 0,
+        description: 'Reliable delivery within business hours',
+        availableDays: ['mon', 'tue', 'wed', 'thu', 'fri'],
+      },
+      {
+        id: 'express',
+        name: 'Express Delivery',
+        time: '1-2 business days',
+        price: 2000,
+        description: 'Faster delivery for urgent orders',
+        availableDays: ['mon', 'tue', 'wed', 'thu', 'fri'],
+      },
+      {
+        id: 'same-day',
+        name: 'Same Day Delivery',
+        time: 'Within 8 hours',
+        price: 4000,
+        description: 'Delivery within 8 hours (if available)',
+        availableDays: ['mon', 'tue', 'wed', 'thu', 'fri'],
+        rushOrder: true,
+      },
+    ],
+    taxRate: 0.075,
+    freeShippingThreshold: 10000,
+  },
+
+  // Payment providers configuration
+  paymentProviders: {
+    paystack: {
+      name: 'Paystack',
+      apiKey: process.env.PAYSTACK_SECRET_KEY || 'pk_test_abc123',
+      publicKey: process.env.PAYSTACK_PUBLIC_KEY || 'pk_test_xyz789',
+      baseUrl: 'https://api.paystack.co',
+      callbackUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard/payments/callback`,
+    },
+    monnify: {
+      name: 'Monnify',
+      apiKey: process.env.MONNIFY_API_KEY,
+      secretKey: process.env.MONNIFY_SECRET_KEY,
+      contractCode: process.env.MONNIFY_CONTRACT_CODE,
+      baseUrl: process.env.MONNIFY_BASE_URL || 'https://api.monnify.com',
+      callbackUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard/payments/callback`,
+    },
+    payphill: {
+      name: 'Payphill',
+      apiKey: process.env.PAYPHILL_API_KEY,
+      baseUrl: 'https://api.payphill.co',
+    },
+    flutterwave: {
+      name: 'Flutterwave',
+      apiKey: process.env.FLUTTERWAVE_SECRET_KEY,
+      publicKey: process.env.FLUTTERWAVE_PUBLIC_KEY,
+      baseUrl: 'https://api.flutterwave.co/v3',
+    },
+  },
+
+  // Delivery and fulfillment configuration
+  delivery: {
+    availableDays: ['mon', 'tue', 'wed', 'thu', 'fri'],
+    businessHours: {
+      start: '09:00',
+      end: '18:00',
+    },
+    timeSlots: [
+      { id: 'morning', label: 'Morning (9:00 - 12:00)', start: '09:00', end: '12:00' },
+      { id: 'afternoon', label: 'Afternoon (12:00 - 17:00)', start: '12:00', end: '17:00' },
+      { id: 'evening', label: 'Evening (17:00 - 20:00)', start: '17:00', end: '20:00' },
+    ],
+    deliveryRegions: ['Lagos', 'Abuja', 'Kano', 'Port Harcourt', 'Enugu', 'Kaduna'],
+    weightCategories: [
+      { id: 'light', name: 'Light (under 2kg)', maxWeight: 2 },
+      { id: 'medium', name: 'Medium (2-5kg)', maxWeight: 5 },
+      { id: 'heavy', name: 'Heavy (5-10kg)', maxWeight: 10 },
+      { id: 'oversize', name: 'Oversize (10kg+)', maxWeight: 50 },
+    ],
+  },
+
+  // Webhook configuration
+  webhooks: {
+    payment: {
+      paystack: process.env.PAYSTACK_WEBHOOK_SECRET || '',
+      monnify: process.env.MONNIFY_WEBHOOK_SECRET || '',
+    },
+    delivery: {
+      endpoint: `${process.env.APP_URL || 'http://localhost:4000'}/api/v1/webhooks/delivery`,
+    },
+  },
+
+  // Third-party service integrations
+  thirdParty: {
+    monnify: {
+      enabled: !!process.env.MONNIFY_API_KEY,
+      apiKey: process.env.MONNIFY_API_KEY,
+      secretKey: process.env.MONNIFY_SECRET_KEY,
+    },
+    lenco: {
+      enabled: !!process.env.LENCO_API_KEY,
+      apiKey: process.env.LENCO_API_KEY,
+    },
+    payphone: {
+      enabled: !!process.env.PAYPHONE_API_KEY,
+      apiKey: process.env.PAYPHONE_API_KEY,
+    },
+    flutterwave: {
+      enabled: !!process.env.FLUTTERWAVE_PUBLIC_KEY,
+      publicKey: process.env.FLUTTERWAVE_PUBLIC_KEY,
+    },
   },
 
   superAdmin: {
