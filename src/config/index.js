@@ -49,6 +49,12 @@ export const config = {
 
   databaseUrl: process.env.DATABASE_URL,
 
+  auth: {
+    googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+    rpId: process.env.RP_ID || 'localhost',
+    passkeyAllowedOrigins: (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,https://front-end-whatsapp-pro.vercel.app').split(','),
+  },
+
   qdrant: {
     url: process.env.QDRANT_URL,
     apiKey: process.env.QDRANT_API_KEY,
@@ -119,6 +125,12 @@ export const config = {
   },
 
   frontendUrl: process.env.FRONTEND_URL,
+
+  auth: {
+    googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+    rpId: process.env.RP_ID || 'localhost',
+    passkeyAllowedOrigins: (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,https://front-end-whatsapp-pro.vercel.app').split(','),
+  },
 
   superAdmin: {
     email:    process.env.SUPERADMIN_EMAIL,
