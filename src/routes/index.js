@@ -41,6 +41,9 @@ import analyticsRoutes from '../modules/analytics/analytics.routes.js';
 import { accept as acceptInviteHandler } from '../modules/team/team.controller.js';
 import demoChatRoutes from '../modules/chat/demo.routes.js';
 import { streamEvents } from '../modules/conversations/conversation.controller.js';
+import * as orderPublicController from '../modules/orders/order.public.controller.js';
+import customerAuthRoutes from '../modules/customer-auth/customer-auth.routes.js';
+import { customerAuthMiddleware } from '../middleware/customer-auth.middleware.js';
 
 const router = Router();
 
@@ -73,6 +76,15 @@ router.use('/billing', billingPublicRoutes);
 
 // Landing page demo chat — public, IP rate limited.
 router.use('/chat', demoChatRoutes);
+
+// Public guest checkout — no JWT required.
+router.post('/orders/public', orderPublicController.createPublicOrder);
+
+// Customer auth (storefront shoppers) — public signup/login.
+router.use('/customer-auth', customerAuthRoutes);
+
+// Customer's own orders — requires customer JWT.
+router.get('/orders/my', customerAuthMiddleware, orderPublicController.getMyOrders);
 
 // SSE stream — EventSource cannot set custom headers, so auth is handled
 // inline via ?token= query param. Must live before the global authMiddleware.

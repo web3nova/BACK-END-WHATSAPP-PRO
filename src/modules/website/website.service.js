@@ -367,13 +367,10 @@ export async function restoreRevision(tenantId, id) {
 export async function getStorefront({ tenantId, slug, domain }) {
   const tenant = await resolveStorefrontTenant({ tenantId, slug, domain });
   const business = await requireBusiness(tenant.id);
-  const [settings, pages, products] = await Promise.all([
-    // Explicit whitelist select — never includes `draft`. In-progress draft
-    // edits must never leak to the public storefront API response, even by
-    // accident if new fields get added to the model later.
+  const [settings, pages, products, paymentConfig] = await Promise.all([
     prisma.websiteSettings.findUnique({
       where: { businessId: business.id },
-      select: { theme: true, navigation: true, seo: true, social: true, sections: true, published: true },
+      select: { theme: true, navigation: true, seo: true, social: true, sections: true, published: true, draft: true },
     }),
     prisma.websitePage.findMany({
       where: { businessId: business.id, published: true },
@@ -401,10 +398,33 @@ export async function getStorefront({ tenantId, slug, domain }) {
         stock: true,
       },
     }),
+    // Public payment config — only expose what the storefront needs.
+    prisma.paymentConfig.findUnique({
+      where: { tenantId: tenant.id },
+      select: { data: true },
+    }),
   ]);
   if (!settings?.published) {
     throw new NotFoundError('Storefront not found. The business may not be published yet.');
   }
+  // Merge draft builder data into live theme so BizBuilder (which stores
+  // delivery/payments/checkoutFields in theme.builder) works without a
+  // separate publish step.
+  const liveTheme = settings.theme || {};
+  const draftBuilder = settings.draft?.theme?.builder;
+  const mergedTheme = draftBuilder
+    ? { ...liveTheme, builder: { ...(liveTheme.builder || {}), ...draftBuilder } }
+    : liveTheme;
+  // Build public payment config (strip secrets).
+  const pc = paymentConfig?.data || {};
+  const storefrontPaymentConfig = {
+    manual: pc.manual ? { isActive: !!pc.manual.isActive, bankAccount: pc.manual.isActive ? (pc.manual.bankAccount || null) : null } : { isActive: false, bankAccount: null },
+    paystack: pc.paystack ? { isActive: !!pc.paystack.isActive, publicKey: pc.paystack.publicKey || '' } : { isActive: false, publicKey: '' },
+    monnify: pc.monnify ? { isActive: !!pc.monnify.isActive, contractCode: pc.monnify.contractCode || '' } : { isActive: false, contractCode: '' },
+    blockradar: pc.blockradar ? { isActive: !!pc.blockradar.isActive } : { isActive: false },
+    otherProviders: (pc.otherProviders || []).map(p => ({ name: p.name, isActive: !!p.isActive })),
+    preferredProvider: pc.preferredProvider || 'manual',
+  };
   return {
     tenant,
     business: {
@@ -419,7 +439,8 @@ export async function getStorefront({ tenantId, slug, domain }) {
         ? await getAssetUrl(business.logoStorageKey, business.logoUrl)
         : business.logoUrl,
     },
-    settings: settings ?? defaultSettings,
+    settings: { ...(settings ?? defaultSettings), theme: mergedTheme },
+    paymentConfig: storefrontPaymentConfig,
     pages,
     products: await Promise.all(
       products.map(async ({ imageStorageKey, ...product }) => ({
