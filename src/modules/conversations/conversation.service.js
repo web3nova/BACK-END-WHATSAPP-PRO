@@ -205,7 +205,10 @@ export const getConversationHistory = async (conversationId, tenantId, { page = 
       orderBy: { createdAt: 'asc' },
       skip,
       take,
-      include: { mediaAssets: true },
+      include: {
+        mediaAssets: true,
+        senderUser: { select: { id: true, name: true, email: true } },
+      },
     }),
   ]);
 
@@ -213,13 +216,15 @@ export const getConversationHistory = async (conversationId, tenantId, { page = 
   // images/videos in chat history never break.
   const { storage } = await import('../../config/storage.js');
   const data = await Promise.all(messages.map(async (m) => {
-    if (!m.mediaAssets?.length) return m;
+    const sender = m.senderUser ? { name: m.senderUser.name, email: m.senderUser.email } : null;
+    const { senderUser, ...rest } = m;
+    if (!m.mediaAssets?.length) return { ...rest, sender };
     const media = await Promise.all(m.mediaAssets.map(async (a) => {
       let url = a.url;
       try { url = await storage.getSignedUrl(a.storageKey); } catch { /* keep stored url */ }
       return { id: a.id, mimeType: a.mimeType, url };
     }));
-    return { ...m, media };
+    return { ...rest, media, sender };
   }));
 
   return { data, meta: { total, page, limit: take } };
@@ -262,7 +267,7 @@ export const release = async (conversationId, tenantId) => {
  * Staff sends a message inside a conversation.
  * Saves to DB and sends via WhatsApp. Resets the auto-release timer.
  */
-export const sendStaffMessage = async (conversationId, tenantId, text) => {
+export const sendStaffMessage = async (conversationId, tenantId, text, senderUserId = null) => {
   const conv = await prisma.conversation.findUnique({
     where: { id: conversationId },
     include: { customer: true },
@@ -270,7 +275,8 @@ export const sendStaffMessage = async (conversationId, tenantId, text) => {
   if (!conv || conv.tenantId !== tenantId) throw new NotFoundError('Conversation not found');
 
   const message = await prisma.message.create({
-    data: { conversationId, role: 'staff', content: text },
+    data: { conversationId, role: 'staff', content: text, senderUserId },
+    include: { senderUser: { select: { id: true, name: true, email: true } } },
   });
 
   // Send via WhatsApp
@@ -285,17 +291,21 @@ export const sendStaffMessage = async (conversationId, tenantId, text) => {
 
   pushEvent(tenantId, 'staff_message', {
     conversationId,
-    message: { id: message.id, role: 'staff', content: text, createdAt: message.createdAt },
+    message: {
+      id: message.id, role: 'staff', content: text, createdAt: message.createdAt,
+      sender: message.senderUser ? { name: message.senderUser.name, email: message.senderUser.email } : null,
+    },
   });
 
-  return message;
+  const { senderUser, ...rest } = message;
+  return { ...rest, sender: senderUser ? { name: senderUser.name, email: senderUser.email } : null };
 };
 
 /**
  * Staff sends an image/video/document inside a conversation.
  * Uploads to storage, delivers via WhatsApp media message, records in chat.
  */
-export const sendStaffMedia = async (conversationId, tenantId, file, caption = '') => {
+export const sendStaffMedia = async (conversationId, tenantId, file, caption = '', senderUserId = null) => {
   const conv = await prisma.conversation.findUnique({
     where: { id: conversationId },
     include: { customer: true },
@@ -318,7 +328,8 @@ export const sendStaffMedia = async (conversationId, tenantId, file, caption = '
   const url = await storage.getSignedUrl(key, 60 * 60 * 24);
 
   const message = await prisma.message.create({
-    data: { conversationId, role: 'staff', content: caption || '' },
+    data: { conversationId, role: 'staff', content: caption || '', senderUserId },
+    include: { senderUser: { select: { id: true, name: true, email: true } } },
   });
   await prisma.mediaAsset.create({
     data: {
@@ -352,6 +363,7 @@ export const sendStaffMedia = async (conversationId, tenantId, file, caption = '
     content: caption || '',
     createdAt: message.createdAt,
     media: [{ mimeType: mime, url }],
+    sender: message.senderUser ? { name: message.senderUser.name, email: message.senderUser.email } : null,
   };
   pushEvent(tenantId, 'staff_message', { conversationId, message: payload });
 

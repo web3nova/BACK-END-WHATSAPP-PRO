@@ -65,7 +65,7 @@ export const staffMessage = asyncHandler(async (req, res) => {
     if (!parsedParams.success) throw new BadRequestError('Invalid conversation id', parsedParams.error.flatten());
     const { text } = req.body;
     if (!text?.trim()) throw new BadRequestError('text is required');
-    const message = await conversationService.sendStaffMessage(parsedParams.data.id, tenant, text.trim());
+    const message = await conversationService.sendStaffMessage(parsedParams.data.id, tenant, text.trim(), req.user?.id ?? null);
     return ok(res, { message });
 });
 
@@ -75,7 +75,7 @@ export const staffMedia = asyncHandler(async (req, res) => {
     if (!parsedParams.success) throw new BadRequestError('Invalid conversation id', parsedParams.error.flatten());
     if (!req.file) throw new BadRequestError('file is required');
     const caption = (req.body?.caption || '').trim();
-    const message = await conversationService.sendStaffMedia(parsedParams.data.id, tenant, req.file, caption);
+    const message = await conversationService.sendStaffMedia(parsedParams.data.id, tenant, req.file, caption, req.user?.id ?? null);
     return ok(res, { message });
 });
 

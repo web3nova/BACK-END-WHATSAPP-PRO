@@ -98,6 +98,7 @@ model User {
   passwordResetTokens PasswordResetToken[]
   otpTokens           OtpToken[]
   refreshTokens       RefreshToken[]
+  sentMessages        Message[]
 
   @@unique([tenantId, email])
   @@map("users")
@@ -493,13 +494,16 @@ model Message {
   role           String // customer|ai|staff
   content        String
   meta           Json     @default("{}")
+  senderUserId   String?  // set when role=staff — which team member sent it
   createdAt      DateTime @default(now())
 
   conversation   Conversation    @relation(fields: [conversationId], references: [id])
+  senderUser     User?           @relation(fields: [senderUserId], references: [id])
   mediaAssets    MediaAsset[]
   outboxMessages OutboxMessage[]
 
   @@index([conversationId])
+  @@index([senderUserId])
   @@map("messages")
 }
 
