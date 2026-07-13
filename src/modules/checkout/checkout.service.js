@@ -37,7 +37,7 @@ async function getBusinessSettings(tenantId) {
     business,
     deliveryOptions: builder.delivery,
     paymentOptions: builder.payments,
-    deliveryFees: website?.theme?.builder?.deliveryFees || {},
+    deliveryFees: stored.deliveryFees || {},
   };
 }
 
@@ -80,7 +80,10 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
   if (!tenant) throw new NotFoundError('Tenant not found');
 
   const priced = await priceItems(tenantId, items);
-  const { deliveryFees } = await getBusinessSettings(tenantId);
+  const { deliveryOptions, deliveryFees } = await getBusinessSettings(tenantId);
+  if (deliveryMethod && !deliveryOptions.includes(deliveryMethod)) {
+    throw new BadRequestError('Invalid delivery method');
+  }
   const deliveryFeeMinor = resolveDeliveryFee(deliveryFees, deliveryMethod);
   const serverTotal = priced.totalMinor + deliveryFeeMinor;
   if (totalMinor && totalMinor !== serverTotal) {
