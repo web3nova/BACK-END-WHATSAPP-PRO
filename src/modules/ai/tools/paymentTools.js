@@ -3,6 +3,7 @@ import { prisma } from '../../../config/prisma.js';
 import { config } from '../../../config/index.js';
 
 const PAYSTACK_BASE_URL = 'https://api.paystack.co';
+const BLOCKRADAR_BASE_URL = 'https://api.blockradar.co/v1';
 
 // Tool: fetch the business's payment details so the AI can tell customers how to pay.
 export const getPaymentDetails = {
@@ -34,6 +35,10 @@ export const getPaymentDetails = {
 
     if (data.paystack?.isActive) methods.push({ type: 'paystack', note: 'Online card payment available via Paystack checkout link (staff can generate one).' });
     if (data.monnify?.isActive) methods.push({ type: 'monnify', note: 'Online payment available via Monnify (staff can generate a link).' });
+    if (data.blockradar?.isActive) methods.push({ type: 'blockradar', note: 'Crypto payment accepted — call create_crypto_payment_address with the orderId to generate a unique deposit address for this order.' });
+    for (const p of data.otherProviders || []) {
+      if (p.isActive && p.name) methods.push({ type: 'other', name: p.name, note: `Accepted via ${p.name} — ask a staff member for payment details.` });
+    }
 
     if (!methods.length) {
       return { configured: false, message: 'No active payment method. Tell the customer a staff member will share payment details shortly.' };
@@ -143,13 +148,83 @@ export const createPaymentLink = {
   },
 };
 
-// Tool: flag a customer-submitted payment receipt for manual verification.
-// The AI reads the receipt image but NEVER confirms payment itself — the
-// business always verifies manual transfers before fulfilling.
+// Tool: generate a unique, dedicated crypto deposit address for an order via
+// Blockradar. Each order gets its OWN address (never reuse one address across
+// orders/customers) so a deposit can be traced back to the right order.
+export const createCryptoPaymentAddress = {
+  name: 'create_crypto_payment_address',
+  description:
+    'Generate a unique crypto deposit address for an existing order when the business accepts crypto (Blockradar) and the customer wants to pay that way. Returns a one-time address to send to the customer.',
+  parameters: {
+    type: 'object',
+    properties: {
+      orderId: { type: 'string', description: 'The order id returned by create_order' },
+    },
+    required: ['orderId'],
+  },
+  async handler({ orderId }, ctx) {
+    const order = await prisma.order.findFirst({ where: { id: orderId, tenantId: ctx.tenantId } });
+    if (!order) return { error: 'Order not found.' };
+    if (['paid', 'fulfilled', 'cancelled'].includes(order.status)) {
+      return { error: `Order is already ${order.status}.` };
+    }
+
+    const cfg = await prisma.paymentConfig.findUnique({ where: { tenantId: ctx.tenantId } });
+    const blockradar = cfg?.data?.blockradar;
+    if (!blockradar?.isActive || !blockradar.apiKey || !blockradar.walletId) {
+      return { error: 'Crypto payment is not fully configured (missing API key or wallet ID). Offer bank transfer instead (get_payment_details).' };
+    }
+
+    const ref = order.id.slice(0, 8).toUpperCase();
+    const response = await fetch(`${BLOCKRADAR_BASE_URL}/wallets/${blockradar.walletId}/addresses`, {
+      method: 'POST',
+      headers: { 'x-api-key': blockradar.apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `Order ${ref}`,
+        metadata: { orderId: order.id, tenantId: ctx.tenantId },
+        // Deposits to a dormant (non-indexed) address are NOT detected in real
+        // time — always enable indexing before handing an address to a customer.
+        enableIndexing: true,
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok || !body?.data?.address) {
+      return { error: `Could not generate a crypto address: ${body?.message || 'provider error'}. Offer bank transfer instead (get_payment_details).` };
+    }
+
+    const addr = body.data;
+    await prisma.payment.create({
+      data: {
+        tenantId: ctx.tenantId,
+        orderId: order.id,
+        reference: `crypto_${addr.id}`,
+        provider: 'blockradar',
+        providerReference: addr.id,
+        amountMinor: order.totalMinor,
+        currency: order.currency,
+        status: 'pending',
+        meta: { provider: 'blockradar', orderId: order.id, address: addr.address, blockchain: addr.blockchain?.name, createdBy: 'ai' },
+      },
+    });
+
+    const amountMajor = (order.totalMinor / 100).toLocaleString();
+    return {
+      address: addr.address,
+      blockchain: addr.blockchain?.name || 'multiple EVM chains',
+      amount: `${order.currency} ${amountMajor}`,
+      instruction: `Send this address to the customer for order ${ref}, and the equivalent amount to send. This address is unique to their order — do not reuse it for anyone else. Tell them to confirm here once they've sent it, since deposit confirmation is manual right now — a staff member will verify and confirm.`,
+    };
+  },
+};
+
+// Tool: flag a payment that needs manual verification — either a bank
+// transfer receipt image, or a customer's text confirmation that they sent a
+// crypto payment. The AI never confirms payment itself — the business always
+// verifies manual transfers/deposits before fulfilling.
 export const reportPaymentReceipt = {
   name: 'report_payment_receipt',
   description:
-    'Alert the business team that the customer sent a payment receipt (bank transfer proof) that needs manual verification. Call this every time you see a receipt image, whether it looks correct or suspicious. Include everything you could read from it.',
+    'Alert the business team that a payment needs manual verification — a bank transfer receipt image, or a customer confirming by text that they sent a crypto payment. Call this every time you see a receipt image or a customer says they\'ve paid via bank transfer/crypto, whether it looks correct or not. Include everything relevant (amount, account/address, what the customer said or what the receipt shows).',
   parameters: {
     type: 'object',
     properties: {
@@ -177,6 +252,6 @@ export const reportPaymentReceipt = {
   },
 };
 
-export const paymentTools = [getPaymentDetails, createPaymentLink, reportPaymentReceipt];
+export const paymentTools = [getPaymentDetails, createPaymentLink, createCryptoPaymentAddress, reportPaymentReceipt];
 
 export default paymentTools;

@@ -9,7 +9,7 @@ export async function getConfig(tenantId) {
         manual: { isActive: false, bankAccount: null },
         paystack: { isActive: false, publicKey: '', secretKey: '' },
         monnify: { isActive: false, apiKey: '', secretKey: '', contractCode: '' },
-        blockradar: { isActive: false, apiKey: '', secretKey: '', webhookUrl: '' },
+        blockradar: { isActive: false, apiKey: '', secretKey: '', walletId: '', webhookUrl: '' },
         otherProviders: [],
         preferredProvider: 'manual',
       },

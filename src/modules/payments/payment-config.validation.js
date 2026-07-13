@@ -24,6 +24,9 @@ const blockradarSchema = z.object({
   isActive: z.boolean().optional().default(false),
   apiKey: z.string().trim().max(200).optional().or(z.literal('')),
   secretKey: z.string().trim().max(200).optional().or(z.literal('')),
+  // Master wallet to derive customer deposit addresses from — required by
+  // Blockradar's Create Dedicated Address API (POST /wallets/{walletId}/addresses).
+  walletId: z.string().trim().max(200).optional().or(z.literal('')),
   webhookUrl: z.string().url().optional().or(z.literal('')),
 });
 
