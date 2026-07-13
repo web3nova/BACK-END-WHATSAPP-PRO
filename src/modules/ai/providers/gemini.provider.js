@@ -9,6 +9,22 @@ if (geminiKey) {
   ai = new GoogleGenAI({ apiKey: geminiKey });
 }
 
+// Gemini's fileData.fileUri only works for URIs from its own Files API — for
+// arbitrary external URLs (our R2 signed URLs) we have to fetch the bytes
+// ourselves and send them as inlineData base64.
+async function urlToInlineImagePart(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const mimeType = res.headers.get('content-type') || 'image/jpeg';
+    const buffer = Buffer.from(await res.arrayBuffer());
+    return { inlineData: { mimeType, data: buffer.toString('base64') } };
+  } catch (err) {
+    logger.warn({ err: err?.message, url }, '[gemini] failed to fetch image for vision input');
+    return null;
+  }
+}
+
 export const geminiProvider = {
   async chat({ system, messages, tools = [], maxTokens = 1024 }) {
     if (!ai) {
@@ -24,10 +40,15 @@ export const geminiProvider = {
     // Convert unified messages to Gemini format
     // Unified: 'user', 'assistant' (with optional toolCalls), 'tool' (with toolCallId, name, content)
     // Gemini: 'user', 'model' (with parts: text, functionCall, functionResponse)
-    const geminiContents = messages.map(msg => {
+    const geminiContents = (await Promise.all(messages.map(async msg => {
       let parts = [];
       if (msg.role === 'user') {
         parts.push({ text: msg.content });
+        // Vision: user turns may carry image URLs (receipts, product photos)
+        if (msg.images?.length) {
+          const imageParts = (await Promise.all(msg.images.map(urlToInlineImagePart))).filter(Boolean);
+          parts.push(...imageParts);
+        }
         return { role: 'user', parts };
       } else if (msg.role === 'assistant') {
         if (msg.content) parts.push({ text: msg.content });
@@ -57,7 +78,7 @@ export const geminiProvider = {
         });
         return { role: 'user', parts }; // function responses go as 'user' role in Gemini
       }
-    }).filter(Boolean);
+    }))).filter(Boolean);
 
     // Map tools to Gemini function declarations
     let geminiTools;
@@ -88,11 +109,14 @@ export const geminiProvider = {
       });
 
       const candidate = response.candidates?.[0];
-      if (!candidate) {
-        return { text: '', stopReason: 'empty' };
+      // candidate.content is absent when Gemini blocks/truncates the response
+      // (e.g. finishReason SAFETY, PROHIBITED_CONTENT, RECITATION) — degrade to
+      // an empty reply instead of throwing, so the caller's fallback text kicks
+      // in rather than the whole turn crashing and escalating to a human.
+      if (!candidate?.content?.parts) {
+        logger.warn({ finishReason: candidate?.finishReason }, 'Gemini returned no content');
+        return { text: '', toolCalls: [], stopReason: candidate?.finishReason || 'empty' };
       }
-
-      const part = candidate.content.parts[0];
 
       let text = '';
       let toolCalls = [];

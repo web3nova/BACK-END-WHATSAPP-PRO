@@ -28,6 +28,16 @@ function toAnthropicMessages(messages) {
       }
       return { role: 'assistant', content };
     }
+    // Vision: user turns may carry image URLs (receipts, product photos)
+    if (m.role === 'user' && m.images?.length) {
+      return {
+        role: 'user',
+        content: [
+          { type: 'text', text: m.content || '' },
+          ...m.images.map((url) => ({ type: 'image', source: { type: 'url', url } })),
+        ],
+      };
+    }
     return { role: m.role, content: m.content };
   });
 }

@@ -18,6 +18,10 @@ function toMessages(system, messages) {
   const out = [];
   if (system) out.push({ role: 'system', content: system });
   for (const m of messages) {
+    // DeepSeek's chat API (deepseek-chat / deepseek-reasoner) has no vision
+    // input — sending image_url content blocks 400s. Fall back to the plain
+    // text placeholder ai.service.js already builds ("[customer attached an
+    // image]") rather than guessing at an unsupported format.
     if (m.role === 'tool') {
       out.push({ role: 'tool', tool_call_id: m.toolCallId, content: asString(m.content) });
       continue;
