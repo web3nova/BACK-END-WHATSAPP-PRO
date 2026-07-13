@@ -6,6 +6,7 @@ import { notify } from '../notifications/notification.service.js';
 import { sendMessage } from '../whatsapp/whatsapp.service.js';
 import { newOrderEmail } from '../../config/emailTemplates.js';
 import { priceItems } from './checkout.pricing.js';
+import { resolveDeliveryFee } from './delivery-fees.js';
 import { getDecryptedConfig } from '../payments/payment-config.service.js';
 import { withBuilderDefaults } from '../website/builder-defaults.js';
 
@@ -32,13 +33,21 @@ async function getBusinessSettings(tenantId) {
   const paymentData = hasPayments ? {} : await getTenantPaymentConfig(tenantId);
   const builder = withBuilderDefaults(stored, business, paymentData);
 
-  return { business, deliveryOptions: builder.delivery, paymentOptions: builder.payments };
+  return {
+    business,
+    deliveryOptions: builder.delivery,
+    paymentOptions: builder.payments,
+    deliveryFees: website?.theme?.builder?.deliveryFees || {},
+  };
 }
 
 export async function initializeCheckout({ tenantId, items, deliveryMethod }) {
-  const { business, deliveryOptions, paymentOptions } = await getBusinessSettings(tenantId);
+  const { business, deliveryOptions, paymentOptions, deliveryFees } = await getBusinessSettings(tenantId);
 
   const { totalMinor: subtotal } = await priceItems(tenantId, items);
+
+  const selectedMethod = deliveryMethod || (deliveryOptions[0] || null);
+  const deliveryFee = resolveDeliveryFee(deliveryFees, selectedMethod);
 
   return {
     business: {
@@ -48,15 +57,16 @@ export async function initializeCheckout({ tenantId, items, deliveryMethod }) {
       email: business.email,
     },
     delivery: {
-      options: deliveryOptions,
-      selectedMethod: deliveryMethod || (deliveryOptions[0] || null),
+      options: deliveryOptions.map(m => ({ method: m, feeMinor: resolveDeliveryFee(deliveryFees, m) })),
+      selectedMethod,
     },
     payment: {
       availableMethods: paymentOptions,
     },
     pricing: {
       subtotal,
-      total: subtotal,
+      deliveryFee,
+      total: subtotal + deliveryFee,
       currency: 'NGN',
     },
   };
@@ -70,9 +80,12 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
   if (!tenant) throw new NotFoundError('Tenant not found');
 
   const priced = await priceItems(tenantId, items);
-  if (totalMinor && totalMinor !== priced.totalMinor) {
+  const { deliveryFees } = await getBusinessSettings(tenantId);
+  const deliveryFeeMinor = resolveDeliveryFee(deliveryFees, deliveryMethod);
+  const serverTotal = priced.totalMinor + deliveryFeeMinor;
+  if (totalMinor && totalMinor !== serverTotal) {
     logger.warn(
-      { tenantId, clientTotal: totalMinor, serverTotal: priced.totalMinor },
+      { tenantId, clientTotal: totalMinor, serverTotal },
       '[checkout] client total mismatch — using server-computed total',
     );
   }
@@ -116,11 +129,12 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
       tenantId,
       customerId: customer.id,
       status: paymentMethod === 'cash' ? 'confirmed' : 'pending',
-      totalMinor: priced.totalMinor,
+      totalMinor: serverTotal,
       currency: currency || 'NGN',
       items: priced.items,
       measurements: {
         deliveryMethod: deliveryMethod || null,
+        deliveryFeeMinor,
         paymentMethod,
         customerName,
         customerPhone,
