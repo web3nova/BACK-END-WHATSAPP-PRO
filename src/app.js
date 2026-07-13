@@ -28,6 +28,7 @@ export function createApp() {
     'http://localhost:5174', // biziq-admin dev server
     'https://back-end-whatsapp-pro.onrender.com',
     'https://biziq-admin.vercel.app',
+    'https://admin.biziq.online',
   ].filter(Boolean);
 
   app.use(cors({
