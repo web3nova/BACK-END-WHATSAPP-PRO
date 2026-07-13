@@ -458,6 +458,7 @@ model Customer {
   tenantId  String
   phone     String
   name      String?
+  source    String?  // whatsapp | website | google — how they became a customer; null for pre-tracking records
   meta      Json     @default("{}")
   createdAt DateTime @default(now())
 

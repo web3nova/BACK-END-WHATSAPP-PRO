@@ -76,7 +76,7 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
   // 3. Upsert customer
   const customer = await prisma.customer.upsert({
     where: { tenantId_phone: { tenantId, phone: normalizedPhone } },
-    create: { tenantId, phone: normalizedPhone, name: senderName },
+    create: { tenantId, phone: normalizedPhone, name: senderName, source: 'whatsapp' },
     update: { name: senderName || undefined }
   });
 

@@ -51,6 +51,7 @@ export async function signup({ tenantId, name, phone, email, password }) {
       tenantId,
       phone: phoneVal,
       name,
+      source: 'website',
       meta: { passwordHash, email: email || null, signupVia: 'storefront' },
     },
   });
@@ -168,6 +169,7 @@ export async function googleLogin({ tenantId, idToken }) {
         tenantId,
         phone,
         name,
+        source: 'google',
         meta: { googleId, email, picture, signupVia: 'google' },
       },
     });

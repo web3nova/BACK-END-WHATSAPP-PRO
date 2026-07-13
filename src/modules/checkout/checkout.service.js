@@ -104,6 +104,7 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
         tenantId,
         phone: customerPhone,
         name: customerName,
+        source: 'website',
         meta: { email: customerEmail || null, address: customerAddress },
       },
     });
