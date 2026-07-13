@@ -1,7 +1,7 @@
-const { z } = require('zod');
+import { z } from 'zod';
 
 // Checkout initialization validation
-const checkoutValidation = z.object({
+export const checkoutValidation = z.object({
   // Order items with validation
   items: z.array(z.object({
     id: z.string(),
@@ -27,7 +27,7 @@ const checkoutValidation = z.object({
 });
 
 // Payment initialization validation
-const paymentValidation = z.object({
+export const paymentValidation = z.object({
   orderId: z.string(),
   paymentMethod: z.enum(['paystack', 'monnify', 'card', 'wallet']).default('paystack'),
   amount: z.number().int().min(1),
@@ -45,14 +45,8 @@ const paymentValidation = z.object({
 });
 
 // Order completion validation
-const completeOrderValidation = z.object({
+export const completeOrderValidation = z.object({
   paymentReference: z.string().optional(),
   paymentProvider: z.enum(['paystack', 'monnify', 'card', 'wallet']).optional(),
   deliveryStatus: z.enum(['pending', 'shipped', 'delivered', 'cancelled']).optional(),
 });
-
-module.exports = {
-  checkoutValidation,
-  paymentValidation,
-  completeOrderValidation,
-};

@@ -1,3 +1,4 @@
+import { prisma } from '../../config/prisma.js';
 import { asyncHandler } from '../../common/utils/asyncHandler.js';
 import { ok, created, noContent } from '../../common/utils/apiResponse.js';
 import { BadRequestError } from '../../common/errors/index.js';
