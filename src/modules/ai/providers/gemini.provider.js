@@ -58,7 +58,11 @@ export const geminiProvider = {
               functionCall: {
                 name: tc.name,
                 args: tc.input
-              }
+              },
+              // Gemini 3.x "thinking" models require this echoed back verbatim
+              // on replayed functionCall parts, or the next call 400s with
+              // "Function call is missing a thought_signature".
+              ...(tc.thoughtSignature && { thoughtSignature: tc.thoughtSignature }),
             });
           });
         }
@@ -127,7 +131,9 @@ export const geminiProvider = {
           toolCalls.push({
             id: p.functionCall.name + '_' + Date.now(), // Generate a fake ID since Gemini doesn't use call IDs
             name: p.functionCall.name,
-            input: p.functionCall.args
+            input: p.functionCall.args,
+            // Must be echoed back on replay — see note in the history-building code above.
+            ...(p.thoughtSignature && { thoughtSignature: p.thoughtSignature }),
           });
         }
       }
