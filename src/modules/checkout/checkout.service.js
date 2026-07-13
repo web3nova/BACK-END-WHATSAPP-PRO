@@ -24,10 +24,15 @@ async function getBusinessSettings(tenantId) {
 
   const website = await prisma.websiteSettings.findUnique({
     where: { businessId: business.id },
-    select: { theme: true },
+    select: { theme: true, draft: true },
   });
 
-  const stored = website?.theme?.builder || {};
+  // BizBuilder saves into draft and getStorefront serves draft-over-live, so
+  // checkout must resolve options from the same merged view or it would
+  // reject methods the storefront legitimately offered.
+  const liveBuilder = website?.theme?.builder || {};
+  const draftBuilder = website?.draft?.theme?.builder;
+  const stored = draftBuilder ? { ...liveBuilder, ...draftBuilder } : liveBuilder;
   // Payment config fetch decrypts secrets — skip it when explicit payments exist.
   const hasPayments = Array.isArray(stored.payments) && stored.payments.length > 0;
   const paymentData = hasPayments ? {} : await getTenantPaymentConfig(tenantId);
