@@ -4,6 +4,7 @@ import { paginate, paginatedResponse } from '../../common/utils/pagination.js';
 import { getAssetUrl, uploadAsset, deleteAsset } from '../../common/utils/uploadAsset.js';
 import { logger } from '../../config/logger.js';
 import { config } from '../../config/index.js';
+import { withBuilderDefaults } from './builder-defaults.js';
 
 
 async function requireBusiness(tenantId) {
@@ -417,6 +418,10 @@ export async function getStorefront({ tenantId, slug, domain }) {
     : liveTheme;
   // Build public payment config (strip secrets).
   const pc = paymentConfig?.data || {};
+  const themeWithDefaults = {
+    ...mergedTheme,
+    builder: withBuilderDefaults(mergedTheme.builder, business, pc),
+  };
   const storefrontPaymentConfig = {
     manual: pc.manual ? { isActive: !!pc.manual.isActive, bankAccount: pc.manual.isActive ? (pc.manual.bankAccount || null) : null } : { isActive: false, bankAccount: null },
     paystack: pc.paystack ? { isActive: !!pc.paystack.isActive, publicKey: pc.paystack.publicKey || '' } : { isActive: false, publicKey: '' },
@@ -445,7 +450,7 @@ export async function getStorefront({ tenantId, slug, domain }) {
       phone: business.phone,
       location: business.location,
     },
-    settings: { ...(settings ?? defaultSettings), theme: mergedTheme },
+    settings: { ...(settings ?? defaultSettings), theme: themeWithDefaults },
     paymentConfig: storefrontPaymentConfig,
     pages,
     products: await Promise.all(
