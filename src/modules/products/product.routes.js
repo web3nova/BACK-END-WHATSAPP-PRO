@@ -202,4 +202,10 @@ router.delete(
   productController.removeGalleryImage,
 );
 
+// Public: increment product view count (no auth required)
+router.post('/:id/view', productController.incrementView);
+
+// Public: get popular/trending products
+router.get('/popular/:tenantId', productController.getPopular);
+
 export default router;

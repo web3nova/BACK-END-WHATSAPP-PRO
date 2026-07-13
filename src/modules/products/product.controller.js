@@ -2,6 +2,7 @@ import { asyncHandler } from '../../common/utils/asyncHandler.js';
 import { ok, created, noContent } from '../../common/utils/apiResponse.js';
 import { getTenantId } from '../../common/utils/tenantContext.js';
 import { BadRequestError } from '../../common/errors/index.js';
+import { prisma } from '../../config/prisma.js';
 import * as productService from './product.service.js';
 
 export const list = asyncHandler(async (req, res) => {
@@ -56,4 +57,23 @@ export const removeGalleryImage = asyncHandler(async (req, res) => {
   }
   const data = await productService.removeGalleryImage(req.params.id, getTenantId(req), storageKey);
   return ok(res, data);
+});
+
+export const incrementView = asyncHandler(async (req, res) => {
+  await prisma.product.update({
+    where: { id: req.params.id },
+    data: { viewCount: { increment: 1 } },
+  });
+  return ok(res, { success: true });
+});
+
+export const getPopular = asyncHandler(async (req, res) => {
+  const tenantId = req.params.tenantId;
+  if (!tenantId) throw new BadRequestError('tenantId is required');
+  const products = await prisma.product.findMany({
+    where: { tenantId, isActive: true },
+    orderBy: [{ viewCount: 'desc' }, { cartCount: 'desc' }],
+    take: parseInt(req.query.limit) || 10,
+  });
+  return ok(res, products);
 });

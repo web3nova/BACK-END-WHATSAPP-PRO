@@ -11,6 +11,7 @@ router.post('/passkey/register/start', customerAuthMiddleware, controller.passke
 router.post('/passkey/register/complete', customerAuthMiddleware, controller.passkeyRegisterComplete);
 router.post('/passkey/login/start', controller.passkeyLoginStart);
 router.post('/passkey/login/complete', controller.passkeyLoginComplete);
+router.get('/google/callback', controller.googleCallback);
 router.get('/me', customerAuthMiddleware, controller.getProfile);
 
 export default router;

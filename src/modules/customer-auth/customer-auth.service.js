@@ -7,30 +7,44 @@ import { logger } from '../../config/logger.js';
 
 const SALT_ROUNDS = 10;
 
-export async function signup({ tenantId, name, phone, password }) {
-  if (!tenantId || !name || !phone || !password) {
-    throw new BadRequestError('tenantId, name, phone, and password are required');
+export async function signup({ tenantId, name, phone, email, password }) {
+  if (!tenantId || !name || !password) {
+    throw new BadRequestError('tenantId, name, and password are required');
+  }
+  if (!phone && !email) {
+    throw new BadRequestError('Phone or email is required');
   }
   if (password.length < 6) {
     throw new BadRequestError('Password must be at least 6 characters');
   }
 
-  const existing = await prisma.customer.findUnique({
-    where: { tenantId_phone: { tenantId, phone } },
-  });
-
-  if (existing) {
-    throw new BadRequestError('An account with this phone number already exists. Please log in.');
+  if (phone) {
+    const existing = await prisma.customer.findUnique({
+      where: { tenantId_phone: { tenantId, phone } },
+    });
+    if (existing) {
+      throw new BadRequestError('An account with this phone number already exists. Please log in.');
+    }
+  }
+  if (email) {
+    const all = await prisma.customer.findMany({
+      where: { tenantId },
+      select: { meta: true },
+    });
+    if (all.some(c => c.meta?.email === email)) {
+      throw new BadRequestError('An account with this email already exists. Please log in.');
+    }
   }
 
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
+  const phoneVal = phone || `email_${Date.now()}`;
   const customer = await prisma.customer.create({
     data: {
       tenantId,
-      phone,
+      phone: phoneVal,
       name,
-      meta: { passwordHash, signupVia: 'storefront' },
+      meta: { passwordHash, email: email || null, signupVia: 'storefront' },
     },
   });
 
@@ -47,17 +61,29 @@ export async function signup({ tenantId, name, phone, password }) {
   };
 }
 
-export async function login({ tenantId, phone, password }) {
-  if (!tenantId || !phone || !password) {
-    throw new BadRequestError('tenantId, phone, and password are required');
+export async function login({ tenantId, phone, email, password }) {
+  if (!tenantId || !password) {
+    throw new BadRequestError('tenantId and password are required');
+  }
+  if (!phone && !email) {
+    throw new BadRequestError('Phone or email is required');
   }
 
-  const customer = await prisma.customer.findUnique({
-    where: { tenantId_phone: { tenantId, phone } },
-  });
+  let customer;
+  if (phone) {
+    customer = await prisma.customer.findUnique({
+      where: { tenantId_phone: { tenantId, phone } },
+    });
+  } else {
+    const all = await prisma.customer.findMany({
+      where: { tenantId },
+      select: { id: true, name: true, phone: true, meta: true },
+    });
+    customer = all.find(c => c.meta?.email === email) || null;
+  }
 
   if (!customer) {
-    throw new UnauthorizedError('No account found with this phone number');
+    throw new UnauthorizedError(phone ? 'No account found with this phone number' : 'No account found with this email');
   }
 
   const storedHash = customer.meta?.passwordHash;
@@ -78,7 +104,7 @@ export async function login({ tenantId, phone, password }) {
   });
 
   return {
-    customer: { id: customer.id, name: customer.name, phone: customer.phone },
+    customer: { id: customer.id, name: customer.name, phone: customer.phone, email: customer.meta?.email || null },
     token,
   };
 }

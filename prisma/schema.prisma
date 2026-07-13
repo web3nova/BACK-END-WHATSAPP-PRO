@@ -317,6 +317,8 @@ model Product {
   minimumOrderQuantity Int  @default(1)
   isActive        Boolean  @default(true)
   isFeatured      Boolean  @default(false)
+  viewCount       Int      @default(0)
+  cartCount       Int      @default(0)
   sortOrder       Int      @default(0)
   relatedProductIds  String[]
   upsellProductIds   String[]
