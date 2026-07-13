@@ -141,10 +141,18 @@ export async function getSettings(tenantId) {
     where: { tenantId },
     select: { data: true },
   });
-  const theme = settings.theme || {};
+  // The controller flattens a pending draft over this result, so the draft's
+  // theme must get the same defaults or they vanish while a draft exists.
+  const applyDefaults = (theme) => ({
+    ...(theme || {}),
+    builder: withBuilderDefaults(theme?.builder, business, paymentConfig?.data),
+  });
   return {
     ...settings,
-    theme: { ...theme, builder: withBuilderDefaults(theme.builder, business, paymentConfig?.data) },
+    theme: applyDefaults(settings.theme),
+    draft: settings.draft?.theme
+      ? { ...settings.draft, theme: applyDefaults(settings.draft.theme) }
+      : settings.draft,
   };
 }
 
