@@ -7,6 +7,7 @@ import { sendMessage } from '../whatsapp/whatsapp.service.js';
 import { newOrderEmail } from '../../config/emailTemplates.js';
 import { priceItems } from './checkout.pricing.js';
 import { getDecryptedConfig } from '../payments/payment-config.service.js';
+import { withBuilderDefaults } from '../website/builder-defaults.js';
 
 async function getTenantPaymentConfig(tenantId) {
   const config = await getDecryptedConfig(tenantId);
@@ -16,7 +17,7 @@ async function getTenantPaymentConfig(tenantId) {
 async function getBusinessSettings(tenantId) {
   const business = await prisma.business.findUnique({
     where: { tenantId },
-    select: { id: true, displayName: true, phone: true, email: true },
+    select: { id: true, displayName: true, phone: true, email: true, deliveryStructure: true },
   });
   if (!business) throw new NotFoundError('Business not found');
 
@@ -25,11 +26,10 @@ async function getBusinessSettings(tenantId) {
     select: { theme: true },
   });
 
-  const builder = website?.theme?.builder || {};
-  const deliveryOptions = Array.isArray(builder.delivery) ? builder.delivery : [];
-  const paymentOptions = Array.isArray(builder.payments) ? builder.payments : [];
+  const paymentData = await getTenantPaymentConfig(tenantId);
+  const builder = withBuilderDefaults(website?.theme?.builder, business, paymentData);
 
-  return { business, deliveryOptions, paymentOptions };
+  return { business, deliveryOptions: builder.delivery, paymentOptions: builder.payments };
 }
 
 export async function initializeCheckout({ tenantId, items, deliveryMethod }) {
