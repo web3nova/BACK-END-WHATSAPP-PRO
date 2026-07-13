@@ -132,10 +132,14 @@ export const verifyOtp = async ({ userId, code }) => {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new NotFoundError('User not found');
 
-  const subscription = await prisma.subscription.findUnique({
-    where: { tenantId: user.tenantId },
-    select: { id: true, plan: true, status: true, trialEndsAt: true },
-  });
+  // Super admins have no tenant (tenantId is null) — skip the lookup rather
+  // than querying a non-nullable unique column with null, which Prisma rejects.
+  const subscription = user.tenantId
+    ? await prisma.subscription.findUnique({
+        where: { tenantId: user.tenantId },
+        select: { id: true, plan: true, status: true, trialEndsAt: true },
+      })
+    : null;
 
   const tokens = await issueTokens(user);
   return { user: sanitizeUser(user), subscription, ...tokens };
