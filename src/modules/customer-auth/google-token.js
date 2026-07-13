@@ -1,4 +1,5 @@
 import { UnauthorizedError } from '../../common/errors/index.js';
+import { logger } from '../../config/logger.js';
 
 const GOOGLE_ISSUERS = ['accounts.google.com', 'https://accounts.google.com'];
 
@@ -9,6 +10,13 @@ export function validateGoogleTokenPayload(payload, expectedAud) {
     throw new UnauthorizedError('Google login is not configured on this server');
   }
   if (payload.aud !== expectedAud) {
+    // Client IDs aren't secret — log both sides (incl. in production) so a
+    // Vercel VITE_GOOGLE_CLIENT_ID / Render GOOGLE_CLIENT_ID mismatch shows
+    // up immediately in Render logs instead of just a generic 401.
+    logger.warn(
+      { expectedAud, receivedAud: payload.aud },
+      '[googleLogin] aud mismatch — VITE_GOOGLE_CLIENT_ID (frontend) and GOOGLE_CLIENT_ID (backend) likely differ',
+    );
     throw new UnauthorizedError('Google token was issued for a different application');
   }
   if (payload.iss && !GOOGLE_ISSUERS.includes(payload.iss)) {
