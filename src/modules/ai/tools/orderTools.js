@@ -125,17 +125,75 @@ export const createOrder = {
   },
 };
 
-// Tool: update an existing order (status, measurements).
+const STATUS_LABELS = {
+  pending: 'Pending',
+  confirmed: 'Confirmed',
+  paid: 'Paid',
+  fulfilled: 'Fulfilled',
+  cancelled: 'Cancelled',
+};
+
+function summarizeOrder(order) {
+  const firstItem = Array.isArray(order.items) ? order.items[0] : null;
+  return {
+    orderId: order.id,
+    status: order.status,
+    statusLabel: STATUS_LABELS[order.status] || order.status,
+    product: firstItem?.name || null,
+    itemCount: Array.isArray(order.items) ? order.items.length : 0,
+    totalMinor: order.totalMinor,
+    currency: order.currency,
+    createdAt: order.createdAt,
+  };
+}
+
+// Tool: look up an order's current status — mirrors exactly what the
+// business sees on their dashboard Orders page (same 5 statuses, same fields).
+export const getOrderStatus = {
+  name: 'get_order_status',
+  description:
+    "Check the current status of an order (pending, confirmed, paid, fulfilled, or cancelled) — the same status shown on the business's Orders dashboard. Pass orderId if you know it (e.g. from create_order earlier in this conversation). If the customer asks about an order without giving an id, omit orderId to get their most recent orders instead.",
+  parameters: {
+    type: 'object',
+    properties: {
+      orderId: { type: 'string', description: 'The order id, if known.' },
+    },
+  },
+  async handler({ orderId }, ctx) {
+    if (orderId) {
+      const order = await prisma.order.findFirst({ where: { id: orderId, tenantId: ctx.tenantId } });
+      if (!order) return { found: false, message: 'Order not found.' };
+      return { found: true, order: summarizeOrder(order) };
+    }
+
+    if (!ctx.customerId) {
+      return { found: false, message: 'No orderId given and no customer on record to look up recent orders for.' };
+    }
+    const orders = await prisma.order.findMany({
+      where: { tenantId: ctx.tenantId, customerId: ctx.customerId },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+    if (!orders.length) return { found: false, message: 'No orders found for this customer.' };
+    return { found: true, orders: orders.map(summarizeOrder) };
+  },
+};
+
+// Tool: update an existing order — measurements, or move it to confirmed/cancelled.
+// Deliberately does NOT allow the AI to set 'paid' or 'fulfilled' — those are
+// staff-only, confirmed manually from the dashboard (see report_payment_receipt
+// for the payment-verification flow). This is enforced here, not just in the
+// prompt, so it can't be talked around.
 export const updateOrder = {
   name: 'update_order',
-  description: 'Update an order — set status or attach/replace measurements.',
+  description: 'Update an order — set status to confirmed/cancelled, or attach/replace measurements. Cannot mark an order paid or fulfilled — only staff can do that from the dashboard after verifying payment.',
   parameters: {
     type: 'object',
     properties: {
       orderId: { type: 'string' },
       status: {
         type: 'string',
-        enum: ['pending', 'confirmed', 'paid', 'fulfilled', 'cancelled'],
+        enum: ['confirmed', 'cancelled'],
       },
       measurements: { type: 'object' },
     },
@@ -159,6 +217,6 @@ export const updateOrder = {
   },
 };
 
-export const orderTools = [createQuote, createOrder, updateOrder];
+export const orderTools = [createQuote, createOrder, getOrderStatus, updateOrder];
 
 export default orderTools;
