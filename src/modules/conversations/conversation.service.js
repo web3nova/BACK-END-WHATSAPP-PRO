@@ -264,6 +264,37 @@ export const release = async (conversationId, tenantId) => {
 };
 
 /**
+ * Staff sends a message to a customer directly (e.g. from the Customers page,
+ * where there's a customerId but no conversationId in hand). Resolves to the
+ * customer's most recent conversation — reopening it if closed/escalated, or
+ * creating one if none exists — then delegates to sendStaffMessage so every
+ * staff-initiated WhatsApp send is persisted and visible in the inbox, not
+ * just the ones sent from the WhatsApp page itself.
+ */
+export const sendStaffMessageByCustomer = async (customerId, tenantId, text, senderUserId = null) => {
+  const customer = await prisma.customer.findFirst({ where: { id: customerId, tenantId } });
+  if (!customer) throw new NotFoundError('Customer not found');
+
+  let conversation = await prisma.conversation.findFirst({
+    where: { tenantId, customerId },
+    orderBy: { updatedAt: 'desc' },
+  });
+
+  if (!conversation) {
+    conversation = await prisma.conversation.create({
+      data: { tenantId, customerId, channel: 'whatsapp', status: 'human' },
+    });
+  } else if (conversation.status === 'closed' || conversation.status === 'escalated') {
+    conversation = await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { status: 'human' },
+    });
+  }
+
+  return sendStaffMessage(conversation.id, tenantId, text, senderUserId);
+};
+
+/**
  * Staff sends a message inside a conversation.
  * Saves to DB and sends via WhatsApp. Resets the auto-release timer.
  */

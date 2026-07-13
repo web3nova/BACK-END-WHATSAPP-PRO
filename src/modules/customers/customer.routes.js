@@ -70,4 +70,30 @@ router.patch('/:id', controller.update);
  */
 router.delete('/:id', controller.remove);
 
+/**
+ * @openapi
+ * /customers/{id}/message:
+ *   post:
+ *     tags: [Customers]
+ *     summary: Send a WhatsApp message to this customer — persisted in their conversation thread
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [text]
+ *             properties:
+ *               text: { type: string }
+ *     responses:
+ *       200: { description: Message sent }
+ *       404: { description: Customer not found }
+ */
+router.post('/:id/message', controller.sendMessage);
+
 export default router;
