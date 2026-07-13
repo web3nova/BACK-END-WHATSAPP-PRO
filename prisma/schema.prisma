@@ -314,6 +314,8 @@ model Product {
   tags            String[]
   collections     String[]
   stock           Int      @default(0)
+  // Opt-in: existing products all have stock 0, so enforcement must be off by default.
+  trackStock      Boolean  @default(false)
   unit            String   @default("piece")
   minimumOrderQuantity Int  @default(1)
   isActive        Boolean  @default(true)

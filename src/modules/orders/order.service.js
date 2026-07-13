@@ -166,16 +166,30 @@ export const createOrder = async (tenantId, data, { notify: sendNotify = false }
 export const updateOrderStatus = async (tenantId, id, status) => {
   const order = await prisma.order.findFirst({
     where: { id, tenantId },
-    select: { id: true, customerId: true },
+    select: { id: true, customerId: true, status: true, items: true },
   });
 
   if (!order) {
     throw new NotFoundError('Order not found');
   }
 
-  const orderResult = await prisma.order.update({
-    where: { id },
-    data: { status }
+  const isCancelling = status === 'cancelled' && order.status !== 'cancelled';
+
+  const orderResult = await prisma.$transaction(async (tx) => {
+    if (isCancelling) {
+      for (const item of order.items || []) {
+        if (!item?.productId || !item?.quantity) continue;
+        await tx.product.updateMany({
+          where: { id: item.productId, tenantId, trackStock: true },
+          data: { stock: { increment: Number(item.quantity) } },
+        });
+      }
+    }
+
+    return tx.order.update({
+      where: { id },
+      data: { status },
+    });
   });
 
   const customerMap = await loadCustomers(tenantId, [order.customerId]);

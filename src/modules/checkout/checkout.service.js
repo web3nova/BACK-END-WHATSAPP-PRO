@@ -6,6 +6,7 @@ import { notify } from '../notifications/notification.service.js';
 import { sendMessage } from '../whatsapp/whatsapp.service.js';
 import { newOrderEmail } from '../../config/emailTemplates.js';
 import { priceItems } from './checkout.pricing.js';
+import { aggregateQuantities, trackedShortages } from './stock.js';
 import { resolveDeliveryFee } from './delivery-fees.js';
 import { getDecryptedConfig } from '../payments/payment-config.service.js';
 import { withBuilderDefaults } from '../website/builder-defaults.js';
@@ -98,6 +99,16 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
     );
   }
 
+  const quantitiesById = aggregateQuantities(items);
+  const trackedProducts = await prisma.product.findMany({
+    where: { tenantId, id: { in: [...quantitiesById.keys()] } },
+    select: { id: true, name: true, stock: true, trackStock: true },
+  });
+  const shortages = trackedShortages(trackedProducts, quantitiesById);
+  if (shortages.length) {
+    throw new BadRequestError(`Insufficient stock for ${shortages[0].name}`);
+  }
+
   // Prefer the authenticated customer so orders appear in their "My Orders".
   let customer = customerId
     ? await prisma.customer.findFirst({ where: { id: customerId, tenantId } })
@@ -132,34 +143,50 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
     });
   }
 
-  const order = await prisma.order.create({
-    data: {
-      tenantId,
-      customerId: customer.id,
-      status: paymentMethod === 'cash' ? 'confirmed' : 'pending',
-      totalMinor: serverTotal,
-      currency: currency || 'NGN',
-      items: priced.items,
-      measurements: {
-        deliveryMethod: deliveryMethod || null,
-        deliveryFeeMinor,
-        paymentMethod,
-        customerName,
-        customerPhone,
-        customerWhatsapp: customerWhatsapp || customerPhone,
-        customerEmail: customerEmail || null,
-        customerAddress,
-        customerState,
-        customerCity,
-        customerPostBox: customerPostBox || null,
-        customerLandmark: customerLandmark || null,
-        source: 'storefront',
+  const trackedById = new Map(trackedProducts.filter((p) => p.trackStock).map((p) => [p.id, p]));
+
+  const order = await prisma.$transaction(async (tx) => {
+    for (const [productId, qty] of quantitiesById) {
+      const product = trackedById.get(productId);
+      if (!product) continue;
+      const decremented = await tx.product.updateMany({
+        where: { id: productId, tenantId, stock: { gte: qty } },
+        data: { stock: { decrement: qty } },
+      });
+      if (decremented.count === 0) {
+        throw new BadRequestError(`Insufficient stock for ${product.name}`);
+      }
+    }
+
+    return tx.order.create({
+      data: {
+        tenantId,
+        customerId: customer.id,
+        status: paymentMethod === 'cash' ? 'confirmed' : 'pending',
+        totalMinor: serverTotal,
+        currency: currency || 'NGN',
+        items: priced.items,
+        measurements: {
+          deliveryMethod: deliveryMethod || null,
+          deliveryFeeMinor,
+          paymentMethod,
+          customerName,
+          customerPhone,
+          customerWhatsapp: customerWhatsapp || customerPhone,
+          customerEmail: customerEmail || null,
+          customerAddress,
+          customerState,
+          customerCity,
+          customerPostBox: customerPostBox || null,
+          customerLandmark: customerLandmark || null,
+          source: 'storefront',
+        },
       },
-    },
-    select: {
-      id: true, tenantId: true, customerId: true, status: true,
-      totalMinor: true, currency: true, items: true, measurements: true, createdAt: true,
-    },
+      select: {
+        id: true, tenantId: true, customerId: true, status: true,
+        totalMinor: true, currency: true, items: true, measurements: true, createdAt: true,
+      },
+    });
   });
 
   const ref = order.id.slice(0, 8).toUpperCase();

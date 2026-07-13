@@ -93,6 +93,7 @@ const productShape = {
   tags: z.array(z.string().trim().min(1).max(50)).optional().default([]),
   collections: z.array(z.string().trim().min(1).max(100)).optional().default([]),
   stock: z.coerce.number().int().min(0).default(0),
+  trackStock: z.boolean().optional(),
   unit: z.string().trim().max(50).default('piece'),
   minimumOrderQuantity: z.coerce.number().int().min(1).default(1),
   isActive: z.boolean().optional().default(true),
