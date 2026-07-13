@@ -163,10 +163,36 @@ export const createOrder = async (tenantId, data, { notify: sendNotify = false }
   return result;
 };
 
+const NOTIFIABLE_STATUSES = new Set(['confirmed', 'shipped', 'delivered', 'cancelled']);
+
+const STATUS_UPDATE_LINES = {
+  confirmed: 'Your order has been confirmed ✅',
+  shipped: 'Your order is on its way 🚚',
+  delivered: 'Your order has been delivered 🎉',
+  cancelled: 'Your order has been cancelled. Contact us if this is unexpected.',
+};
+
+function sendOrderStatusWhatsApp(tenantId, order, status, customer) {
+  const phone = order.measurements?.customerWhatsapp || order.measurements?.customerPhone || customer?.phone;
+  if (!phone) return;
+
+  const ref = order.id.slice(0, 8).toUpperCase();
+  const extraLine = STATUS_UPDATE_LINES[status];
+
+  const message = [
+    `📦 *Order #${ref} update*`,
+    `Status: ${status}`,
+    ...(extraLine ? [extraLine] : []),
+    'Thank you for shopping with us!',
+  ].join('\n');
+
+  sendMessage(tenantId, phone, message).catch(() => {});
+}
+
 export const updateOrderStatus = async (tenantId, id, status) => {
   const order = await prisma.order.findFirst({
     where: { id, tenantId },
-    select: { id: true, customerId: true, status: true, items: true },
+    select: { id: true, customerId: true, status: true, items: true, measurements: true },
   });
 
   if (!order) {
@@ -174,6 +200,7 @@ export const updateOrderStatus = async (tenantId, id, status) => {
   }
 
   const isCancelling = status === 'cancelled' && order.status !== 'cancelled';
+  const statusChanged = order.status !== status;
 
   const orderResult = await prisma.$transaction(async (tx) => {
     if (isCancelling) {
@@ -193,6 +220,12 @@ export const updateOrderStatus = async (tenantId, id, status) => {
   });
 
   const customerMap = await loadCustomers(tenantId, [order.customerId]);
+  const customer = order.customerId ? customerMap.get(order.customerId) ?? null : null;
+
+  if (statusChanged && NOTIFIABLE_STATUSES.has(status)) {
+    sendOrderStatusWhatsApp(tenantId, order, status, customer);
+  }
+
   return attachCustomer(orderResult, customerMap);
 };
 
