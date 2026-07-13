@@ -1,5 +1,10 @@
-import crypto from 'crypto';
 import bcrypt from 'bcrypt';
+import {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+} from '@simplewebauthn/server';
 import { prisma } from '../../config/prisma.js';
 import { BadRequestError, NotFoundError, UnauthorizedError } from '../../common/errors/index.js';
 import { signAccessToken } from '../../common/utils/token.js';
@@ -189,37 +194,47 @@ export async function googleLogin({ tenantId, idToken }) {
 
 // ── Passkey (WebAuthn) support ──────────────────────────────────────
 
-// Store challenges temporarily (in production, use Redis)
+// In-memory challenge store. Fine for a single Render instance; move to Redis
+// if the backend ever scales horizontally.
 const pendingChallenges = new Map();
+const CHALLENGE_TTL_MS = 300000;
+
+function putChallenge(key, value) {
+  pendingChallenges.set(key, { ...value, createdAt: Date.now() });
+  for (const [k, v] of pendingChallenges) {
+    if (Date.now() - v.createdAt > CHALLENGE_TTL_MS) pendingChallenges.delete(k);
+  }
+}
+
+function takeChallenge(key) {
+  const stored = pendingChallenges.get(key);
+  pendingChallenges.delete(key);
+  if (!stored || Date.now() - stored.createdAt > CHALLENGE_TTL_MS) return null;
+  return stored;
+}
 
 export async function passkeyRegisterStart({ tenantId, customerId }) {
   if (!tenantId || !customerId) {
     throw new BadRequestError('tenantId and customerId are required');
   }
 
-  const challenge = crypto.randomBytes(32).toString('base64url');
-  const userId = crypto.randomBytes(16).toString('base64url');
+  const customer = await prisma.customer.findFirst({ where: { id: customerId, tenantId } });
+  if (!customer) throw new NotFoundError('Customer not found');
 
-  pendingChallenges.set(`reg:${customerId}`, {
-    challenge,
-    userId,
-    tenantId,
-    createdAt: Date.now(),
+  const existing = (customer.meta?.passkeys || []).map(pk => ({ id: pk.id }));
+
+  const options = await generateRegistrationOptions({
+    rpName: 'BizIQ',
+    rpID: config.auth.rpId,
+    userName: customer.meta?.email || customer.phone,
+    userDisplayName: customer.name || customer.phone,
+    attestationType: 'none',
+    excludeCredentials: existing,
+    authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
   });
 
-  // Clean up old challenges
-  for (const [key, val] of pendingChallenges) {
-    if (Date.now() - val.createdAt > 300000) pendingChallenges.delete(key);
-  }
-
-  return {
-    challenge,
-    userId,
-    rpName: 'BizAI',
-    rpId: typeof globalThis !== 'undefined' && globalThis.location
-      ? globalThis.location.hostname
-      : 'localhost',
-  };
+  putChallenge(`reg:${customerId}`, { challenge: options.challenge, tenantId });
+  return options;
 }
 
 export async function passkeyRegisterComplete({ customerId, credential }) {
@@ -227,58 +242,57 @@ export async function passkeyRegisterComplete({ customerId, credential }) {
     throw new BadRequestError('customerId and credential are required');
   }
 
-  const stored = pendingChallenges.get(`reg:${customerId}`);
+  const stored = takeChallenge(`reg:${customerId}`);
   if (!stored) {
     throw new BadRequestError('Registration challenge expired. Please try again.');
   }
 
-  // Store the credential in the customer's meta
   const customer = await prisma.customer.findUnique({ where: { id: customerId } });
   if (!customer) throw new NotFoundError('Customer not found');
 
+  let verification;
+  try {
+    verification = await verifyRegistrationResponse({
+      response: credential,
+      expectedChallenge: stored.challenge,
+      expectedOrigin: config.auth.passkeyAllowedOrigins,
+      expectedRPID: config.auth.rpId,
+    });
+  } catch (err) {
+    logger.warn({ err: err.message }, '[passkey] registration verification failed');
+    throw new BadRequestError('Passkey registration could not be verified');
+  }
+  if (!verification.verified || !verification.registrationInfo) {
+    throw new BadRequestError('Passkey registration could not be verified');
+  }
+
+  const { credential: cred } = verification.registrationInfo;
   const meta = { ...(customer.meta || {}) };
-  const passkeys = meta.passkeys || [];
+  const passkeys = (meta.passkeys || []).filter(pk => pk.id !== cred.id);
   passkeys.push({
-    id: credential.id,
-    type: credential.type || 'public-key',
-    rawId: credential.rawId || credential.id,
-    response: credential.response,
+    id: cred.id,
+    publicKey: Buffer.from(cred.publicKey).toString('base64url'),
+    counter: cred.counter,
+    transports: cred.transports || [],
     createdAt: new Date().toISOString(),
   });
   meta.passkeys = passkeys;
 
-  await prisma.customer.update({
-    where: { id: customerId },
-    data: { meta },
-  });
-
-  pendingChallenges.delete(`reg:${customerId}`);
-
+  await prisma.customer.update({ where: { id: customerId }, data: { meta } });
   return { success: true };
 }
 
 export async function passkeyLoginStart({ tenantId }) {
   if (!tenantId) throw new BadRequestError('tenantId is required');
 
-  const challenge = crypto.randomBytes(32).toString('base64url');
-
-  pendingChallenges.set(`auth:${tenantId}`, {
-    challenge,
-    tenantId,
-    createdAt: Date.now(),
+  const options = await generateAuthenticationOptions({
+    rpID: config.auth.rpId,
+    userVerification: 'preferred',
+    allowCredentials: [],
   });
 
-  // Clean up old challenges
-  for (const [key, val] of pendingChallenges) {
-    if (Date.now() - val.createdAt > 300000) pendingChallenges.delete(key);
-  }
-
-  return {
-    challenge,
-    rpId: typeof globalThis !== 'undefined' && globalThis.location
-      ? globalThis.location.hostname
-      : 'localhost',
-  };
+  putChallenge(`auth:${tenantId}`, { challenge: options.challenge, tenantId });
+  return options;
 }
 
 export async function passkeyLoginComplete({ tenantId, credential }) {
@@ -286,36 +300,65 @@ export async function passkeyLoginComplete({ tenantId, credential }) {
     throw new BadRequestError('tenantId and credential are required');
   }
 
-  const stored = pendingChallenges.get(`auth:${tenantId}`);
+  const stored = takeChallenge(`auth:${tenantId}`);
   if (!stored) {
     throw new BadRequestError('Authentication challenge expired. Please try again.');
   }
 
-  // Find customer with matching passkey credential
   const customers = await prisma.customer.findMany({
     where: { tenantId },
     select: { id: true, name: true, phone: true, meta: true },
   });
 
   let matchedCustomer = null;
+  let matchedPasskey = null;
   for (const c of customers) {
-    const passkeys = c.meta?.passkeys || [];
-    const match = passkeys.find(pk => pk.id === credential.id || pk.rawId === credential.rawId);
+    const match = (c.meta?.passkeys || []).find(pk => pk.id === credential.id && pk.publicKey);
     if (match) {
       matchedCustomer = c;
+      matchedPasskey = match;
       break;
     }
   }
 
   if (!matchedCustomer) {
-    throw new UnauthorizedError('Passkey not found for this account');
+    throw new UnauthorizedError('Passkey not recognized. Please register it again from your account page.');
   }
 
-  pendingChallenges.delete(`auth:${tenantId}`);
+  let verification;
+  try {
+    verification = await verifyAuthenticationResponse({
+      response: credential,
+      expectedChallenge: stored.challenge,
+      expectedOrigin: config.auth.passkeyAllowedOrigins,
+      expectedRPID: config.auth.rpId,
+      credential: {
+        id: matchedPasskey.id,
+        publicKey: Buffer.from(matchedPasskey.publicKey, 'base64url'),
+        counter: matchedPasskey.counter || 0,
+        transports: matchedPasskey.transports || [],
+      },
+    });
+  } catch (err) {
+    logger.warn({ err: err.message }, '[passkey] authentication verification failed');
+    throw new UnauthorizedError('Passkey verification failed');
+  }
+  if (!verification.verified) {
+    throw new UnauthorizedError('Passkey verification failed');
+  }
+
+  // Persist the new signature counter (clone detection).
+  const meta = { ...(matchedCustomer.meta || {}) };
+  meta.passkeys = (meta.passkeys || []).map(pk =>
+    pk.id === matchedPasskey.id
+      ? { ...pk, counter: verification.authenticationInfo.newCounter }
+      : pk,
+  );
+  await prisma.customer.update({ where: { id: matchedCustomer.id }, data: { meta } });
 
   const token = signAccessToken({
     sub: matchedCustomer.id,
-    tenantId: matchedCustomer.tenantId,
+    tenantId,
     phone: matchedCustomer.phone,
     role: 'customer',
   });
