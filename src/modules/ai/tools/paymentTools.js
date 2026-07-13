@@ -349,11 +349,19 @@ export const reportPaymentReceipt = {
   },
   async handler({ orderId, summary }, ctx) {
     const { notify } = await import('../../notifications/notification.service.js');
+    const { paymentReceiptEmail } = await import('../../../config/emailTemplates.js');
+    const [customer, order] = await Promise.all([
+      ctx.customerId ? prisma.customer.findUnique({ where: { id: ctx.customerId }, select: { name: true, phone: true } }) : null,
+      orderId ? prisma.order.findFirst({ where: { id: orderId, tenantId: ctx.tenantId }, select: { id: true } }) : null,
+    ]);
+    const customerName = customer?.name || customer?.phone;
+    const orderRef = order?.id ? order.id.slice(0, 8).toUpperCase() : null;
     await notify(ctx.tenantId, {
       type: 'payment_received',
       title: 'Payment receipt needs verification',
       body: summary.slice(0, 400),
       emailSubject: 'Customer sent a payment receipt — please verify',
+      emailHtml: paymentReceiptEmail({ customerName, summary: summary.slice(0, 800), orderRef }),
       metadata: { conversationId: ctx.conversationId, ...(orderId ? { orderId } : {}) },
     }).catch(() => {});
     return {

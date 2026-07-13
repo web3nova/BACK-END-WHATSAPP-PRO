@@ -4,6 +4,7 @@ import aiService from '../../modules/ai/ai.service.js';
 import * as whatsappService from '../../modules/whatsapp/whatsapp.service.js';
 import { notify } from '../../modules/notifications/notification.service.js';
 import { pushEvent } from '../../modules/sse/sse.service.js';
+import { escalationEmail } from '../../config/emailTemplates.js';
 
 export default async function processAiReply(job) {
   const { tenantId, conversationId, messageId } = job.data;
@@ -85,6 +86,7 @@ export default async function processAiReply(job) {
       title: `Human needed — AI couldn't handle ${customerName}`,
       body: `The AI failed to respond to a message from ${customerName}. The conversation has been escalated and needs your attention.`,
       emailSubject: `Action needed: AI escalation from ${customerName}`,
+      emailHtml: escalationEmail({ customerName, reason: 'The AI ran into an error trying to reply and couldn\'t recover.' }),
       metadata: { conversationId },
     }).catch(() => {});
 
@@ -119,6 +121,7 @@ export default async function processAiReply(job) {
       title: `Human needed — AI couldn't resolve ${customerName}'s query`,
       body: `The AI reached its limit trying to help ${customerName}. The conversation has been escalated and needs your attention.`,
       emailSubject: `Action needed: AI escalation from ${customerName}`,
+      emailHtml: escalationEmail({ customerName, reason: 'The AI made several attempts but couldn\'t resolve this on its own.' }),
       metadata: { conversationId },
     }).catch(() => {});
   }

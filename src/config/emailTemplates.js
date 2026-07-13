@@ -172,6 +172,42 @@ export function trialWelcomeEmail({ businessName, trialEndsAt }) {
   });
 }
 
+export function escalationEmail({ customerName, reason }) {
+  const name = customerName || 'A customer';
+  const bodyHtml = `
+    <p style="margin:0 0 16px;">Your AI sales agent couldn't handle a message from <strong>${name}</strong> and has stepped back — the conversation is waiting for you.</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#fef2f2;border-left:3px solid #dc2626;border-radius:8px;padding:14px 16px;margin-bottom:16px;">
+      <tr><td style="font-size:13px;color:#991b1b;line-height:1.5;">${reason || 'The AI ran into an issue processing this message.'}</td></tr>
+    </table>
+    <p style="margin:0;color:${MUTED};font-size:13px;">Reply to the customer directly on WhatsApp to pick things up.</p>
+  `;
+  return layout({
+    preheader: `${name} needs a human reply — the AI couldn't continue`,
+    heading: '⚠️ A customer needs your attention',
+    bodyHtml,
+    ctaLabel: 'Open Conversation',
+    ctaUrl: `${APP_URL}/dashboard/whatsapp`,
+  });
+}
+
+export function paymentReceiptEmail({ customerName, summary, orderRef }) {
+  const name = customerName || 'A customer';
+  const bodyHtml = `
+    <p style="margin:0 0 16px;"><strong>${name}</strong> sent a payment receipt${orderRef ? ` for order <strong>${orderRef}</strong>` : ''} — it needs your manual verification before the order is marked as paid.</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#f4f6ff;border-radius:12px;padding:16px;margin-bottom:16px;">
+      <tr><td style="font-size:14px;color:${INK};line-height:1.6;">${summary}</td></tr>
+    </table>
+    <p style="margin:0;color:${MUTED};font-size:13px;">The AI has not marked this order as paid — only you can confirm the transfer went through.</p>
+  `;
+  return layout({
+    preheader: `${name} sent a payment receipt — please verify`,
+    heading: '💳 Payment receipt needs verification',
+    bodyHtml,
+    ctaLabel: 'Review & Verify',
+    ctaUrl: `${APP_URL}/dashboard/whatsapp`,
+  });
+}
+
 export default {
   trialWelcomeEmail,
   superAdminWelcomeEmail,
@@ -181,4 +217,6 @@ export default {
   trialEndingEmail,
   renewalReminderEmail,
   newOrderEmail,
+  escalationEmail,
+  paymentReceiptEmail,
 };
