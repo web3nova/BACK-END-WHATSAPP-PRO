@@ -19,6 +19,16 @@ router.get('/customer/orders',
   checkoutController.getCustomerOrders
 );
 
+router.get('/orders/:id',
+  customerAuthMiddleware,
+  checkoutController.getCustomerOrder
+);
+
+router.post('/orders/:id/claim-payment',
+  customerAuthMiddleware,
+  checkoutController.claimPayment
+);
+
 router.post('/webhook/paystack', checkoutController.paystackWebhook);
 
 router.get('/providers', checkoutController.getPaymentProviders);

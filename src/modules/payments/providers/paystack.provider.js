@@ -22,7 +22,7 @@ export function createPaystackProvider() {
   return {
     name: 'paystack',
 
-    async initializePayment({ payment, order, customerEmail }) {
+    async initializePayment({ payment, order, customerEmail, callbackUrl }) {
       const response = await fetch(`${PAYSTACK_BASE_URL}/transaction/initialize`, {
         method: 'POST',
         headers: {
@@ -34,6 +34,7 @@ export function createPaystackProvider() {
           amount: order.totalMinor,
           currency: order.currency,
           reference: payment.reference,
+          ...(callbackUrl ? { callback_url: callbackUrl } : {}),
           metadata: {
             paymentId: payment.id,
             orderId: order.id,

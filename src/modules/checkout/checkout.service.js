@@ -1,4 +1,5 @@
 import { prisma } from '../../config/prisma.js';
+import { config } from '../../config/index.js';
 import { logger } from '../../config/logger.js';
 import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
 import * as paymentService from '../payments/payment.service.js';
@@ -222,6 +223,7 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
         tenantId, order.id,
         customerEmail || `${customerPhone.replace(/[^0-9]/g, '')}@customer.store`,
         providerName,
+        { callbackUrl: `${config.frontendUrl}/storefront/${tenantId}?order=${order.id}` },
       );
       payment = {
         provider: initResult.provider,
@@ -289,4 +291,70 @@ export async function getCustomerOrders(tenantId, customerId) {
     createdAt: o.createdAt,
     updatedAt: o.updatedAt,
   }));
+}
+
+function toOrderStatusResponse(order) {
+  return {
+    id: order.id,
+    status: order.status,
+    totalMinor: order.totalMinor,
+    currency: order.currency,
+    items: order.items,
+    reference: order.id.slice(0, 8).toUpperCase(),
+    createdAt: order.createdAt,
+    paymentMethod: order.measurements?.paymentMethod || null,
+    deliveryMethod: order.measurements?.deliveryMethod || null,
+    deliveryFeeMinor: order.measurements?.deliveryFeeMinor ?? null,
+    paymentClaimed: !!order.measurements?.paymentClaimed,
+  };
+}
+
+export async function getCustomerOrder(tenantId, customerId, orderId) {
+  const order = await prisma.order.findFirst({
+    where: { id: orderId, tenantId, customerId },
+    select: orderSelect,
+  });
+  if (!order) throw new NotFoundError('Order not found');
+  return toOrderStatusResponse(order);
+}
+
+export async function claimPayment(tenantId, customerId, orderId) {
+  const order = await prisma.order.findFirst({
+    where: { id: orderId, tenantId, customerId },
+    select: orderSelect,
+  });
+  if (!order) throw new NotFoundError('Order not found');
+
+  if (order.measurements?.paymentMethod !== 'bank') {
+    throw new BadRequestError('Only bank-transfer orders can claim payment');
+  }
+  if (order.status !== 'pending') {
+    throw new BadRequestError('Order is not awaiting payment confirmation');
+  }
+
+  const alreadyClaimed = !!order.measurements?.paymentClaimed;
+
+  const measurements = {
+    ...(order.measurements || {}),
+    paymentClaimed: true,
+  };
+
+  const updated = await prisma.order.update({
+    where: { id: order.id },
+    data: { measurements },
+    select: orderSelect,
+  });
+
+  if (!alreadyClaimed) {
+    const ref = order.id.slice(0, 8).toUpperCase();
+    notify(tenantId, {
+      type: 'payment_claimed',
+      title: `Customer says they've paid order #${ref}`,
+      body: `Please verify the bank transfer and confirm order #${ref}.`,
+      metadata: { orderId: order.id },
+      outbound: true,
+    }).catch(() => {});
+  }
+
+  return toOrderStatusResponse(updated);
 }

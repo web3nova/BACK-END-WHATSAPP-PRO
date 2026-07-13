@@ -67,7 +67,7 @@ function buildPaymentReference() {
   return `pay_${crypto.randomBytes(12).toString('hex')}`;
 }
 
-export async function initializePayment(tenantId, orderId, email, providerName) {
+export async function initializePayment(tenantId, orderId, email, providerName, options = {}) {
   const provider = getPaymentProvider(providerName);
   const order = await getOrderForTenant(tenantId, orderId);
 
@@ -98,6 +98,7 @@ export async function initializePayment(tenantId, orderId, email, providerName) 
       payment,
       order,
       customerEmail: email,
+      callbackUrl: options.callbackUrl,
     });
 
     const updated = await prisma.payment.update({

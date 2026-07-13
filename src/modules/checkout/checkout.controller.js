@@ -52,6 +52,22 @@ export const getCustomerOrders = asyncHandler(async (req, res) => {
   ok(res, orders);
 });
 
+export const getCustomerOrder = asyncHandler(async (req, res) => {
+  if (!req.customer) {
+    throw new BadRequestError('Authentication required');
+  }
+  const order = await checkoutService.getCustomerOrder(req.customer.tenantId, req.customer.id, req.params.id);
+  ok(res, order);
+});
+
+export const claimPayment = asyncHandler(async (req, res) => {
+  if (!req.customer) {
+    throw new BadRequestError('Authentication required');
+  }
+  const order = await checkoutService.claimPayment(req.customer.tenantId, req.customer.id, req.params.id);
+  ok(res, order);
+});
+
 export const getPaymentProviders = asyncHandler(async (req, res) => {
   ok(res, {
     providers: ['paystack', 'bank', 'cash', 'card', 'flutterwave', 'monnify'],
