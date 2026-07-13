@@ -13,6 +13,7 @@ const pgbossUrl = (process.env.DIRECT_DATABASE_URL || config.databaseUrl).replac
 
 const boss = new PgBoss({
   connectionString: pgbossUrl,
+  max: 3,
   deleteAfterDays: 3,
   retryLimit: 3,
   retryBackoff: true,

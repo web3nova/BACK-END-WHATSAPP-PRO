@@ -21,10 +21,12 @@ export const sendNotification = asyncHandler(async (req, res) => {
 
 export const listNotifications = asyncHandler(async (req, res) => {
   const tenantId = req.tenant.id;
+  const limit = Math.min(parseInt(req.query.limit) || 30, 50);
   const [items, unread] = await Promise.all([
-    listForTenant(tenantId),
+    listForTenant(tenantId, { limit }),
     getUnreadCount(tenantId),
   ]);
+  res.setHeader('Cache-Control', 'no-cache');
   return ok(res, { items, unread });
 });
 
