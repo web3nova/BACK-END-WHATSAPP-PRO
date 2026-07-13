@@ -40,6 +40,30 @@ router.get('/stats', controller.stats);
 
 /**
  * @openapi
+ * /admin/tenants:
+ *   get:
+ *     summary: List all tenants (paginated, searchable)
+ *     tags: [SuperAdmin]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 25 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Paginated tenant list
+ *       403:
+ *         description: Super admin only
+ */
+router.get('/tenants', controller.listTenants);
+
+/**
+ * @openapi
  * /admin/tenants/{id}/suspend:
  *   patch:
  *     summary: Suspend a tenant

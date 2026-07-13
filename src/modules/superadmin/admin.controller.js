@@ -7,6 +7,12 @@ export const stats = asyncHandler(async (req, res) => {
   return ok(res, data);
 });
 
+export const listTenants = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 25, search = '' } = req.query;
+  const result = await adminService.listTenants({ page: Number(page), limit: Number(limit), search: String(search) });
+  return ok(res, result.data, result.meta);
+});
+
 export const suspend = asyncHandler(async (req, res) => {
   const tenant = await adminService.suspendTenant(req.params.id);
   return ok(res, tenant);

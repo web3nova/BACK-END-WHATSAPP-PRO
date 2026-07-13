@@ -28,6 +28,31 @@ export const getPlatformStats = async () => {
 };
 
 // ── Tenant management ──
+export const listTenants = async ({ page = 1, limit = 25, search = '' } = {}) => {
+  const take = Math.min(limit, 100);
+  const skip = Math.max(0, (page - 1) * take);
+  const where = search
+    ? { OR: [{ name: { contains: search, mode: 'insensitive' } }, { slug: { contains: search, mode: 'insensitive' } }, { domain: { contains: search, mode: 'insensitive' } }] }
+    : {};
+
+  const [total, tenants] = await Promise.all([
+    prisma.tenant.count({ where }),
+    prisma.tenant.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take,
+      select: {
+        id: true, name: true, slug: true, domain: true, status: true, createdAt: true,
+        subscription: { select: { status: true, plan: { select: { name: true } } } },
+        _count: { select: { users: true, orders: true } },
+      },
+    }),
+  ]);
+
+  return { data: tenants, meta: { total, page, limit: take } };
+};
+
 export const suspendTenant = async (id) => {
   const tenant = await prisma.tenant.findUnique({ where: { id } });
   if (!tenant) throw new NotFoundError('Tenant not found');
