@@ -26,8 +26,11 @@ async function getBusinessSettings(tenantId) {
     select: { theme: true },
   });
 
-  const paymentData = await getTenantPaymentConfig(tenantId);
-  const builder = withBuilderDefaults(website?.theme?.builder, business, paymentData);
+  const stored = website?.theme?.builder || {};
+  // Payment config fetch decrypts secrets — skip it when explicit payments exist.
+  const hasPayments = Array.isArray(stored.payments) && stored.payments.length > 0;
+  const paymentData = hasPayments ? {} : await getTenantPaymentConfig(tenantId);
+  const builder = withBuilderDefaults(stored, business, paymentData);
 
   return { business, deliveryOptions: builder.delivery, paymentOptions: builder.payments };
 }
