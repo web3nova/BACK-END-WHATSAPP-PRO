@@ -43,6 +43,7 @@ import demoChatRoutes from '../modules/chat/demo.routes.js';
 import { streamEvents } from '../modules/conversations/conversation.controller.js';
 import * as orderPublicController from '../modules/orders/order.public.controller.js';
 import customerAuthRoutes from '../modules/customer-auth/customer-auth.routes.js';
+import * as paymentController from '../modules/payments/payment.controller.js';
 import { customerAuthMiddleware } from '../middleware/customer-auth.middleware.js';
 import checkoutRoutes from '../modules/checkout/checkout.routes.js';
 
@@ -86,6 +87,11 @@ router.use('/customer-auth', customerAuthRoutes);
 
 // Checkout — uses customer JWT (middleware inside routes).
 router.use('/checkout', checkoutRoutes);
+
+// Payment gateway webhooks — signature verified inside the provider, no JWT.
+// (The /payments mount below sits behind authMiddleware, so gateways could
+// never reach it; this public registration wins because it responds first.)
+router.post('/payments/webhook/:provider?', paymentController.webhook);
 
 // Customer's own orders — requires customer JWT.
 router.get('/orders/my', customerAuthMiddleware, orderPublicController.getMyOrders);

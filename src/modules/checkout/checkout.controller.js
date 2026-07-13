@@ -1,8 +1,9 @@
 import { asyncHandler } from '../../common/utils/asyncHandler.js';
 import { ok, created } from '../../common/utils/apiResponse.js';
 import { BadRequestError } from '../../common/errors/index.js';
-import { prisma } from '../../config/prisma.js';
 import * as checkoutService from './checkout.service.js';
+import * as paymentService from '../payments/payment.service.js';
+import { logger } from '../../config/logger.js';
 import { checkoutInitSchema, paymentInitSchema, completeOrderSchema } from './checkout.validation.js';
 
 export const initializeCheckout = asyncHandler(async (req, res) => {
@@ -58,14 +59,14 @@ export const getPaymentProviders = asyncHandler(async (req, res) => {
 });
 
 export const paystackWebhook = asyncHandler(async (req, res) => {
+  // Ack immediately; Paystack retries on non-2xx.
   res.status(200).send('Webhook received');
-  const { event, data } = req.body;
-  if (event === 'charge.success' && data?.status === 'success') {
-    const reference = data.reference;
-    await prisma.payment.updateMany({
-      where: { reference },
-      data: { status: 'success', providerReference: data.id?.toString() || reference },
-    });
+
+  const signature = req.headers['x-paystack-signature'];
+  try {
+    await paymentService.handleWebhook('paystack', req.body, signature, req.rawBody);
+  } catch (err) {
+    logger.error({ err: err.message }, '[checkout] paystack webhook rejected');
   }
 });
 
