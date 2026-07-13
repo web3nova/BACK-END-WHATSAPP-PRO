@@ -348,12 +348,17 @@ export const reportPaymentReceipt = {
     required: ['summary'],
   },
   async handler({ orderId, summary }, ctx) {
-    const { notify } = await import('../../notifications/notification.service.js');
-    const { paymentReceiptEmail } = await import('../../../config/emailTemplates.js');
     const [customer, order] = await Promise.all([
       ctx.customerId ? prisma.customer.findUnique({ where: { id: ctx.customerId }, select: { name: true, phone: true } }) : null,
       orderId ? prisma.order.findFirst({ where: { id: orderId, tenantId: ctx.tenantId }, select: { id: true } }) : null,
     ]);
+    // orderId was given but doesn't belong to a real order — never let a
+    // fabricated/stale order reference reach the customer or the team.
+    if (orderId && !order) {
+      return { error: `No order found with id ${orderId}. Do not reference an order that doesn't exist — call create_order first if the customer hasn't confirmed one yet, or get_order_status to find the right id.` };
+    }
+    const { notify } = await import('../../notifications/notification.service.js');
+    const { paymentReceiptEmail } = await import('../../../config/emailTemplates.js');
     const customerName = customer?.name || customer?.phone;
     const orderRef = order?.id ? order.id.slice(0, 8).toUpperCase() : null;
     await notify(ctx.tenantId, {
