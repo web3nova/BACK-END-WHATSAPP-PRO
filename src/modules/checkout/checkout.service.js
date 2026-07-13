@@ -76,11 +76,38 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
     );
   }
 
-  const customer = await prisma.customer.upsert({
-    where: { tenantId_phone: { tenantId, phone: customerPhone } },
-    update: { name: customerName, meta: { email: customerEmail || null, address: customerAddress } },
-    create: { tenantId, phone: customerPhone, name: customerName, meta: { email: customerEmail || null, address: customerAddress } },
-  });
+  // Prefer the authenticated customer so orders appear in their "My Orders".
+  let customer = customerId
+    ? await prisma.customer.findFirst({ where: { id: customerId, tenantId } })
+    : null;
+
+  if (!customer) {
+    customer = await prisma.customer.findUnique({
+      where: { tenantId_phone: { tenantId, phone: customerPhone } },
+    });
+  }
+
+  if (customer) {
+    // Merge — never replace — meta: it also holds passwordHash/passkeys/googleId.
+    const meta = {
+      ...(customer.meta || {}),
+      email: customerEmail || customer.meta?.email || null,
+      address: customerAddress,
+    };
+    customer = await prisma.customer.update({
+      where: { id: customer.id },
+      data: { name: customer.name || customerName, meta },
+    });
+  } else {
+    customer = await prisma.customer.create({
+      data: {
+        tenantId,
+        phone: customerPhone,
+        name: customerName,
+        meta: { email: customerEmail || null, address: customerAddress },
+      },
+    });
+  }
 
   const order = await prisma.order.create({
     data: {
