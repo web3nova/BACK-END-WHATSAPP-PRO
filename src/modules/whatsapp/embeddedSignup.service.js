@@ -3,6 +3,7 @@ import { randomInt } from 'crypto';
 import { BadRequestError } from '../../common/errors/index.js';
 import { logger } from '../../config/logger.js';
 import { notify } from '../notifications/notification.service.js';
+import { encryptSecret } from '../../common/utils/encryption.js';
 
 const GRAPH_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v20.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
@@ -126,10 +127,12 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
   }
 
   // 6. Persist all identifiers — tenant can now send/receive WhatsApp messages
+  const encryptedAccessToken = encryptSecret(accessToken);
+  const encryptedPin = twoStepPin ? encryptSecret(twoStepPin) : null;
   await prisma.whatsappAccount.upsert({
     where: { tenantId },
-    update: { accessToken, wabaId, phoneNumberId, phoneNumber, ...(twoStepPin && { twoStepPin }), verified: true },
-    create: { tenantId, accessToken, wabaId, phoneNumberId, phoneNumber, ...(twoStepPin && { twoStepPin }), verified: true },
+    update: { accessToken: encryptedAccessToken, wabaId, phoneNumberId, phoneNumber, ...(encryptedPin && { twoStepPin: encryptedPin }), verified: true },
+    create: { tenantId, accessToken: encryptedAccessToken, wabaId, phoneNumberId, phoneNumber, ...(encryptedPin && { twoStepPin: encryptedPin }), verified: true },
   });
 
   notify(tenantId, {

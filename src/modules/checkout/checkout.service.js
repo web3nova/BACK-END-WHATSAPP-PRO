@@ -6,12 +6,10 @@ import { notify } from '../notifications/notification.service.js';
 import { sendMessage } from '../whatsapp/whatsapp.service.js';
 import { newOrderEmail } from '../../config/emailTemplates.js';
 import { priceItems } from './checkout.pricing.js';
+import { getDecryptedConfig } from '../payments/payment-config.service.js';
 
 async function getTenantPaymentConfig(tenantId) {
-  const config = await prisma.paymentConfig.findUnique({
-    where: { tenantId },
-    select: { data: true },
-  });
+  const config = await getDecryptedConfig(tenantId);
   return config?.data || {};
 }
 

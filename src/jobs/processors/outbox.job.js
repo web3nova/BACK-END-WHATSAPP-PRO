@@ -1,6 +1,7 @@
 import { prisma } from '../../config/prisma.js';
 import { storage } from '../../config/storage.js';
 import { logger } from '../../config/logger.js';
+import { decryptSecret } from '../../common/utils/encryption.js';
 
 export default async function processOutbox(job) {
     const { outboxId } = job.data;
@@ -14,7 +15,8 @@ export default async function processOutbox(job) {
 
     await prisma.outboxMessage.update({ where: { id: outboxId }, data: { attempts: outbox.attempts + 1, status: 'in_progress' } });
 
-    const account = await prisma.whatsappAccount.findUnique({ where: { tenantId: outbox.tenantId } });
+    const accountRow = await prisma.whatsappAccount.findUnique({ where: { tenantId: outbox.tenantId } });
+    const account = accountRow?.accessToken ? { ...accountRow, accessToken: decryptSecret(accountRow.accessToken) } : accountRow;
     if (!account || !account.accessToken || !account.phoneNumberId) {
         await prisma.outboxMessage.update({ where: { id: outboxId }, data: { status: 'failed', lastError: 'Missing whatsapp account config' } });
         logger.error({ outboxId, tenantId: outbox.tenantId }, '[outbox] missing WhatsApp account config');

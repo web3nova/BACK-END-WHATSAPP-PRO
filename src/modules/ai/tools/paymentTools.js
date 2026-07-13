@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { prisma } from '../../../config/prisma.js';
 import { config } from '../../../config/index.js';
+import { getDecryptedConfig } from '../../payments/payment-config.service.js';
 
 const PAYSTACK_BASE_URL = 'https://api.paystack.co';
 const BLOCKRADAR_BASE_URL = 'https://api.blockradar.co/v1';
@@ -15,8 +16,8 @@ export const getPaymentDetails = {
     properties: {},
   },
   async handler(_input, ctx) {
-    const config = await prisma.paymentConfig.findUnique({ where: { tenantId: ctx.tenantId } });
-    const data = config?.data;
+    const paymentConfig = await getDecryptedConfig(ctx.tenantId);
+    const data = paymentConfig?.data;
     if (!data) {
       return { configured: false, message: 'No payment method has been set up by the business yet. Ask the customer to hold on while a staff member shares payment details.' };
     }
@@ -82,7 +83,7 @@ export const createPaymentLink = {
 
     // Use the business's own Paystack key so funds go to their account;
     // fall back to the platform key if the tenant has not connected Paystack.
-    const cfg = await prisma.paymentConfig.findUnique({ where: { tenantId: ctx.tenantId } });
+    const cfg = await getDecryptedConfig(ctx.tenantId);
     const paystack = cfg?.data?.paystack;
     const secretKey = (paystack?.isActive && paystack.secretKey) || config.payment.secretKey;
     if (!secretKey) {
@@ -148,6 +149,116 @@ export const createPaymentLink = {
   },
 };
 
+async function getMonnifyToken(apiKey, secretKey, baseUrl) {
+  const credentials = Buffer.from(`${apiKey}:${secretKey}`).toString('base64');
+  const res = await fetch(`${baseUrl}/api/v1/auth/login`, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${credentials}`, 'Content-Type': 'application/json' },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!data.requestSuccessful) throw new Error(data.responseMessage || 'Monnify authentication failed');
+  return data.responseBody.accessToken;
+}
+
+// Tool: generate a real Monnify checkout link for an order, using the
+// business's own Monnify credentials so funds go to their account.
+export const createMonnifyPaymentLink = {
+  name: 'create_monnify_payment_link',
+  description:
+    'Generate an online payment (checkout) link via Monnify for an existing order. Call this after create_order when the business\'s preferred/active online provider is Monnify and the customer wants to pay online. Returns a URL to send to the customer.',
+  parameters: {
+    type: 'object',
+    properties: {
+      orderId: { type: 'string', description: 'The order id returned by create_order' },
+      email: { type: 'string', description: "Customer email if they provided one. Optional — a placeholder is used if omitted." },
+    },
+    required: ['orderId'],
+  },
+  async handler({ orderId, email }, ctx) {
+    const order = await prisma.order.findFirst({ where: { id: orderId, tenantId: ctx.tenantId } });
+    if (!order) return { error: 'Order not found.' };
+    if (['paid', 'fulfilled', 'cancelled'].includes(order.status)) {
+      return { error: `Order is already ${order.status}.` };
+    }
+
+    const cfg = await getDecryptedConfig(ctx.tenantId);
+    const monnify = cfg?.data?.monnify;
+    if (!monnify?.isActive || !monnify.apiKey || !monnify.secretKey || !monnify.contractCode) {
+      return { error: 'Monnify is not fully configured (missing API key, secret key, or contract code). Offer bank transfer instead (get_payment_details).' };
+    }
+
+    const customer = order.customerId
+      ? await prisma.customer.findUnique({ where: { id: order.customerId } })
+      : null;
+    const payerEmail = email || customer?.meta?.email
+      || `${(customer?.phone || 'customer').replace(/\D/g, '')}@customers.biziq.online`;
+
+    const baseUrl = process.env.MONNIFY_BASE_URL || 'https://api.monnify.com';
+    const reference = `pay_${crypto.randomBytes(12).toString('hex')}`;
+
+    const payment = await prisma.payment.create({
+      data: {
+        tenantId: ctx.tenantId,
+        orderId: order.id,
+        reference,
+        provider: 'monnify',
+        amountMinor: order.totalMinor,
+        currency: order.currency,
+        status: 'pending',
+        meta: { provider: 'monnify', orderId: order.id, createdBy: 'ai' },
+      },
+    });
+
+    try {
+      const token = await getMonnifyToken(monnify.apiKey, monnify.secretKey, baseUrl);
+      const response = await fetch(`${baseUrl}/api/v1/merchant/transactions/init-transaction`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: order.totalMinor / 100, // Monnify wants major units (naira), not kobo
+          customerName: customer?.name || 'Customer',
+          customerEmail: payerEmail,
+          paymentReference: reference,
+          paymentDescription: `Order payment`,
+          currencyCode: order.currency,
+          contractCode: monnify.contractCode,
+          redirectUrl: config.frontendUrl,
+          paymentMethods: ['CARD', 'ACCOUNT_TRANSFER'],
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!body.requestSuccessful) {
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: { status: 'failed', meta: { ...payment.meta, initializeError: body.responseMessage || 'init failed' } },
+        }).catch(() => {});
+        return { error: `Could not create payment link: ${body.responseMessage || 'provider error'}. Offer bank transfer instead (get_payment_details).` };
+      }
+
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          meta: { ...payment.meta, checkoutUrl: body.responseBody.checkoutUrl, initializedAt: new Date().toISOString() },
+        },
+      });
+
+      const amountMajor = (order.totalMinor / 100).toLocaleString();
+      return {
+        checkoutUrl: body.responseBody.checkoutUrl,
+        amount: `${order.currency} ${amountMajor}`,
+        reference,
+        instruction: 'Send the checkoutUrl to the customer so they can pay online. Tell them the amount.',
+      };
+    } catch (err) {
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: 'failed', meta: { ...payment.meta, initializeError: err.message } },
+      }).catch(() => {});
+      return { error: `Could not create payment link: ${err.message}. Offer bank transfer instead (get_payment_details).` };
+    }
+  },
+};
+
 // Tool: generate a unique, dedicated crypto deposit address for an order via
 // Blockradar. Each order gets its OWN address (never reuse one address across
 // orders/customers) so a deposit can be traced back to the right order.
@@ -169,7 +280,7 @@ export const createCryptoPaymentAddress = {
       return { error: `Order is already ${order.status}.` };
     }
 
-    const cfg = await prisma.paymentConfig.findUnique({ where: { tenantId: ctx.tenantId } });
+    const cfg = await getDecryptedConfig(ctx.tenantId);
     const blockradar = cfg?.data?.blockradar;
     if (!blockradar?.isActive || !blockradar.apiKey || !blockradar.walletId) {
       return { error: 'Crypto payment is not fully configured (missing API key or wallet ID). Offer bank transfer instead (get_payment_details).' };
@@ -252,6 +363,6 @@ export const reportPaymentReceipt = {
   },
 };
 
-export const paymentTools = [getPaymentDetails, createPaymentLink, createCryptoPaymentAddress, reportPaymentReceipt];
+export const paymentTools = [getPaymentDetails, createPaymentLink, createMonnifyPaymentLink, createCryptoPaymentAddress, reportPaymentReceipt];
 
 export default paymentTools;

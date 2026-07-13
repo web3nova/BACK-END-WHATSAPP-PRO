@@ -6,8 +6,16 @@ import { fetchAndStoreMedia } from './media.service.js';
 import processOutbox from '../../jobs/processors/outbox.job.js';
 import { parseMessage, isMediaMessage, extractMediaId } from './whatsapp.parser.js';
 import { notify } from '../notifications/notification.service.js';
+import { decryptSecret } from '../../common/utils/encryption.js';
 
 const GRAPH_BASE = `https://graph.facebook.com/${process.env.WHATSAPP_API_VERSION || 'v20.0'}`;
+
+// accessToken is stored encrypted (see embeddedSignup.service.js) — every read
+// site that needs to actually call the Meta Graph API must decrypt it first.
+function withDecryptedToken(account) {
+  if (!account?.accessToken) return account;
+  return { ...account, accessToken: decryptSecret(account.accessToken) };
+}
 
 /** Return the tenant's connected WhatsApp account (no access token). */
 export const getAccount = async (tenantId) => {
@@ -20,10 +28,10 @@ export const getAccount = async (tenantId) => {
 
 /** Return the tenant's connected WhatsApp account with live status from Meta. */
 export const getAccountWithStatus = async (tenantId) => {
-  const account = await prisma.whatsappAccount.findUnique({
+  const account = withDecryptedToken(await prisma.whatsappAccount.findUnique({
     where: { tenantId },
     select: { id: true, wabaId: true, phoneNumberId: true, phoneNumber: true, accessToken: true, verified: true },
-  });
+  }));
   if (!account) return null;
 
   let status = null;
@@ -56,10 +64,10 @@ export const disconnectAccount = async (tenantId) => {
 
 /** Fetch WhatsApp Business Profile from Meta for the tenant's phone number. */
 export const getBusinessProfile = async (tenantId) => {
-  const account = await prisma.whatsappAccount.findUnique({
+  const account = withDecryptedToken(await prisma.whatsappAccount.findUnique({
     where: { tenantId },
     select: { phoneNumberId: true, accessToken: true },
-  });
+  }));
   if (!account?.phoneNumberId || !account?.accessToken) return null;
 
   const res = await fetch(
@@ -73,10 +81,10 @@ export const getBusinessProfile = async (tenantId) => {
 
 /** Update WhatsApp Business Profile on Meta for the tenant's phone number. */
 export const updateBusinessProfile = async (tenantId, fields) => {
-  const account = await prisma.whatsappAccount.findUnique({
+  const account = withDecryptedToken(await prisma.whatsappAccount.findUnique({
     where: { tenantId },
     select: { phoneNumberId: true, accessToken: true },
-  });
+  }));
   if (!account?.phoneNumberId || !account?.accessToken) {
     const err = new Error('WhatsApp account not connected');
     err.statusCode = 400;
@@ -112,10 +120,10 @@ export const updateBusinessProfile = async (tenantId, fields) => {
 
 /** Upload a profile picture to Meta and update the WhatsApp Business Profile. */
 export const uploadProfilePicture = async (tenantId, fileBuffer, mimeType) => {
-  const account = await prisma.whatsappAccount.findUnique({
+  const account = withDecryptedToken(await prisma.whatsappAccount.findUnique({
     where: { tenantId },
     select: { phoneNumberId: true, accessToken: true },
-  });
+  }));
   if (!account?.phoneNumberId || !account?.accessToken) {
     const err = new Error('WhatsApp account not connected'); err.statusCode = 400; throw err;
   }
@@ -167,10 +175,10 @@ export const uploadProfilePicture = async (tenantId, fileBuffer, mimeType) => {
 
 /** Request a display name change for the WhatsApp phone number (Meta must approve). */
 export const requestDisplayNameChange = async (tenantId, displayName) => {
-  const account = await prisma.whatsappAccount.findUnique({
+  const account = withDecryptedToken(await prisma.whatsappAccount.findUnique({
     where: { tenantId },
     select: { phoneNumberId: true, accessToken: true },
-  });
+  }));
   if (!account?.phoneNumberId || !account?.accessToken) {
     const err = new Error('WhatsApp account not connected'); err.statusCode = 400; throw err;
   }
@@ -372,7 +380,7 @@ export const processIncoming = async (payload) => {
         try {
           const mediaId = extractMediaId(message);
           if (isMediaMessage(message.type) && mediaId) {
-            const account = await prisma.whatsappAccount.findFirst({ where: { phoneNumberId } });
+            const account = withDecryptedToken(await prisma.whatsappAccount.findFirst({ where: { phoneNumberId } }));
             if (account && account.accessToken) {
               const asset = await fetchAndStoreMedia({ tenantId: account.tenantId, mediaId, accessToken: account.accessToken });
               if (asset) mediaAssets.push(asset);

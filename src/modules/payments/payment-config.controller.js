@@ -5,7 +5,7 @@ import * as paymentConfigService from './payment-config.service.js';
 import * as bankService from './bank.service.js';
 
 export const getConfig = asyncHandler(async (req, res) => {
-  const data = await paymentConfigService.getConfig(getTenantId(req));
+  const data = await paymentConfigService.getMaskedConfig(getTenantId(req));
   return ok(res, data);
 });
 
