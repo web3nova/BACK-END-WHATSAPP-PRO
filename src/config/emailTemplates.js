@@ -1,7 +1,6 @@
 // Branded HTML email layout — table-based, inline CSS for max client
 // compatibility (Gmail/Outlook strip <style> blocks and don't render SVG).
 const BRAND = '#4166F5';
-const BRAND_DARK = '#2f4fd1';
 const INK = '#1e293b';
 const MUTED = '#64748b';
 const APP_URL = process.env.FRONTEND_URL || 'https://www.biziq.online';
@@ -9,15 +8,17 @@ const APP_URL = process.env.FRONTEND_URL || 'https://www.biziq.online';
 function layout({ preheader = '', heading, bodyHtml, ctaLabel, ctaUrl }) {
   return `<!doctype html>
 <html>
-  <body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <body style="margin:0;padding:0;background:#eef0f4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${preheader}</div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:32px 16px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef0f4;padding:40px 16px;">
       <tr><td align="center">
-        <table role="presentation" width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+        <table role="presentation" width="100%" style="max-width:520px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 4px 16px rgba(15,23,42,0.06);">
           <tr>
-            <td style="background:${BRAND};padding:28px 32px;">
-              <span style="font-size:20px;font-weight:800;color:#ffffff;letter-spacing:-0.02em;">BizIQ</span>
-              <span style="font-size:12px;color:#dbe3ff;margin-left:8px;">AI Sales Agent for WhatsApp</span>
+            <td style="background:${BRAND};height:4px;line-height:4px;font-size:1px;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td style="padding:28px 32px 20px;border-bottom:1px solid #f1f3f6;">
+              <img src="${APP_URL}/BizIq.png" width="130" alt="BizIQ" style="display:block;width:130px;max-width:130px;height:auto;border:0;" />
             </td>
           </tr>
           <tr>
@@ -29,14 +30,17 @@ function layout({ preheader = '', heading, bodyHtml, ctaLabel, ctaUrl }) {
           ${ctaUrl ? `
           <tr>
             <td style="padding:8px 32px 32px;">
-              <a href="${ctaUrl}" style="display:inline-block;background:${BRAND};color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;">${ctaLabel || 'Open Dashboard'}</a>
+              <a href="${ctaUrl}" style="display:inline-block;background:${BRAND};color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:13px 26px;border-radius:10px;box-shadow:0 2px 8px rgba(65,102,245,0.35);">${ctaLabel || 'Open Dashboard'}</a>
             </td>
           </tr>` : ''}
           <tr>
-            <td style="padding:20px 32px;border-top:1px solid #f0f1f3;">
-              <p style="margin:0;font-size:12px;color:${MUTED};">
+            <td style="padding:22px 32px 28px;border-top:1px solid #f1f3f6;">
+              <p style="margin:0 0 10px;font-size:12px;color:${MUTED};line-height:1.6;">
                 You're receiving this because your business is on BizIQ.
-                <br/>Questions? Just reply to this email.
+                <br/>Questions? Just reply to this email — a real person reads these.
+              </p>
+              <p style="margin:0;font-size:11px;color:#a3abba;">
+                BizIQ · Run Your Business Smarter · <a href="${APP_URL}" style="color:#a3abba;">biziq.online</a>
               </p>
             </td>
           </tr>
