@@ -54,7 +54,9 @@ export const googleCallback = asyncHandler(async (req, res) => {
     const parsed = state ? JSON.parse(state) : {};
     tenantId = parsed.tenantId || '';
     stateOrigin = parsed.origin || '';
-  } catch {}
+  } catch {
+    // malformed state param — fall through to defaults
+  }
 
   const allowedOrigins = config.auth.passkeyAllowedOrigins || [];
   const targetOrigin = allowedOrigins.includes(stateOrigin)
