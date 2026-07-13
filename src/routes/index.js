@@ -79,9 +79,6 @@ router.use('/billing', billingPublicRoutes);
 // Landing page demo chat — public, IP rate limited.
 router.use('/chat', demoChatRoutes);
 
-// Public guest checkout — no JWT required.
-router.post('/orders/public', orderPublicController.createPublicOrder);
-
 // Customer auth (storefront shoppers) — public signup/login.
 router.use('/customer-auth', customerAuthRoutes);
 
