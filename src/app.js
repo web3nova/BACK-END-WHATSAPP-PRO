@@ -21,15 +21,28 @@ export function createApp() {
   app.use(helmet({
   contentSecurityPolicy: false,
 }));
-  app.use(cors({
-  origin: [
+  const ALLOWED_ORIGINS = [
     config.frontendUrl,
     'http://localhost:4000',
     'http://localhost:5173',
+    'http://localhost:5174', // biziq-admin dev server
     'https://back-end-whatsapp-pro.onrender.com',
-  ],
-  credentials: true,
-}));
+    'https://biziq-admin.vercel.app',
+  ].filter(Boolean);
+
+  app.use(cors({
+    origin(origin, callback) {
+      // No Origin header (server-to-server, curl, webhooks) — allow.
+      if (!origin) return callback(null, true);
+      if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+      // Vercel preview deployments for our own projects, e.g.
+      // biziq-admin-git-feature-x-teamname.vercel.app
+      if (/^https:\/\/biziq-admin(-[a-z0-9-]+)?\.vercel\.app$/.test(origin)) return callback(null, true);
+      if (/^https:\/\/front-end-whatsapp-pro(-[a-z0-9-]+)?\.vercel\.app$/.test(origin)) return callback(null, true);
+      callback(new Error(`Not allowed by CORS: ${origin}`));
+    },
+    credentials: true,
+  }));
   app.use(compression());
   app.use(express.json({
     limit: '5mb',
