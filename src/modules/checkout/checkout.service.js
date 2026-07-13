@@ -59,7 +59,7 @@ export async function initializeCheckout({ tenantId, items, deliveryMethod }) {
   };
 }
 
-export async function placeOrder({ tenantId, customerId, customerName, customerPhone, customerEmail, customerAddress, items, totalMinor, currency, deliveryMethod, paymentMethod }) {
+export async function placeOrder({ tenantId, customerId, customerName, customerPhone, customerWhatsapp, customerEmail, customerAddress, customerState, customerCity, customerPostBox, customerLandmark, items, totalMinor, currency, deliveryMethod, paymentMethod }) {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: { id: true, name: true },
@@ -83,9 +83,15 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
       measurements: {
         deliveryMethod: deliveryMethod || null,
         paymentMethod,
-        customerAddress,
-        customerEmail: customerEmail || null,
         customerName,
+        customerPhone,
+        customerWhatsapp: customerWhatsapp || customerPhone,
+        customerEmail: customerEmail || null,
+        customerAddress,
+        customerState,
+        customerCity,
+        customerPostBox: customerPostBox || null,
+        customerLandmark: customerLandmark || null,
         source: 'storefront',
       },
     },
@@ -181,8 +187,16 @@ export async function getCustomerOrders(tenantId, customerId) {
     currency: o.currency,
     items: o.items,
     deliveryAddress: o.measurements?.customerAddress || null,
+    deliveryState: o.measurements?.customerState || null,
+    deliveryCity: o.measurements?.customerCity || null,
+    deliveryPostBox: o.measurements?.customerPostBox || null,
+    deliveryLandmark: o.measurements?.customerLandmark || null,
     paymentMethod: o.measurements?.paymentMethod || null,
     deliveryMethod: o.measurements?.deliveryMethod || null,
+    customerName: o.measurements?.customerName || null,
+    customerPhone: o.measurements?.customerPhone || null,
+    customerWhatsapp: o.measurements?.customerWhatsapp || null,
+    customerEmail: o.measurements?.customerEmail || null,
     createdAt: o.createdAt,
     updatedAt: o.updatedAt,
   }));

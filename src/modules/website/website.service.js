@@ -438,6 +438,12 @@ export async function getStorefront({ tenantId, slug, domain }) {
       logoUrl: business.logoStorageKey
         ? await getAssetUrl(business.logoStorageKey, business.logoUrl)
         : business.logoUrl,
+      deliveryStructure: business.deliveryStructure,
+      availableDays: business.availableDays,
+      openingTime: business.openingTime,
+      closingTime: business.closingTime,
+      phone: business.phone,
+      location: business.location,
     },
     settings: { ...(settings ?? defaultSettings), theme: mergedTheme },
     paymentConfig: storefrontPaymentConfig,
