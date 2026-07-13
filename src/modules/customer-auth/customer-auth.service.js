@@ -4,6 +4,8 @@ import { prisma } from '../../config/prisma.js';
 import { BadRequestError, NotFoundError, UnauthorizedError } from '../../common/errors/index.js';
 import { signAccessToken } from '../../common/utils/token.js';
 import { logger } from '../../config/logger.js';
+import { config } from '../../config/index.js';
+import { validateGoogleTokenPayload } from './google-token.js';
 
 const SALT_ROUNDS = 10;
 
@@ -124,6 +126,8 @@ export async function googleLogin({ tenantId, idToken }) {
     logger.error({ err: err.message }, '[googleLogin] token verification failed');
     throw new UnauthorizedError('Invalid Google token');
   }
+
+  validateGoogleTokenPayload(payload, config.auth.googleClientId);
 
   if (!payload.email) {
     throw new BadRequestError('Google account must have an email');
