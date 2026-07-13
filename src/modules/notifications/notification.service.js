@@ -111,7 +111,7 @@ export async function updateNotificationPrefs(tenantId, prefs) {
   return merged;
 }
 
-export async function notify(tenantId, { type, title, body, metadata, outbound = true, emailSubject } = {}) {
+export async function notify(tenantId, { type, title, body, metadata, outbound = true, emailSubject, emailHtml } = {}) {
   // 1. In-app (never throws)
   await createInApp(tenantId, { type, title, body, metadata });
 
@@ -144,7 +144,7 @@ export async function notify(tenantId, { type, title, body, metadata, outbound =
       to: ownerEmail,
       subject: emailSubject || title,
       text: body,
-      html: `<p>${body}</p>`,
+      html: emailHtml || `<p>${body}</p>`,
     });
   } catch (err) {
     logger.warn({ err: err?.message, tenantId, type }, '[notification] failed to enqueue outbound notification');

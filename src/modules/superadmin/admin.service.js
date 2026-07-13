@@ -1,6 +1,12 @@
+import crypto from 'crypto';
 import prisma from '../../config/prisma.js';
 import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
 import { hashPassword } from '../../common/utils/hash.js';
+import { sendMail } from '../../config/mailer.js';
+import { superAdminWelcomeEmail } from '../../config/emailTemplates.js';
+import { logger } from '../../config/logger.js';
+
+const ADMIN_URL = process.env.ADMIN_URL || 'https://admin.biziq.online';
 
 // ── Platform stats ──
 export const getPlatformStats = async () => {
@@ -163,16 +169,37 @@ export const listSuperAdmins = async () => {
   });
 };
 
-export const createSuperAdmin = async ({ email, password, name }) => {
+export const createSuperAdmin = async ({ email, name }, requestingUserId) => {
   const existing = await prisma.user.findFirst({ where: { email } });
   if (existing) throw new BadRequestError('Email already in use');
 
-  const passwordHash = await hashPassword(password);
+  // No one — including the creator — ever sets or sees this account's
+  // password. It starts unusable (random hash, never given to the user) and
+  // the new admin sets their own via the emailed set-password link.
+  const unusablePasswordHash = await hashPassword(crypto.randomBytes(32).toString('hex'));
 
-  return prisma.user.create({
-    data: { email, passwordHash, name, isSuperAdmin: true, tenantId: null },
+  const admin = await prisma.user.create({
+    data: { email, passwordHash: unusablePasswordHash, name, isSuperAdmin: true, tenantId: null },
     select: { id: true, email: true, name: true, createdAt: true },
   });
+
+  const token = crypto.randomBytes(32).toString('hex');
+  await prisma.passwordResetToken.create({
+    data: { userId: admin.id, token, expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7) }, // 7 days to accept
+  });
+  const setPasswordUrl = `${ADMIN_URL}/reset-password?token=${token}`;
+
+  const requester = requestingUserId
+    ? await prisma.user.findUnique({ where: { id: requestingUserId }, select: { name: true, email: true } })
+    : null;
+
+  sendMail({
+    to: email,
+    subject: 'You\'ve been added as a BizIQ super admin',
+    html: superAdminWelcomeEmail({ name, email, addedBy: requester?.name || requester?.email, setPasswordUrl }),
+  }).catch((err) => logger.error(`[admin] super admin welcome email failed for ${email}: ${err.message}`));
+
+  return admin;
 };
 
 export const deleteSuperAdmin = async (id, requestingUserId) => {

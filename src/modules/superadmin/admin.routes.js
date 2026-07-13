@@ -354,22 +354,19 @@ router.get('/admins', controller.listAdmins);
  *   post:
  *     summary: Create a new super admin
  *     tags: [SuperAdmin]
+ *     description: Creates the account with no usable password and emails the new admin a link to set their own — the creator never sets or sees a password.
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [email, password]
+ *             required: [email]
  *             properties:
  *               email:
  *                 type: string
  *                 format: email
  *                 example: admin@platform.com
- *               password:
- *                 type: string
- *                 minLength: 8
- *                 example: securepassword
  *               name:
  *                 type: string
  *                 example: Platform Admin
@@ -397,9 +394,8 @@ router.post(
   '/admins',
   validate(
     z.object({
-      email:    z.string().email(),
-      password: z.string().min(8),
-      name:     z.string().optional(),
+      email: z.string().email(),
+      name:  z.string().optional(),
     }),
     'body'
   ),

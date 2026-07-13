@@ -6,6 +6,7 @@ import { logger } from '../../config/logger.js';
 import * as paymentService from '../payments/payment.service.js';
 import { notify } from '../notifications/notification.service.js';
 import { sendMessage } from '../whatsapp/whatsapp.service.js';
+import { newOrderEmail } from '../../config/emailTemplates.js';
 
 export const createPublicOrder = asyncHandler(async (req, res) => {
   const {
@@ -66,6 +67,7 @@ export const createPublicOrder = asyncHandler(async (req, res) => {
     title: `New storefront order from ${customerName}`,
     body: `Order #${ref} for ${amountMajor} — ${paymentMethod || 'pending'} payment`,
     emailSubject: `New order #${ref} — ${amountMajor}`,
+    emailHtml: newOrderEmail({ customerName, amount: `${order.currency} ${amountMajor}`, orderRef: ref }),
     metadata: { orderId: order.id },
     outbound: true,
   }).catch(() => {});

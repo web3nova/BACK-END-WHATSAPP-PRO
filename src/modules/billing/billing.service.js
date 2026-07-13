@@ -5,6 +5,7 @@ import { config } from '../../config/index.js';
 import { sendMail } from '../../config/mailer.js';
 import { BadRequestError, NotFoundError } from '../../common/errors/index.js';
 import { notify } from '../notifications/notification.service.js';
+import { trialWelcomeEmail, paymentConfirmedEmail, trialEndingEmail, renewalReminderEmail } from '../../config/emailTemplates.js';
 
 const TRIAL_DAYS = 14;
 
@@ -50,11 +51,14 @@ export const startTrial = async (tenantId) => {
     create: { tenantId, status: 'TRIAL', trialStartsAt, trialEndsAt },
   });
 
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } });
+
   notify(tenantId, {
     type: 'trial_started',
     title: 'Your 14-day free trial has started',
     body: `You have full access until ${trialEndsAt.toDateString()}. Upgrade anytime to keep access.`,
-    emailSubject: 'Welcome — your free trial has started',
+    emailSubject: 'Welcome to BizIQ — your free trial has started 🎉',
+    emailHtml: trialWelcomeEmail({ businessName: tenant?.name, trialEndsAt }),
     outbound: true,
   }).catch(() => {});
 
@@ -204,12 +208,7 @@ export const handleWebhook = async (payload, signature) => {
     await sendMail({
       to:      ownerEmail,
       subject: 'Payment confirmed — your subscription is active',
-      html: `
-        <p>Hi ${tenant.name},</p>
-        <p>Your payment of <strong>₦${(payment.amountMinor / 100).toLocaleString()}</strong> was successful.</p>
-        <p>Your subscription is now <strong>active</strong>${renewsAt ? ` and renews on <strong>${renewsAt.toDateString()}</strong>` : ''}.</p>
-        <p>Thank you for choosing WhatsApp Pro!</p>
-      `,
+      html: paymentConfirmedEmail({ businessName: tenant.name, amountMinor: payment.amountMinor, renewsAt }),
     });
   }
 
@@ -264,20 +263,13 @@ export const sendTrialReminders = async () => {
     }),
   ]);
 
-  const upgradeUrl = `${config.frontendUrl}/billing`;
-
   for (const sub of day3Subs) {
     const email = sub.tenant.users[0]?.email;
     if (!email) continue;
     await sendMail({
       to:      email,
       subject: 'Your free trial ends in 2 days',
-      html: `
-        <p>Hi ${sub.tenant.name},</p>
-        <p>Your 5-day free trial ends in <strong>2 days</strong> on <strong>${sub.trialEndsAt.toDateString()}</strong>.</p>
-        <p>Upgrade now to keep access to all features.</p>
-        <a href="${upgradeUrl}" style="padding:10px 20px;background:#25D366;color:#fff;border-radius:6px;text-decoration:none;">Upgrade Now</a>
-      `,
+      html: trialEndingEmail({ businessName: sub.tenant.name, trialEndsAt: sub.trialEndsAt, isToday: false }),
     });
   }
 
@@ -287,11 +279,7 @@ export const sendTrialReminders = async () => {
     await sendMail({
       to:      email,
       subject: 'Your free trial ends today',
-      html: `
-        <p>Hi ${sub.tenant.name},</p>
-        <p>Your free trial ends <strong>today</strong>. Don't lose access — upgrade now to continue using WhatsApp Pro.</p>
-        <a href="${upgradeUrl}" style="padding:10px 20px;background:#25D366;color:#fff;border-radius:6px;text-decoration:none;">Upgrade Now</a>
-      `,
+      html: trialEndingEmail({ businessName: sub.tenant.name, trialEndsAt: sub.trialEndsAt, isToday: true }),
     });
   }
 
@@ -324,12 +312,7 @@ export const sendMonthlyBillingReminders = async () => {
     await sendMail({
       to:      email,
       subject: 'Your subscription renews in 3 days',
-      html: `
-        <p>Hi ${sub.tenant.name},</p>
-        <p>This is a reminder that your <strong>${sub.plan?.label || 'subscription'}</strong> renews on <strong>${sub.renewsAt.toDateString()}</strong> for <strong>${amount}</strong>.</p>
-        <p>Make sure your payment method is up to date.</p>
-        <a href="${config.frontendUrl}/billing" style="padding:10px 20px;background:#25D366;color:#fff;border-radius:6px;text-decoration:none;">Manage Billing</a>
-      `,
+      html: renewalReminderEmail({ businessName: sub.tenant.name, planLabel: sub.plan?.label, amount, renewsAt: sub.renewsAt }),
     });
   }
 

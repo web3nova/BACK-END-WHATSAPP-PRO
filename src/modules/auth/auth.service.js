@@ -16,6 +16,7 @@ import {
 import { sendMail } from '../../config/mailer.js';
 import { logger } from '../../config/logger.js';
 import { startTrial } from '../billing/billing.service.js';
+import { otpEmail, passwordResetEmail } from '../../config/emailTemplates.js';
 
 const INACTIVITY_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 const OTP_TTL_MINS = 10;
@@ -106,14 +107,7 @@ export const login = async ({ email, password }) => {
   sendMail({
     to: user.email,
     subject: 'Your BizIQ login code',
-    html: `
-      <div style="font-family:sans-serif;max-width:400px;margin:0 auto">
-        <h2 style="color:#1e293b">Your login code</h2>
-        <p style="color:#475569">Use this code to complete your sign-in. It expires in ${OTP_TTL_MINS} minutes.</p>
-        <div style="font-size:36px;font-weight:700;letter-spacing:8px;color:#4166F5;margin:24px 0">${code}</div>
-        <p style="color:#94a3b8;font-size:13px">If you didn't try to sign in, you can ignore this email.</p>
-      </div>
-    `,
+    html: otpEmail({ code, ttlMinutes: OTP_TTL_MINS }),
   }).catch((err) => logger.error(`[auth] OTP email failed for ${user.email}: ${err.message}`));
 
   return { requiresOtp: true, userId: user.id, email: user.email };
@@ -191,7 +185,17 @@ export const logout = async ({ refreshToken }) => {
   }
 };
 
-export const forgotPassword = async ({ email }) => {
+// Apps allowed to receive a user back after password reset. The main app and
+// the internal admin dashboard have separate frontends/domains — the reset
+// link must point at whichever one the request actually came from.
+const RESET_ORIGIN_ALLOWLIST = [
+  config.frontendUrl,
+  'https://biziq-admin.vercel.app',
+  'https://admin.biziq.online',
+  'http://localhost:5174',
+].filter(Boolean);
+
+export const forgotPassword = async ({ email, origin }) => {
   const user = await prisma.user.findFirst({ where: { email } });
   if (!user) return;
 
@@ -207,17 +211,13 @@ export const forgotPassword = async ({ email }) => {
     data: { userId: user.id, token, expiresAt },
   });
 
-  const resetUrl = `${config.frontendUrl}/reset-password?token=${token}`;
+  const base = origin && RESET_ORIGIN_ALLOWLIST.includes(origin) ? origin : config.frontendUrl;
+  const resetUrl = `${base}/reset-password?token=${token}`;
 
   sendMail({
     to:      email,
-    subject: 'Reset your password',
-    html: `
-      <p>You requested a password reset.</p>
-      <p>Click the link below to reset your password. This link expires in 1 hour.</p>
-      <a href="${resetUrl}">${resetUrl}</a>
-      <p>If you did not request this, please ignore this email.</p>
-    `,
+    subject: 'Reset your BizIQ password',
+    html: passwordResetEmail({ resetUrl }),
   }).catch((err) => logger.error(`[auth] Password reset email failed for ${email}: ${err.message}`));
 };
 
@@ -260,13 +260,7 @@ export const resendOtp = async ({ userId }) => {
   sendMail({
     to: user.email,
     subject: 'Your new BizIQ login code',
-    html: `
-      <div style="font-family:sans-serif;max-width:400px;margin:0 auto">
-        <h2 style="color:#1e293b">New login code</h2>
-        <p style="color:#475569">Here is your new sign-in code. It expires in ${OTP_TTL_MINS} minutes.</p>
-        <div style="font-size:36px;font-weight:700;letter-spacing:8px;color:#4166F5;margin:24px 0">${code}</div>
-      </div>
-    `,
+    html: otpEmail({ code, ttlMinutes: OTP_TTL_MINS, isResend: true }),
   }).catch((err) => logger.error(`[auth] Resend OTP email failed for ${user.email}: ${err.message}`));
 
   return { sent: true };

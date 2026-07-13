@@ -28,6 +28,9 @@ export const refreshSchema = z.object({
 
 export const forgotPasswordSchema = z.object({
   email: z.string().email(),
+  // Which app originated the request — reset link points back there.
+  // Validated server-side against an allow-list, never trusted as-is.
+  origin: z.string().url().optional(),
 });
 
 export const resetPasswordSchema = z.object({

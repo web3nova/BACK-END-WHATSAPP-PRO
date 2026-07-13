@@ -4,6 +4,7 @@ import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
 import * as paymentService from '../payments/payment.service.js';
 import { notify } from '../notifications/notification.service.js';
 import { sendMessage } from '../whatsapp/whatsapp.service.js';
+import { newOrderEmail } from '../../config/emailTemplates.js';
 
 async function getTenantPaymentConfig(tenantId) {
   const config = await prisma.paymentConfig.findUnique({
@@ -119,6 +120,7 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
     title: `New storefront order from ${customerName}`,
     body: `Order #${ref} for ${amountMajor} — ${paymentMethod || 'pending'} payment`,
     emailSubject: `New order #${ref} — ${amountMajor}`,
+    emailHtml: newOrderEmail({ customerName, amount: `${order.currency} ${amountMajor}`, orderRef: ref }),
     metadata: { orderId: order.id },
     outbound: true,
   }).catch(() => {});

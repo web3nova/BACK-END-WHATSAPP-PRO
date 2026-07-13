@@ -39,7 +39,7 @@ export const listAdmins = asyncHandler(async (req, res) => {
 });
 
 export const createAdmin = asyncHandler(async (req, res) => {
-  const admin = await adminService.createSuperAdmin(req.body);
+  const admin = await adminService.createSuperAdmin(req.body, req.user.id);
   return created(res, admin);
 });
 

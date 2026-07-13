@@ -4,6 +4,7 @@ import { notify } from '../notifications/notification.service.js';
 import { sendMessage } from '../whatsapp/whatsapp.service.js';
 import { pushEvent } from '../sse/sse.service.js';
 import { logger } from '../../config/logger.js';
+import { newOrderEmail } from '../../config/emailTemplates.js';
 
 const orderSelect = {
   id: true,
@@ -153,6 +154,7 @@ export const createOrder = async (tenantId, data, { notify: sendNotify = false }
       title: `New order from ${customerName}`,
       body: `Order ${amount ? `for ${amount} ` : ''}has been placed and is awaiting fulfillment.`,
       emailSubject: `New order received — ${amount || 'check your dashboard'}`,
+      emailHtml: newOrderEmail({ customerName, amount: amount || '—', orderRef: order.id.slice(0, 8).toUpperCase() }),
       metadata: { orderId: order.id, conversationId: order.conversationId ?? undefined },
       outbound: true,
     }).catch(() => {});
