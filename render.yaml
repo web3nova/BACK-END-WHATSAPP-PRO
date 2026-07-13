@@ -93,6 +93,15 @@ services:
         value: anthropic
       - key: AI_EMBEDDING_PROVIDER
         value: openai
+      # Customer auth (storefront shoppers)
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: RP_ID
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
 
   # ── Background Worker (BullMQ — aiReply, outbox, notifications) ──────────
   - type: worker
