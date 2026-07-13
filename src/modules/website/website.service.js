@@ -132,11 +132,20 @@ export async function setPublished(tenantId, slug, published) {
 
 export async function getSettings(tenantId) {
   const business = await requireBusiness(tenantId);
-  return prisma.websiteSettings.upsert({
+  const settings = await prisma.websiteSettings.upsert({
     where: { businessId: business.id },
     create: { businessId: business.id, ...defaultSettings },
     update: {},
   });
+  const paymentConfig = await prisma.paymentConfig.findUnique({
+    where: { tenantId },
+    select: { data: true },
+  });
+  const theme = settings.theme || {};
+  return {
+    ...settings,
+    theme: { ...theme, builder: withBuilderDefaults(theme.builder, business, paymentConfig?.data) },
+  };
 }
 
 // Stable app-hosted URL for a website image. Stored in builder JSON instead
