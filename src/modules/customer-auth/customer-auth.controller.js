@@ -1,4 +1,5 @@
 import { asyncHandler } from '../../common/utils/asyncHandler.js';
+import { config } from '../../config/index.js';
 import { ok, created } from '../../common/utils/apiResponse.js';
 import * as customerAuthService from './customer-auth.service.js';
 
@@ -48,7 +49,17 @@ export const passkeyLoginComplete = asyncHandler(async (req, res) => {
 export const googleCallback = asyncHandler(async (req, res) => {
   const { code, state } = req.query;
   let tenantId = '';
-  try { tenantId = state ? JSON.parse(state).tenantId : ''; } catch {}
+  let stateOrigin = '';
+  try {
+    const parsed = state ? JSON.parse(state) : {};
+    tenantId = parsed.tenantId || '';
+    stateOrigin = parsed.origin || '';
+  } catch {}
+
+  const allowedOrigins = config.auth.passkeyAllowedOrigins || [];
+  const targetOrigin = allowedOrigins.includes(stateOrigin)
+    ? stateOrigin
+    : (allowedOrigins[0] || '');
 
   let result = {};
   if (code) {
@@ -77,9 +88,13 @@ export const googleCallback = asyncHandler(async (req, res) => {
   }
 
   res.setHeader('Content-Type', 'text/html');
+  if (!targetOrigin) {
+    res.send('<p>Authentication complete, but no allowed origin is configured. Set ALLOWED_ORIGINS.</p>');
+    return;
+  }
   res.send(`<script>
     if (window.opener) {
-      window.opener.postMessage(${JSON.stringify(result)}, '*');
+      window.opener.postMessage(${JSON.stringify(result)}, ${JSON.stringify(targetOrigin)});
       window.close();
     } else {
       document.write('Authentication complete. You may close this window.');
