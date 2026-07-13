@@ -1,0 +1,189 @@
+import { prisma } from '../../config/prisma.js';
+import { logger } from '../../config/logger.js';
+import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
+import * as paymentService from '../payments/payment.service.js';
+import { notify } from '../notifications/notification.service.js';
+import { sendMessage } from '../whatsapp/whatsapp.service.js';
+
+async function getTenantPaymentConfig(tenantId) {
+  const config = await prisma.paymentConfig.findUnique({
+    where: { tenantId },
+    select: { data: true },
+  });
+  return config?.data || {};
+}
+
+async function getBusinessSettings(tenantId) {
+  const business = await prisma.business.findUnique({
+    where: { tenantId },
+    select: { id: true, displayName: true, phone: true, email: true },
+  });
+  if (!business) throw new NotFoundError('Business not found');
+
+  const website = await prisma.websiteSettings.findUnique({
+    where: { businessId: business.id },
+    select: { theme: true },
+  });
+
+  const builder = website?.theme?.builder || {};
+  const deliveryOptions = Array.isArray(builder.delivery) ? builder.delivery : [];
+  const paymentOptions = Array.isArray(builder.payments) ? builder.payments : [];
+
+  return { business, deliveryOptions, paymentOptions };
+}
+
+export async function initializeCheckout({ tenantId, items, deliveryMethod }) {
+  const { business, deliveryOptions, paymentOptions } = await getBusinessSettings(tenantId);
+
+  const subtotal = items.reduce((sum, item) => sum + (item.priceMinor || 0) * item.quantity, 0);
+
+  return {
+    business: {
+      id: business.id,
+      name: business.displayName,
+      phone: business.phone,
+      email: business.email,
+    },
+    delivery: {
+      options: deliveryOptions,
+      selectedMethod: deliveryMethod || (deliveryOptions[0] || null),
+    },
+    payment: {
+      availableMethods: paymentOptions,
+    },
+    pricing: {
+      subtotal,
+      total: subtotal,
+      currency: 'NGN',
+    },
+  };
+}
+
+export async function placeOrder({ tenantId, customerId, customerName, customerPhone, customerEmail, customerAddress, items, totalMinor, currency, deliveryMethod, paymentMethod }) {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { id: true, name: true },
+  });
+  if (!tenant) throw new NotFoundError('Tenant not found');
+
+  const customer = await prisma.customer.upsert({
+    where: { tenantId_phone: { tenantId, phone: customerPhone } },
+    update: { name: customerName, meta: { email: customerEmail || null, address: customerAddress } },
+    create: { tenantId, phone: customerPhone, name: customerName, meta: { email: customerEmail || null, address: customerAddress } },
+  });
+
+  const order = await prisma.order.create({
+    data: {
+      tenantId,
+      customerId: customer.id,
+      status: paymentMethod === 'cash' ? 'confirmed' : 'pending',
+      totalMinor,
+      currency: currency || 'NGN',
+      items,
+      measurements: {
+        deliveryMethod: deliveryMethod || null,
+        paymentMethod,
+        customerAddress,
+        customerEmail: customerEmail || null,
+        customerName,
+        source: 'storefront',
+      },
+    },
+    select: {
+      id: true, tenantId: true, customerId: true, status: true,
+      totalMinor: true, currency: true, items: true, measurements: true, createdAt: true,
+    },
+  });
+
+  const ref = order.id.slice(0, 8).toUpperCase();
+  const amountMajor = (order.totalMinor / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 });
+  const itemLines = (order.items || []).map(it => `• ${it.name}${it.quantity ? ` x${it.quantity}` : ''}`);
+
+  sendMessage(tenantId, customerPhone, [
+    `🛒 *Order #${ref}*`,
+    ...itemLines,
+    `Total: *${order.currency} ${amountMajor}*`,
+    `Status: ${order.status}`,
+    '',
+    'We will keep you updated on your order.',
+  ].join('\n')).catch(() => {});
+
+  notify(tenantId, {
+    type: 'new_order',
+    title: `New storefront order from ${customerName}`,
+    body: `Order #${ref} for ${amountMajor} — ${paymentMethod || 'pending'} payment`,
+    emailSubject: `New order #${ref} — ${amountMajor}`,
+    metadata: { orderId: order.id },
+    outbound: true,
+  }).catch(() => {});
+
+  let payment = null;
+  let bankDetails = null;
+
+  if (paymentMethod === 'paystack' || paymentMethod === 'card') {
+    try {
+      const providerName = paymentMethod === 'card' ? 'paystack' : paymentMethod;
+      const initResult = await paymentService.initializePayment(
+        tenantId, order.id,
+        customerEmail || `${customerPhone.replace(/[^0-9]/g, '')}@customer.store`,
+        providerName,
+      );
+      payment = {
+        provider: initResult.provider,
+        reference: initResult.reference,
+        checkoutUrl: initResult.checkoutUrl,
+        authorization_url: initResult.authorization_url,
+        access_code: initResult.accessCode,
+      };
+    } catch (err) {
+      logger.error({ err: err.message, orderId: order.id }, '[checkout] payment init failed');
+    }
+  }
+
+  if (paymentMethod === 'bank') {
+    const paymentConfig = await getTenantPaymentConfig(tenantId);
+    if (paymentConfig?.manual?.bankAccount) {
+      bankDetails = paymentConfig.manual.bankAccount;
+    }
+  }
+
+  return {
+    order: {
+      id: order.id,
+      status: order.status,
+      totalMinor: order.totalMinor,
+      currency: order.currency,
+      items: order.items,
+      reference: ref,
+      createdAt: order.createdAt,
+    },
+    payment,
+    bankDetails,
+  };
+}
+
+const orderSelect = {
+  id: true, status: true, totalMinor: true, currency: true, items: true, measurements: true,
+  createdAt: true, updatedAt: true,
+};
+
+export async function getCustomerOrders(tenantId, customerId) {
+  const orders = await prisma.order.findMany({
+    where: { customerId, tenantId },
+    orderBy: { createdAt: 'desc' },
+    select: orderSelect,
+  });
+  return orders.map(o => ({
+    id: o.id,
+    reference: o.id.slice(0, 8).toUpperCase(),
+    status: o.status,
+    totalMinor: o.totalMinor,
+    currency: o.currency,
+    items: o.items,
+    deliveryAddress: o.measurements?.customerAddress || null,
+    paymentMethod: o.measurements?.paymentMethod || null,
+    deliveryMethod: o.measurements?.deliveryMethod || null,
+    createdAt: o.createdAt,
+    updatedAt: o.updatedAt,
+  }));
+}

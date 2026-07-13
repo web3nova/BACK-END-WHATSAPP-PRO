@@ -44,6 +44,7 @@ import { streamEvents } from '../modules/conversations/conversation.controller.j
 import * as orderPublicController from '../modules/orders/order.public.controller.js';
 import customerAuthRoutes from '../modules/customer-auth/customer-auth.routes.js';
 import { customerAuthMiddleware } from '../middleware/customer-auth.middleware.js';
+import checkoutRoutes from '../modules/checkout/checkout.routes.js';
 
 const router = Router();
 
@@ -82,6 +83,9 @@ router.post('/orders/public', orderPublicController.createPublicOrder);
 
 // Customer auth (storefront shoppers) — public signup/login.
 router.use('/customer-auth', customerAuthRoutes);
+
+// Checkout — uses customer JWT (middleware inside routes).
+router.use('/checkout', checkoutRoutes);
 
 // Customer's own orders — requires customer JWT.
 router.get('/orders/my', customerAuthMiddleware, orderPublicController.getMyOrders);
