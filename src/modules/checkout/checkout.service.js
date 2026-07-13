@@ -5,6 +5,7 @@ import * as paymentService from '../payments/payment.service.js';
 import { notify } from '../notifications/notification.service.js';
 import { sendMessage } from '../whatsapp/whatsapp.service.js';
 import { newOrderEmail } from '../../config/emailTemplates.js';
+import { priceItems } from './checkout.pricing.js';
 
 async function getTenantPaymentConfig(tenantId) {
   const config = await prisma.paymentConfig.findUnique({
@@ -36,7 +37,7 @@ async function getBusinessSettings(tenantId) {
 export async function initializeCheckout({ tenantId, items, deliveryMethod }) {
   const { business, deliveryOptions, paymentOptions } = await getBusinessSettings(tenantId);
 
-  const subtotal = items.reduce((sum, item) => sum + (item.priceMinor || 0) * item.quantity, 0);
+  const { totalMinor: subtotal } = await priceItems(tenantId, items);
 
   return {
     business: {
@@ -67,6 +68,14 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
   });
   if (!tenant) throw new NotFoundError('Tenant not found');
 
+  const priced = await priceItems(tenantId, items);
+  if (totalMinor && totalMinor !== priced.totalMinor) {
+    logger.warn(
+      { tenantId, clientTotal: totalMinor, serverTotal: priced.totalMinor },
+      '[checkout] client total mismatch — using server-computed total',
+    );
+  }
+
   const customer = await prisma.customer.upsert({
     where: { tenantId_phone: { tenantId, phone: customerPhone } },
     update: { name: customerName, meta: { email: customerEmail || null, address: customerAddress } },
@@ -78,9 +87,9 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
       tenantId,
       customerId: customer.id,
       status: paymentMethod === 'cash' ? 'confirmed' : 'pending',
-      totalMinor,
+      totalMinor: priced.totalMinor,
       currency: currency || 'NGN',
-      items,
+      items: priced.items,
       measurements: {
         deliveryMethod: deliveryMethod || null,
         paymentMethod,
