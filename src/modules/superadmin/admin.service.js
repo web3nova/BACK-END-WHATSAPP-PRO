@@ -53,6 +53,21 @@ export const listTenants = async ({ page = 1, limit = 25, search = '' } = {}) =>
   return { data: tenants, meta: { total, page, limit: take } };
 };
 
+export const getTenantDetail = async (id) => {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id },
+    select: {
+      id: true, name: true, slug: true, domain: true, status: true, createdAt: true,
+      subscription: {
+        select: { id: true, status: true, planId: true, renewsAt: true, trialEndsAt: true, plan: { select: { id: true, name: true, label: true } } },
+      },
+      _count: { select: { users: true, orders: true, customers: true } },
+    },
+  });
+  if (!tenant) throw new NotFoundError('Tenant not found');
+  return tenant;
+};
+
 export const suspendTenant = async (id) => {
   const tenant = await prisma.tenant.findUnique({ where: { id } });
   if (!tenant) throw new NotFoundError('Tenant not found');
@@ -192,8 +207,21 @@ export const setTenantPlan = async (tenantId, { planId, status, renewsAt }) => {
   });
 };
 
+export const listTenantRoles = async (tenantId) => {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant) throw new NotFoundError('Tenant not found');
+  // Roles are either tenant-specific or global defaults (tenantId: null)
+  return prisma.role.findMany({
+    where: { OR: [{ tenantId }, { tenantId: null }] },
+    orderBy: { name: 'asc' },
+  });
+};
+
 export default {
   getPlatformStats,
+  listTenants,
+  getTenantDetail,
+  listTenantRoles,
   suspendTenant,
   activateTenant,
   listTenantUsers,

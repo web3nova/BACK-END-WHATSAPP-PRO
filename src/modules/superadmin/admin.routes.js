@@ -64,6 +64,42 @@ router.get('/tenants', controller.listTenants);
 
 /**
  * @openapi
+ * /admin/tenants/{id}:
+ *   get:
+ *     summary: Get full detail for a single tenant (plan, counts)
+ *     tags: [SuperAdmin]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Tenant detail }
+ *       403: { description: Super admin only }
+ *       404: { description: Tenant not found }
+ */
+router.get('/tenants/:id', controller.getTenant);
+
+/**
+ * @openapi
+ * /admin/tenants/{tenantId}/roles:
+ *   get:
+ *     summary: List roles available to a tenant (tenant-specific + global defaults)
+ *     tags: [SuperAdmin]
+ *     parameters:
+ *       - in: path
+ *         name: tenantId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: List of roles }
+ *       403: { description: Super admin only }
+ *       404: { description: Tenant not found }
+ */
+router.get('/tenants/:tenantId/roles', controller.listTenantRoles);
+
+/**
+ * @openapi
  * /admin/tenants/{id}/suspend:
  *   patch:
  *     summary: Suspend a tenant

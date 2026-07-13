@@ -13,6 +13,16 @@ export const listTenants = asyncHandler(async (req, res) => {
   return ok(res, result.data, result.meta);
 });
 
+export const getTenant = asyncHandler(async (req, res) => {
+  const tenant = await adminService.getTenantDetail(req.params.id);
+  return ok(res, tenant);
+});
+
+export const listTenantRoles = asyncHandler(async (req, res) => {
+  const roles = await adminService.listTenantRoles(req.params.tenantId);
+  return ok(res, roles);
+});
+
 export const suspend = asyncHandler(async (req, res) => {
   const tenant = await adminService.suspendTenant(req.params.id);
   return ok(res, tenant);
