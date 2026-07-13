@@ -33,7 +33,17 @@ export async function updateProfile(tenantId, data) {
   const existing = await prisma.business.findUnique({ where: { tenantId } });
   if (!existing)
     throw new NotFoundError('Business profile not found. Create one first with POST /business.');
-  const business = await prisma.business.update({ where: { tenantId }, data });
+
+  // A logoUrl set here points at an asset outside the /business/logo
+  // storage-key flow (e.g. picked from the media gallery or pasted).
+  // Clear the old storageKey so withFreshLogoUrl doesn't regenerate a
+  // signed URL to the previous upload and silently override this one.
+  const payload = { ...data };
+  if (payload.logoUrl !== undefined) {
+    payload.logoStorageKey = null;
+  }
+
+  const business = await prisma.business.update({ where: { tenantId }, data: payload });
   return withFreshLogoUrl(business);
 }
 
