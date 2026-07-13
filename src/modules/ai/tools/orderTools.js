@@ -31,6 +31,22 @@ export const createQuote = {
   },
   async handler({ items, currency = 'NGN', details = {} }, ctx) {
     const amountMinor = sumItems(items);
+
+    // Same webhook-redelivery duplicate risk as create_order — see comment there.
+    if (ctx.conversationId) {
+      const recent = await prisma.quote.findFirst({
+        where: {
+          conversationId: ctx.conversationId,
+          amountMinor,
+          createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (recent) {
+        return { quoteId: recent.id, amountMinor: recent.amountMinor, currency: recent.currency, status: recent.status, deduplicated: true };
+      }
+    }
+
     const quote = await prisma.quote.create({
       data: {
         tenantId: ctx.tenantId,
@@ -72,6 +88,27 @@ export const createOrder = {
   },
   async handler({ items, measurements = {}, currency = 'NGN' }, ctx) {
     const totalMinor = sumItems(items);
+
+    // Idempotency guard: WhatsApp redelivers webhooks it doesn't get a fast
+    // 200 for, which can spin up a second AI turn for the same customer
+    // confirmation before the first has finished. Without this, that
+    // produces two identical orders a few seconds apart. If an order for
+    // this conversation with the same total was just created, return it
+    // instead of creating a duplicate.
+    if (ctx.conversationId) {
+      const recent = await prisma.order.findFirst({
+        where: {
+          conversationId: ctx.conversationId,
+          totalMinor,
+          createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (recent) {
+        return { orderId: recent.id, totalMinor: recent.totalMinor, currency: recent.currency, status: recent.status, deduplicated: true };
+      }
+    }
+
     const order = await prisma.order.create({
       data: {
         tenantId: ctx.tenantId,

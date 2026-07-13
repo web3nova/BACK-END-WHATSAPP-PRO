@@ -459,11 +459,27 @@ export async function getStorefront({ tenantId, slug, domain }) {
   };
 }
 
+// Own-platform hosts — when the referrer is the BizIQ dashboard itself (the
+// business previewing their own storefront, or clicking "View Site"), that's
+// not a real customer visit and must not be counted, or every owner preview
+// click permanently inflates "Referral" traffic.
+const PLATFORM_HOSTS = ['biziq.online', 'www.biziq.online'];
+function isPlatformOrigin(referrerUrl) {
+  try {
+    const host = new URL(referrerUrl).hostname.toLowerCase();
+    return PLATFORM_HOSTS.includes(host) || host.endsWith('.vercel.app') || host === 'localhost';
+  } catch {
+    return false;
+  }
+}
+
 // Classify a storefront visit into one of the 4 buckets the Analytics page
 // shows, from the Referer header — no cookies/fingerprinting, just an
 // aggregate count. Caller (the controller) never awaits this — a logging
 // failure must never affect or slow down the actual storefront response.
 export async function recordVisit({ tenantId, referrer, host }) {
+  if (referrer && isPlatformOrigin(referrer)) return; // owner previewing their own storefront
+
   let source = 'direct';
   if (referrer) {
     const ref = referrer.toLowerCase();
