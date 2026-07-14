@@ -79,13 +79,13 @@ export async function validateCoupon({ tenantId, code, items }) {
   return { valid: true, discountMinor, code: coupon.code };
 }
 
-export async function initializeCheckout({ tenantId, items, deliveryMethod, couponCode }) {
+export async function initializeCheckout({ tenantId, items, deliveryMethod, couponCode, customerState }) {
   const { business, deliveryOptions, paymentOptions, deliveryFees } = await getBusinessSettings(tenantId);
 
   const { totalMinor: subtotal } = await priceItems(tenantId, items);
 
   const selectedMethod = deliveryMethod || (deliveryOptions[0] || null);
-  const deliveryFee = resolveDeliveryFee(deliveryFees, selectedMethod);
+  const deliveryFee = resolveDeliveryFee(deliveryFees, selectedMethod, customerState);
 
   // Preview endpoint — an invalid/unknown coupon code is silently ignored
   // (no discount applied) rather than rejecting the checkout preview.
@@ -103,7 +103,7 @@ export async function initializeCheckout({ tenantId, items, deliveryMethod, coup
       email: business.email,
     },
     delivery: {
-      options: deliveryOptions.map(m => ({ method: m, feeMinor: resolveDeliveryFee(deliveryFees, m) })),
+      options: deliveryOptions.map(m => ({ method: m, feeMinor: resolveDeliveryFee(deliveryFees, m, customerState) })),
       selectedMethod,
     },
     payment: {
@@ -131,7 +131,7 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
   if (deliveryMethod && !deliveryOptions.includes(deliveryMethod)) {
     throw new BadRequestError('Invalid delivery method');
   }
-  const deliveryFeeMinor = resolveDeliveryFee(deliveryFees, deliveryMethod);
+  const deliveryFeeMinor = resolveDeliveryFee(deliveryFees, deliveryMethod, customerState);
 
   let coupon = null;
   let discountMinor = 0;

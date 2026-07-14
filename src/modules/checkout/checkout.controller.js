@@ -7,10 +7,10 @@ import { logger } from '../../config/logger.js';
 import { checkoutInitSchema, paymentInitSchema, completeOrderSchema, validateCouponSchema, cartPingSchema } from './checkout.validation.js';
 
 export const initializeCheckout = asyncHandler(async (req, res) => {
-  const { items, deliveryMethod, paymentMethod, customerName, customerPhone, customerEmail, customerAddress, tenantId, couponCode } = checkoutInitSchema.parse(req.body);
+  const { items, deliveryMethod, paymentMethod, customerName, customerPhone, customerEmail, customerAddress, customerState, tenantId, couponCode } = checkoutInitSchema.parse(req.body);
 
   const checkout = await checkoutService.initializeCheckout({
-    tenantId, items, deliveryMethod, couponCode,
+    tenantId, items, deliveryMethod, couponCode, customerState,
   });
 
   created(res, checkout);
