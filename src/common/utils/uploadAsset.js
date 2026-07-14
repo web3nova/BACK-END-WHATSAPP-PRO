@@ -81,4 +81,15 @@ export async function getAssetUrl(storageKey, fallbackUrl) {
   }
 }
 
+// A stable, never-expiring URL that redirects to a freshly-signed one on
+// every hit (see the matching app.js `/assets/<prefix>/:path(*)` route) —
+// use this instead of getAssetUrl() directly anywhere the URL might outlive
+// a single request/response cycle (an emailed link, a client-side PDF
+// generated well after the page loaded, cached API responses). getAssetUrl's
+// raw signed URL expires (~1hr from when it was generated); this doesn't.
+export function proxyAssetUrl(prefix, storageKey) {
+  if (!storageKey) return null;
+  return `${config.appUrl}/assets/${prefix}/${storageKey}`;
+}
+
 export default uploadAsset;

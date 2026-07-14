@@ -1,13 +1,18 @@
 import { prisma } from '../../config/prisma.js';
 import { NotFoundError } from '../../common/errors/index.js';
-import { getAssetUrl, uploadAsset } from '../../common/utils/uploadAsset.js';
+import { uploadAsset, proxyAssetUrl } from '../../common/utils/uploadAsset.js';
 import { BUSINESS_CATEGORIES } from '../../common/constants/businessProfile.js';
 
+// A raw signed URL (getAssetUrl) expires (~1hr) — fine for something
+// rendered immediately, but the same logoUrl also ends up in places that
+// outlive a single request (team-invite emails, a client-side PDF generated
+// after the dashboard's been open a while). proxyAssetUrl never goes stale
+// itself, so use it everywhere the logo is exposed.
 async function withFreshLogoUrl(business) {
   if (!business?.logoStorageKey) return business;
   return {
     ...business,
-    logoUrl: await getAssetUrl(business.logoStorageKey, business.logoUrl),
+    logoUrl: proxyAssetUrl('business-logos', business.logoStorageKey),
   };
 }
 

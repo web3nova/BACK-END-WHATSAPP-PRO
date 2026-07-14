@@ -5,15 +5,16 @@ import { hashPassword } from '../../common/utils/hash.js';
 import { sendMail } from '../../config/mailer.js';
 import { superAdminWelcomeEmail } from '../../config/emailTemplates.js';
 import { logger } from '../../config/logger.js';
-import { getAssetUrl } from '../../common/utils/uploadAsset.js';
+import { proxyAssetUrl } from '../../common/utils/uploadAsset.js';
 
-// Resolves a business logo to a fresh URL (signed URLs expire) — mirrors
-// business.service.js's withFreshLogoUrl, applied to the tenant.business relation.
-async function withLogoUrl(tenant) {
+// Resolves a business logo to a stable URL (raw signed URLs expire, ~1hr) —
+// mirrors business.service.js's withFreshLogoUrl, applied to the
+// tenant.business relation.
+function withLogoUrl(tenant) {
   if (!tenant) return tenant;
   const { business, ...rest } = tenant;
-  if (!business) return { ...rest, logoUrl: null };
-  return { ...rest, logoUrl: await getAssetUrl(business.logoStorageKey, business.logoUrl) };
+  if (!business?.logoStorageKey) return { ...rest, logoUrl: business?.logoUrl || null };
+  return { ...rest, logoUrl: proxyAssetUrl('business-logos', business.logoStorageKey) };
 }
 
 const ADMIN_URL = process.env.ADMIN_URL || 'https://admin.biziq.online';

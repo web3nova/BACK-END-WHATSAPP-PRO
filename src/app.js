@@ -70,6 +70,20 @@ export function createApp() {
     res.set('Cache-Control', 'public, max-age=1800');
     return res.redirect(302, url);
   }));
+  // Business logos — same proxy pattern as product images. Places that embed
+  // a logo somewhere that outlives a single request (an emailed invite, a
+  // client-side PDF generated after the page has been open a while) were
+  // capturing a directly-signed URL that expires (~1hr); this endpoint never
+  // goes stale itself, it just redirects to a fresh signed URL on every hit.
+  app.get('/assets/business-logos/:path(*)', asyncHandler(async (req, res) => {
+    const path = req.params.path || '';
+    if (!path || path.includes('..')) {
+      throw new BadRequestError('Invalid asset key.');
+    }
+    const url = await getAssetUrl(path);
+    res.set('Cache-Control', 'public, max-age=1800');
+    return res.redirect(302, url);
+  }));
 
   // Swagger UI
   app.use(

@@ -4,6 +4,7 @@ import { prisma } from '../../config/prisma.js';
 import { sendMail } from '../../config/mailer.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../config/logger.js';
+import { proxyAssetUrl } from '../../common/utils/uploadAsset.js';
 
 const INVITE_TTL_HOURS = 48;
 
@@ -20,11 +21,19 @@ const ROLE_DESCRIPTIONS = {
 async function getBusinessInfo(tenantId) {
   const [tenant, business] = await Promise.all([
     prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
-    prisma.business.findUnique({ where: { tenantId }, select: { displayName: true, logoUrl: true, category: true, location: true } }).catch(() => null),
+    prisma.business.findUnique({ where: { tenantId }, select: { displayName: true, logoUrl: true, logoStorageKey: true, category: true, location: true } }).catch(() => null),
   ]);
+  // business.logoUrl is a presigned URL captured at upload time and expires
+  // (~1hr) — same class of bug as product images earlier today. proxyAssetUrl
+  // never goes stale itself (redirects to a fresh sign on every hit), unlike
+  // trusting the stored value directly, so an invite email sent any time
+  // after upload doesn't show a broken image.
+  const logoUrl = business?.logoStorageKey
+    ? proxyAssetUrl('business-logos', business.logoStorageKey)
+    : business?.logoUrl || null;
   return {
     businessName: business?.displayName || tenant?.name || 'A business',
-    logoUrl: business?.logoUrl || null,
+    logoUrl,
     category: business?.category || null,
     location: business?.location || null,
   };

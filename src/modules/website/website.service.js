@@ -1,7 +1,7 @@
 import { prisma } from '../../config/prisma.js';
 import { NotFoundError, BadRequestError, ForbiddenError } from '../../common/errors/index.js';
 import { paginate, paginatedResponse } from '../../common/utils/pagination.js';
-import { getAssetUrl, uploadAsset, deleteAsset } from '../../common/utils/uploadAsset.js';
+import { getAssetUrl, uploadAsset, deleteAsset, proxyAssetUrl } from '../../common/utils/uploadAsset.js';
 import { logger } from '../../config/logger.js';
 import { config } from '../../config/index.js';
 import { withBuilderDefaults } from './builder-defaults.js';
@@ -457,8 +457,10 @@ export async function getStorefront({ tenantId, slug, domain }) {
       description: business.description,
       email: business.email,
       whatsappNumber: business.whatsappNumber,
+      // Public storefront — a customer's browser tab can sit open a long
+      // time, so a raw signed URL (expires ~1hr) risks going stale mid-visit.
       logoUrl: business.logoStorageKey
-        ? await getAssetUrl(business.logoStorageKey, business.logoUrl)
+        ? proxyAssetUrl('business-logos', business.logoStorageKey)
         : business.logoUrl,
       deliveryStructure: business.deliveryStructure,
       availableDays: business.availableDays,
