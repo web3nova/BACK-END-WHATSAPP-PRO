@@ -134,65 +134,88 @@ export const getPrice = {
   },
 };
 
-// Tool: send a product photo to the customer on WhatsApp. Images can't be
-// embedded in a text reply — this queues a real WhatsApp media message,
-// same delivery path as staff-sent images.
+// Tool: send one or more product photos to the customer on WhatsApp. Images
+// can't be embedded in a text reply — this queues real WhatsApp media
+// messages, same delivery path as staff-sent images.
+//
+// Takes a batch of items rather than one productId, so "show me these 5
+// items" costs one tool-calling step instead of five — each image call
+// previously ate a full step out of the AI's MAX_STEPS budget, so a
+// multi-item request could burn through it before the AI even got to
+// answer the actual question, hitting the truncation/escalation path on a
+// perfectly ordinary request.
 export const sendProductImage = {
   name: 'send_product_image',
   description:
-    'Send a photo of a specific product to the customer on WhatsApp. Use this when the customer asks to see a product, or when showing a picture would help them decide. Only works if the product has an image (check hasImage from search_products/get_price first) — do not call this for a product with no image.',
+    'Send photos of one or more products to the customer on WhatsApp in a single call. Use this when the customer asks to see a product (or several), or when showing a picture would help them decide. Pass every product they want to see at once — do not call this tool separately per item. Only include products with hasImage: true (check search_products/get_price first).',
   parameters: {
     type: 'object',
     properties: {
-      productId: { type: 'string', description: 'The product id from search_products' },
-      caption: { type: 'string', description: 'Optional short caption to send with the image (e.g. the product name and price).' },
+      items: {
+        type: 'array',
+        description: 'Every product photo to send in this call.',
+        items: {
+          type: 'object',
+          properties: {
+            productId: { type: 'string', description: 'The product id from search_products' },
+            caption: { type: 'string', description: 'Optional short caption to send with the image (e.g. the product name and price).' },
+          },
+          required: ['productId'],
+        },
+      },
     },
-    required: ['productId'],
+    required: ['items'],
   },
-  async handler({ productId, caption }, ctx) {
-    const product = await prisma.product.findFirst({ where: { id: productId, tenantId: ctx.tenantId } });
-    if (!product) return { sent: false, message: 'Product not found.' };
-    const imageUrl = freshImageUrl(product);
-    if (!imageUrl) return { sent: false, message: 'This product has no image to send.' };
-
+  async handler({ items }, ctx) {
     const customer = ctx.customerId
       ? await prisma.customer.findUnique({ where: { id: ctx.customerId }, select: { phone: true } })
       : null;
-    if (!customer?.phone) return { sent: false, message: 'No customer phone number on record.' };
+    if (!customer?.phone) return { results: items.map(() => ({ sent: false, message: 'No customer phone number on record.' })) };
 
     const { sendMessage } = await import('../../whatsapp/whatsapp.service.js');
-    await sendMessage(ctx.tenantId, customer.phone, {
-      type: 'media',
-      mediaType: 'image',
-      url: imageUrl,
-      caption: caption || product.name,
-    });
+    const results = [];
+    for (const { productId, caption } of items) {
+      const product = await prisma.product.findFirst({ where: { id: productId, tenantId: ctx.tenantId } });
+      if (!product) { results.push({ productId, sent: false, message: 'Product not found.' }); continue; }
+      const imageUrl = freshImageUrl(product);
+      if (!imageUrl) { results.push({ productId, sent: false, message: 'This product has no image to send.' }); continue; }
 
-    // Record it the same way sendStaffMedia does — otherwise the image only
-    // ever exists on the customer's phone: no Message row means it's gone
-    // from chat history on reload, and no SSE push means it doesn't show up
-    // live in the dashboard either, even though WhatsApp delivered it fine.
-    const text = caption || product.name;
-    const mimeType = mimeTypeFromKey(product.imageStorageKey || imageUrl);
-    const message = await prisma.message.create({
-      data: { conversationId: ctx.conversationId, role: 'ai', content: encryptMessage(text), meta: { productId } },
-    });
-    await prisma.mediaAsset.create({
-      data: {
-        tenantId: ctx.tenantId,
-        messageId: message.id,
-        provider: 'upload',
-        mimeType,
-        storageKey: product.imageStorageKey || imageUrl,
+      await sendMessage(ctx.tenantId, customer.phone, {
+        type: 'media',
+        mediaType: 'image',
         url: imageUrl,
-      },
-    });
-    pushEvent(ctx.tenantId, 'ai_message', {
-      conversationId: ctx.conversationId,
-      message: { id: message.id, role: 'ai', content: text, createdAt: message.createdAt, media: [{ mimeType, url: imageUrl }] },
-    });
+        caption: caption || product.name,
+      });
 
-    return { sent: true, message: 'Image queued for delivery.' };
+      // Record it the same way sendStaffMedia does — otherwise the image
+      // only ever exists on the customer's phone: no Message row means it's
+      // gone from chat history on reload, and no SSE push means it doesn't
+      // show up live in the dashboard either, even though WhatsApp
+      // delivered it fine.
+      const text = caption || product.name;
+      const mimeType = mimeTypeFromKey(product.imageStorageKey || imageUrl);
+      const message = await prisma.message.create({
+        data: { conversationId: ctx.conversationId, role: 'ai', content: encryptMessage(text), meta: { productId } },
+      });
+      await prisma.mediaAsset.create({
+        data: {
+          tenantId: ctx.tenantId,
+          messageId: message.id,
+          provider: 'upload',
+          mimeType,
+          storageKey: product.imageStorageKey || imageUrl,
+          url: imageUrl,
+        },
+      });
+      pushEvent(ctx.tenantId, 'ai_message', {
+        conversationId: ctx.conversationId,
+        message: { id: message.id, role: 'ai', content: text, createdAt: message.createdAt, media: [{ mimeType, url: imageUrl }] },
+      });
+
+      results.push({ productId, sent: true, message: 'Image queued for delivery.' });
+    }
+
+    return { results };
   },
 };
 

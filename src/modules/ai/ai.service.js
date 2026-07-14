@@ -6,7 +6,12 @@ import { buildSystemPrompt } from './prompts/system.prompt.js';
 import * as memory from './memory/conversationMemory.js';
 import { decryptMessage } from '../../common/utils/encryption.js';
 
-const MAX_STEPS = 6; // safety cap on the tool-calling loop
+// Safety cap on the tool-calling loop. 6 sounds generous but each
+// send_product_image call (and each get_price lookup) costs one full step —
+// a customer asking to see several items, then asking for their total,
+// burns through it fast and hits truncation (which fires an escalation
+// email) on perfectly ordinary multi-item requests, not actual failures.
+const MAX_STEPS = 12;
 const PROVIDER_TIMEOUT_MS = 20000; // 20s per LLM call — fail fast if provider hangs
 
 function withTimeout(promise, ms) {
