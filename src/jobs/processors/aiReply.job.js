@@ -5,6 +5,7 @@ import * as whatsappService from '../../modules/whatsapp/whatsapp.service.js';
 import { notify } from '../../modules/notifications/notification.service.js';
 import { pushEvent } from '../../modules/sse/sse.service.js';
 import { escalationEmail } from '../../config/emailTemplates.js';
+import { encryptSecret, decryptSecret } from '../../common/utils/encryption.js';
 
 export default async function processAiReply(job) {
   const { tenantId, conversationId, messageId } = job.data;
@@ -56,13 +57,13 @@ export default async function processAiReply(job) {
       tenantId,
       conversationId,
       customerId: conversation.customerId,
-      message: message.content
+      message: decryptSecret(message.content)
     });
   } catch (err) {
     logger.error({ err: err?.message, conversationId }, '[aiReply] AI service failed, escalating');
 
     const fallback = 'Sorry, I could not process your message right now. A human will reply shortly.';
-    const fallbackMessage = await prisma.message.create({ data: { conversationId, role: 'ai', content: fallback, meta: { aiForMessageId: messageId } } });
+    const fallbackMessage = await prisma.message.create({ data: { conversationId, role: 'ai', content: encryptSecret(fallback), meta: { aiForMessageId: messageId } } });
     pushEvent(tenantId, 'ai_message', {
       conversationId,
       message: { id: fallbackMessage.id, role: 'ai', content: fallback, createdAt: fallbackMessage.createdAt },
@@ -98,7 +99,7 @@ export default async function processAiReply(job) {
     data: {
       conversationId,
       role: 'ai',
-      content: aiResponse.reply,
+      content: encryptSecret(aiResponse.reply),
       meta: { aiForMessageId: messageId }
     }
   });
