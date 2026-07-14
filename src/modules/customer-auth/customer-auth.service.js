@@ -223,10 +223,34 @@ function takeChallenge(key) {
   return stored;
 }
 
-export async function passkeyRegisterStart({ tenantId, customerId }) {
+// WebAuthn's RP ID must be exactly the domain the browser is actually on — a
+// credential registered under one domain cannot verify against another. This
+// app serves the storefront from multiple domains at once (biziq.online, a
+// Vercel preview URL, and now per-tenant custom domains from the storefront
+// roadmap's Phase 4), so a single static RP_ID env var can never be correct
+// for all of them simultaneously. Instead, derive it per-request from the
+// browser's actual Origin header, checked against the same allowlist already
+// used for CORS/passkey origin validation — and store the resolved value
+// alongside the challenge so the *complete* call verifies against the exact
+// origin/RP ID used at *start*, even if the allowlist changes in between.
+function resolveOrigin(originHeader) {
+  const allowed = config.auth.passkeyAllowedOrigins;
+  if (!originHeader || !allowed.includes(originHeader)) {
+    throw new BadRequestError('Passkeys are not supported from this origin.');
+  }
+  return originHeader;
+}
+
+function rpIdFromOrigin(origin) {
+  return new URL(origin).hostname;
+}
+
+export async function passkeyRegisterStart({ tenantId, customerId, origin }) {
   if (!tenantId || !customerId) {
     throw new BadRequestError('tenantId and customerId are required');
   }
+  const resolvedOrigin = resolveOrigin(origin);
+  const rpID = rpIdFromOrigin(resolvedOrigin);
 
   const customer = await prisma.customer.findFirst({ where: { id: customerId, tenantId } });
   if (!customer) throw new NotFoundError('Customer not found');
@@ -235,7 +259,7 @@ export async function passkeyRegisterStart({ tenantId, customerId }) {
 
   const options = await generateRegistrationOptions({
     rpName: 'BizIQ',
-    rpID: config.auth.rpId,
+    rpID,
     userName: customer.meta?.email || customer.phone,
     userDisplayName: customer.name || customer.phone,
     attestationType: 'none',
@@ -243,7 +267,7 @@ export async function passkeyRegisterStart({ tenantId, customerId }) {
     authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
   });
 
-  putChallenge(`reg:${customerId}`, { challenge: options.challenge, tenantId });
+  putChallenge(`reg:${customerId}`, { challenge: options.challenge, tenantId, rpID, origin: resolvedOrigin });
   return options;
 }
 
@@ -265,8 +289,8 @@ export async function passkeyRegisterComplete({ customerId, credential }) {
     verification = await verifyRegistrationResponse({
       response: credential,
       expectedChallenge: stored.challenge,
-      expectedOrigin: config.auth.passkeyAllowedOrigins,
-      expectedRPID: config.auth.rpId,
+      expectedOrigin: stored.origin,
+      expectedRPID: stored.rpID,
     });
   } catch (err) {
     logger.warn({ err: err.message }, '[passkey] registration verification failed');
@@ -292,16 +316,18 @@ export async function passkeyRegisterComplete({ customerId, credential }) {
   return { success: true };
 }
 
-export async function passkeyLoginStart({ tenantId }) {
+export async function passkeyLoginStart({ tenantId, origin }) {
   if (!tenantId) throw new BadRequestError('tenantId is required');
+  const resolvedOrigin = resolveOrigin(origin);
+  const rpID = rpIdFromOrigin(resolvedOrigin);
 
   const options = await generateAuthenticationOptions({
-    rpID: config.auth.rpId,
+    rpID,
     userVerification: 'preferred',
     allowCredentials: [],
   });
 
-  putChallenge(`auth:${tenantId}`, { challenge: options.challenge, tenantId });
+  putChallenge(`auth:${tenantId}`, { challenge: options.challenge, tenantId, rpID, origin: resolvedOrigin });
   return options;
 }
 
@@ -340,8 +366,8 @@ export async function passkeyLoginComplete({ tenantId, credential }) {
     verification = await verifyAuthenticationResponse({
       response: credential,
       expectedChallenge: stored.challenge,
-      expectedOrigin: config.auth.passkeyAllowedOrigins,
-      expectedRPID: config.auth.rpId,
+      expectedOrigin: stored.origin,
+      expectedRPID: stored.rpID,
       credential: {
         id: matchedPasskey.id,
         publicKey: Buffer.from(matchedPasskey.publicKey, 'base64url'),

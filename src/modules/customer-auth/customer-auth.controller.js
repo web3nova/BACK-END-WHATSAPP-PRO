@@ -24,7 +24,7 @@ export const googleLogin = asyncHandler(async (req, res) => {
 export const passkeyRegisterStart = asyncHandler(async (req, res) => {
   const { customerId } = req.body;
   const tenantId = req.customer?.tenantId || req.body.tenantId;
-  const data = await customerAuthService.passkeyRegisterStart({ tenantId, customerId });
+  const data = await customerAuthService.passkeyRegisterStart({ tenantId, customerId, origin: req.headers.origin });
   ok(res, data);
 });
 
@@ -36,7 +36,7 @@ export const passkeyRegisterComplete = asyncHandler(async (req, res) => {
 
 export const passkeyLoginStart = asyncHandler(async (req, res) => {
   const { tenantId } = req.body;
-  const data = await customerAuthService.passkeyLoginStart({ tenantId });
+  const data = await customerAuthService.passkeyLoginStart({ tenantId, origin: req.headers.origin });
   ok(res, data);
 });
 

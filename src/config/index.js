@@ -52,7 +52,7 @@ export const config = {
   auth: {
     googleClientId: process.env.GOOGLE_CLIENT_ID || '',
     rpId: process.env.RP_ID || 'localhost',
-    passkeyAllowedOrigins: (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,https://front-end-whatsapp-pro.vercel.app').split(','),
+    passkeyAllowedOrigins: (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,https://front-end-whatsapp-pro.vercel.app').split(',').map(o => o.trim()).filter(Boolean),
   },
 
   qdrant: {
