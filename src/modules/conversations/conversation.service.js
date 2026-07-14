@@ -6,6 +6,7 @@ import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { notify } from '../notifications/notification.service.js';
 import { pushEvent } from '../sse/sse.service.js';
 import processAiReply from '../../jobs/processors/aiReply.job.js';
+import { sendMessage } from '../whatsapp/whatsapp.service.js';
 
 // Enqueue via pg-boss (Postgres-backed, always available). Falls back to
 // in-process only if the enqueue itself fails (e.g. DB unreachable).
@@ -79,6 +80,17 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
     create: { tenantId, phone: normalizedPhone, name: senderName, source: 'whatsapp' },
     update: { name: senderName || undefined }
   });
+
+  // 3b. Hardcoded STOP keyword — opt the customer out of cart reminders and
+  // short-circuit the rest of the message pipeline (no AI reply, no
+  // conversation/message persistence for this one message).
+  if (text && text.trim().toUpperCase() === 'STOP') {
+    const meta = { ...(customer.meta || {}), cartRemindersOptedOut: true };
+    await prisma.customer.update({ where: { id: customer.id }, data: { meta } });
+    sendMessage(tenantId, normalizedPhone, "You've been unsubscribed from cart reminders.").catch(() => {});
+    logger.info({ tenantId, customerId: customer.id }, '[conversation] customer opted out of cart reminders via STOP');
+    return;
+  }
 
   // 4. Create conversation (if needed) + message in a single transaction.
   // The transaction is atomic so concurrent webhooks can't create duplicate conversations.
