@@ -37,7 +37,7 @@ function layout({ preheader = '', heading, bodyHtml, ctaLabel, ctaUrl }) {
             <td style="padding:22px 32px 28px;border-top:1px solid #f1f3f6;">
               <p style="margin:0 0 10px;font-size:12px;color:${MUTED};line-height:1.6;">
                 You're receiving this because your business is on BizIQ.
-                <br/>Questions? Just reply to this email — a real person reads these.
+                <br/>This is an automated message from an unmonitored inbox.
               </p>
               <p style="margin:0;font-size:11px;color:#a3abba;">
                 BizIQ · Run Your Business Smarter · <a href="${APP_URL}" style="color:#a3abba;">biziq.online</a>
@@ -158,21 +158,21 @@ export function superAdminWelcomeEmail({ name, email, addedBy, setPasswordUrl })
 export function trialWelcomeEmail({ businessName, trialEndsAt }) {
   const endDate = trialEndsAt?.toDateString?.() || String(trialEndsAt);
   const bodyHtml = `
-    <p style="margin:0 0 16px;">Hey${businessName ? ` ${businessName}` : ''} 👋 — your 14-day free trial just started, and your AI sales agent is already live on WhatsApp.</p>
-    <p style="margin:0 0 20px;">Here's what's working for you right now:</p>
+    <p style="margin:0 0 16px;">Hey${businessName ? ` ${businessName}` : ''} 👋 — your account is ready and your 14-day free trial has started.</p>
+    <p style="margin:0 0 20px;">One thing left before your AI sales agent can start replying to customers: connect your WhatsApp number. It only takes a couple of minutes.</p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin-bottom:20px;">
-      <tr><td style="padding:6px 0;">🤖&nbsp;&nbsp;<strong>AI Sales Agent</strong> — replies to customers on WhatsApp instantly, day or night</td></tr>
+      <tr><td style="padding:6px 0;">🤖&nbsp;&nbsp;<strong>AI Sales Agent</strong> — once connected, replies to customers on WhatsApp instantly, day or night</td></tr>
       <tr><td style="padding:6px 0;">🛍️&nbsp;&nbsp;<strong>Your Storefront</strong> — a branded product catalog customers can browse</td></tr>
       <tr><td style="padding:6px 0;">💳&nbsp;&nbsp;<strong>Orders & Payments</strong> — quotes, orders, and payment links, handled automatically</td></tr>
     </table>
     <p style="margin:0;color:${MUTED};font-size:14px;">Full access until <strong style="color:${INK};">${endDate}</strong>. Upgrade anytime to keep it running.</p>
   `;
   return layout({
-    preheader: 'Your AI sales agent is live — here\'s what to do next.',
+    preheader: 'Connect your WhatsApp number to get your AI sales agent live.',
     heading: '🎉 Your free trial has started!',
     bodyHtml,
-    ctaLabel: 'Go to Dashboard',
-    ctaUrl: `${APP_URL}/dashboard`,
+    ctaLabel: 'Connect WhatsApp',
+    ctaUrl: `${APP_URL}/dashboard/whatsapp`,
   });
 }
 
