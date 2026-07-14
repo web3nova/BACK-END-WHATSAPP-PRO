@@ -83,10 +83,11 @@ export const createOrder = {
       },
       measurements: { type: 'object', description: 'Customer measurements if applicable' },
       currency: { type: 'string' },
+      quoteId: { type: 'string', description: 'If this order is the customer accepting a quote you generated earlier in this conversation, pass its quoteId here so it gets linked and marked accepted.' },
     },
     required: ['items'],
   },
-  async handler({ items, measurements = {}, currency = 'NGN' }, ctx) {
+  async handler({ items, measurements = {}, currency = 'NGN', quoteId }, ctx) {
     const totalMinor = sumItems(items);
 
     // Idempotency guard: WhatsApp redelivers webhooks it doesn't get a fast
@@ -109,6 +110,11 @@ export const createOrder = {
       }
     }
 
+    // Only link a quote that's actually this tenant's and not already tied to another order.
+    const quote = quoteId
+      ? await prisma.quote.findFirst({ where: { id: quoteId, tenantId: ctx.tenantId, orderId: null } })
+      : null;
+
     const order = await prisma.order.create({
       data: {
         tenantId: ctx.tenantId,
@@ -121,7 +127,12 @@ export const createOrder = {
         measurements,
       },
     });
-    return { orderId: order.id, totalMinor, currency, status: order.status };
+
+    if (quote) {
+      await prisma.quote.update({ where: { id: quote.id }, data: { status: 'accepted', orderId: order.id } });
+    }
+
+    return { orderId: order.id, totalMinor, currency, status: order.status, ...(quote ? { linkedQuoteId: quote.id } : {}) };
   },
 };
 

@@ -617,6 +617,7 @@ model Order {
   conversation Conversation? @relation(fields: [conversationId], references: [id])
   payments     Payment[]
   reviews      ProductReview[]
+  quote        Quote?
 
   @@index([tenantId])
   @@index([conversationId])
@@ -628,6 +629,7 @@ model Quote {
   tenantId       String
   customerId     String?
   conversationId String?
+  orderId        String?  @unique
   status         String   @default("draft")
   amountMinor    Int      @default(0)
   currency       String   @default("NGN")
@@ -636,6 +638,7 @@ model Quote {
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id])
   conversation Conversation? @relation(fields: [conversationId], references: [id])
+  order        Order?        @relation(fields: [orderId], references: [id])
 
   @@index([tenantId])
   @@index([conversationId])

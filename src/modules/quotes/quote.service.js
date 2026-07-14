@@ -9,6 +9,7 @@ const quoteSelect = {
   tenantId: true,
   customerId: true,
   conversationId: true,
+  orderId: true,
   status: true,
   amountMinor: true,
   currency: true,
