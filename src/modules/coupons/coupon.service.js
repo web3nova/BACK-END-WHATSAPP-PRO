@@ -29,9 +29,20 @@ export async function createCoupon(tenantId, data) {
 }
 
 export async function updateCoupon(tenantId, id, data) {
-  await findOwned(id, tenantId);
+  const existing = await findOwned(id, tenantId);
   const { code, ...rest } = data;
   const updateData = code !== undefined ? { ...rest, code: code.toUpperCase() } : rest;
+
+  // The percent-cap check in validation only fires when `type` is resent in
+  // the same request — a partial update (e.g. `{ value }` alone) must still
+  // be checked against the coupon's EXISTING type, or the 1-100 cap is
+  // bypassable by omitting `type` from the PATCH body.
+  const effectiveType = updateData.type ?? existing.type;
+  const effectiveValue = updateData.value ?? existing.value;
+  if (effectiveType === 'percent' && effectiveValue > 100) {
+    throw new BadRequestError('Percent value must be between 1 and 100');
+  }
+
   try {
     return await prisma.coupon.update({
       where: { id },
