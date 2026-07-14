@@ -9,6 +9,7 @@ import { newOrderEmail } from '../../config/emailTemplates.js';
 import { priceItems } from './checkout.pricing.js';
 import { aggregateQuantities, trackedShortages } from './stock.js';
 import { resolveDeliveryFee } from './delivery-fees.js';
+import { resolveCouponDiscount } from './coupons.js';
 import { getDecryptedConfig } from '../payments/payment-config.service.js';
 import { withBuilderDefaults } from '../website/builder-defaults.js';
 
@@ -48,13 +49,51 @@ async function getBusinessSettings(tenantId) {
   };
 }
 
-export async function initializeCheckout({ tenantId, items, deliveryMethod }) {
+// Determines why a coupon can't be applied, in priority order. Returns null
+// when the coupon is valid for the given subtotal (caller still computes the
+// discount amount separately via resolveCouponDiscount).
+function couponFailureReason(coupon, subtotalMinor) {
+  if (!coupon) return 'not_found';
+  if (!coupon.active) return 'inactive';
+  if (coupon.expiresAt && new Date(coupon.expiresAt) < new Date()) return 'expired';
+  if (coupon.maxUses != null && coupon.usedCount >= coupon.maxUses) return 'max_uses_reached';
+  if (coupon.minSubtotal != null && subtotalMinor < coupon.minSubtotal) return 'min_subtotal_not_met';
+  return null;
+}
+
+async function findCoupon(tenantId, code) {
+  if (!code) return null;
+  return prisma.coupon.findUnique({
+    where: { tenantId_code: { tenantId, code: String(code).toUpperCase() } },
+  });
+}
+
+export async function validateCoupon({ tenantId, code, items }) {
+  const { totalMinor: subtotalMinor } = await priceItems(tenantId, items);
+  const coupon = await findCoupon(tenantId, code);
+  const reason = couponFailureReason(coupon, subtotalMinor);
+  if (reason) {
+    return { valid: false, reason };
+  }
+  const discountMinor = resolveCouponDiscount(coupon, subtotalMinor);
+  return { valid: true, discountMinor, code: coupon.code };
+}
+
+export async function initializeCheckout({ tenantId, items, deliveryMethod, couponCode }) {
   const { business, deliveryOptions, paymentOptions, deliveryFees } = await getBusinessSettings(tenantId);
 
   const { totalMinor: subtotal } = await priceItems(tenantId, items);
 
   const selectedMethod = deliveryMethod || (deliveryOptions[0] || null);
   const deliveryFee = resolveDeliveryFee(deliveryFees, selectedMethod);
+
+  // Preview endpoint — an invalid/unknown coupon code is silently ignored
+  // (no discount applied) rather than rejecting the checkout preview.
+  let discount = 0;
+  if (couponCode) {
+    const coupon = await findCoupon(tenantId, couponCode);
+    discount = resolveCouponDiscount(coupon, subtotal);
+  }
 
   return {
     business: {
@@ -72,14 +111,15 @@ export async function initializeCheckout({ tenantId, items, deliveryMethod }) {
     },
     pricing: {
       subtotal,
+      discount,
       deliveryFee,
-      total: subtotal + deliveryFee,
+      total: subtotal - discount + deliveryFee,
       currency: 'NGN',
     },
   };
 }
 
-export async function placeOrder({ tenantId, customerId, customerName, customerPhone, customerWhatsapp, customerEmail, customerAddress, customerState, customerCity, customerPostBox, customerLandmark, items, totalMinor, currency, deliveryMethod, paymentMethod }) {
+export async function placeOrder({ tenantId, customerId, customerName, customerPhone, customerWhatsapp, customerEmail, customerAddress, customerState, customerCity, customerPostBox, customerLandmark, items, totalMinor, currency, deliveryMethod, paymentMethod, couponCode }) {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: { id: true, name: true, slug: true },
@@ -92,7 +132,19 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
     throw new BadRequestError('Invalid delivery method');
   }
   const deliveryFeeMinor = resolveDeliveryFee(deliveryFees, deliveryMethod);
-  const serverTotal = priced.totalMinor + deliveryFeeMinor;
+
+  let coupon = null;
+  let discountMinor = 0;
+  if (couponCode) {
+    coupon = await findCoupon(tenantId, couponCode);
+    const reason = couponFailureReason(coupon, priced.totalMinor);
+    if (reason) {
+      throw new BadRequestError('Invalid coupon code');
+    }
+    discountMinor = resolveCouponDiscount(coupon, priced.totalMinor);
+  }
+
+  const serverTotal = priced.totalMinor - discountMinor + deliveryFeeMinor;
   if (totalMinor && totalMinor !== serverTotal) {
     logger.warn(
       { tenantId, clientTotal: totalMinor, serverTotal },
@@ -159,6 +211,14 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
       }
     }
 
+    if (coupon) {
+      const updated = await tx.coupon.updateMany({
+        where: { id: coupon.id, OR: [{ maxUses: null }, { usedCount: { lt: coupon.maxUses } }] },
+        data: { usedCount: { increment: 1 } },
+      });
+      if (updated.count === 0) throw new BadRequestError('Coupon is no longer valid');
+    }
+
     return tx.order.create({
       data: {
         tenantId,
@@ -170,6 +230,8 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
         measurements: {
           deliveryMethod: deliveryMethod || null,
           deliveryFeeMinor,
+          couponCode: coupon ? coupon.code : null,
+          discountMinor,
           paymentMethod,
           customerName,
           customerPhone,

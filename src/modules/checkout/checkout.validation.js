@@ -22,6 +22,19 @@ export const checkoutInitSchema = z.object({
   tenantId: z.string(),
   totalMinor: z.number().int().min(0),
   currency: z.string().default('NGN'),
+  couponCode: z.string().trim().optional(),
+});
+
+export const validateCouponSchema = z.object({
+  tenantId: z.string(),
+  code: z.string().trim().min(1),
+  items: z.array(z.object({
+    productId: z.string(),
+    name: z.string().optional(),
+    priceMinor: z.number().int().min(0).optional(),
+    quantity: z.number().int().min(1).max(100),
+    attributes: z.record(z.any()).optional(),
+  })).min(1),
 });
 
 export const paymentInitSchema = z.object({

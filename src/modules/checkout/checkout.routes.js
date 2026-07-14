@@ -14,6 +14,11 @@ router.post('/place-order',
   checkoutController.placeOrder
 );
 
+router.post('/validate-coupon',
+  customerAuthMiddleware,
+  checkoutController.validateCoupon
+);
+
 router.get('/customer/orders',
   customerAuthMiddleware,
   checkoutController.getCustomerOrders

@@ -4,13 +4,13 @@ import { BadRequestError } from '../../common/errors/index.js';
 import * as checkoutService from './checkout.service.js';
 import * as paymentService from '../payments/payment.service.js';
 import { logger } from '../../config/logger.js';
-import { checkoutInitSchema, paymentInitSchema, completeOrderSchema } from './checkout.validation.js';
+import { checkoutInitSchema, paymentInitSchema, completeOrderSchema, validateCouponSchema } from './checkout.validation.js';
 
 export const initializeCheckout = asyncHandler(async (req, res) => {
-  const { items, deliveryMethod, paymentMethod, customerName, customerPhone, customerEmail, customerAddress, tenantId } = checkoutInitSchema.parse(req.body);
+  const { items, deliveryMethod, paymentMethod, customerName, customerPhone, customerEmail, customerAddress, tenantId, couponCode } = checkoutInitSchema.parse(req.body);
 
   const checkout = await checkoutService.initializeCheckout({
-    tenantId, items, deliveryMethod,
+    tenantId, items, deliveryMethod, couponCode,
   });
 
   created(res, checkout);
@@ -18,7 +18,7 @@ export const initializeCheckout = asyncHandler(async (req, res) => {
 
 export const placeOrder = asyncHandler(async (req, res) => {
   const body = checkoutInitSchema.parse(req.body);
-  const { items, deliveryMethod, paymentMethod, customerName, customerPhone, customerEmail, customerAddress, tenantId, totalMinor, currency } = body;
+  const { items, deliveryMethod, paymentMethod, customerName, customerPhone, customerEmail, customerAddress, tenantId, totalMinor, currency, couponCode } = body;
 
   const customerId = req.customer?.id || null;
 
@@ -39,9 +39,16 @@ export const placeOrder = asyncHandler(async (req, res) => {
     currency: currency || 'NGN',
     deliveryMethod,
     paymentMethod,
+    couponCode,
   });
 
   created(res, result);
+});
+
+export const validateCoupon = asyncHandler(async (req, res) => {
+  const { tenantId, code, items } = validateCouponSchema.parse(req.body);
+  const result = await checkoutService.validateCoupon({ tenantId, code, items });
+  ok(res, result);
 });
 
 export const getCustomerOrders = asyncHandler(async (req, res) => {
