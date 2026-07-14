@@ -6,7 +6,7 @@ import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { notify } from '../notifications/notification.service.js';
 import { pushEvent } from '../sse/sse.service.js';
 import processAiReply from '../../jobs/processors/aiReply.job.js';
-import { encryptSecret, decryptSecret } from '../../common/utils/encryption.js';
+import { encryptMessage, decryptMessage } from '../../common/utils/encryption.js';
 
 // Enqueue via pg-boss (Postgres-backed, always available). Falls back to
 // in-process only if the enqueue itself fails (e.g. DB unreachable).
@@ -119,7 +119,7 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
     }
 
     const message = await tx.message.create({
-      data: { conversationId: conversation.id, role: 'customer', content: encryptSecret(text), externalId: messageId, meta: { whatsappMessageId: messageId } }
+      data: { conversationId: conversation.id, role: 'customer', content: encryptMessage(text), externalId: messageId, meta: { whatsappMessageId: messageId } }
     });
 
     if (media && media.length) {
@@ -234,7 +234,7 @@ export const getConversationHistory = async (conversationId, tenantId, { page = 
   const data = await Promise.all(messages.map(async (m) => {
     const sender = m.senderUser ? { name: m.senderUser.name, email: m.senderUser.email } : null;
     const { senderUser, ...rest } = m;
-    rest.content = decryptSecret(rest.content);
+    rest.content = decryptMessage(rest.content);
     if (!m.mediaAssets?.length) return { ...rest, sender };
     const media = await Promise.all(m.mediaAssets.map(async (a) => {
       let url = a.url;
@@ -323,7 +323,7 @@ export const sendStaffMessage = async (conversationId, tenantId, text, senderUse
   if (!conv || conv.tenantId !== tenantId) throw new NotFoundError('Conversation not found');
 
   const message = await prisma.message.create({
-    data: { conversationId, role: 'staff', content: encryptSecret(text), senderUserId },
+    data: { conversationId, role: 'staff', content: encryptMessage(text), senderUserId },
     include: { senderUser: { select: { id: true, name: true, email: true } } },
   });
 
@@ -376,7 +376,7 @@ export const sendStaffMedia = async (conversationId, tenantId, file, caption = '
   const url = await storage.getSignedUrl(key, 60 * 60 * 24);
 
   const message = await prisma.message.create({
-    data: { conversationId, role: 'staff', content: encryptSecret(caption || ''), senderUserId },
+    data: { conversationId, role: 'staff', content: encryptMessage(caption || ''), senderUserId },
     include: { senderUser: { select: { id: true, name: true, email: true } } },
   });
   await prisma.mediaAsset.create({

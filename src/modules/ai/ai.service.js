@@ -4,7 +4,7 @@ import { getChatProvider } from './providers/index.js';
 import { getToolDefinitions, executeTool } from './tools/index.js';
 import { buildSystemPrompt } from './prompts/system.prompt.js';
 import * as memory from './memory/conversationMemory.js';
-import { decryptSecret } from '../../common/utils/encryption.js';
+import { decryptMessage } from '../../common/utils/encryption.js';
 
 const MAX_STEPS = 6; // safety cap on the tool-calling loop
 const PROVIDER_TIMEOUT_MS = 20000; // 20s per LLM call — fail fast if provider hangs
@@ -85,7 +85,7 @@ export async function chat({ tenantId, conversationId, customerId, message }) {
   const { storage } = await import('../../config/storage.js');
 
   const history = await Promise.all(ordered.map(async (m, idx) => {
-    let content = decryptSecret(m.content)?.trim() || '';
+    let content = decryptMessage(m.content)?.trim() || '';
     let images;
     const assets = m.mediaAssets || [];
     const imgAssets = assets.filter((a) => a.mimeType?.startsWith('image/'));

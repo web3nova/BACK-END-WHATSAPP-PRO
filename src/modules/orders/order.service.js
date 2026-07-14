@@ -5,7 +5,7 @@ import { sendMessage } from '../whatsapp/whatsapp.service.js';
 import { pushEvent } from '../sse/sse.service.js';
 import { logger } from '../../config/logger.js';
 import { newOrderEmail } from '../../config/emailTemplates.js';
-import { encryptSecret } from '../../common/utils/encryption.js';
+import { encryptMessage } from '../../common/utils/encryption.js';
 
 const orderSelect = {
   id: true,
@@ -145,7 +145,7 @@ export const createOrder = async (tenantId, data, { notify: sendNotify = false }
       await sendMessage(tenantId, phone, text);
       if (order.conversationId) {
         const message = await prisma.message.create({
-          data: { conversationId: order.conversationId, role: 'staff', content: encryptSecret(text), meta: { orderId: order.id } },
+          data: { conversationId: order.conversationId, role: 'staff', content: encryptMessage(text), meta: { orderId: order.id } },
         });
         pushEvent(tenantId, 'staff_message', {
           conversationId: order.conversationId,

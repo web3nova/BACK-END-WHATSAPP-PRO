@@ -5,7 +5,7 @@ import * as whatsappService from '../../modules/whatsapp/whatsapp.service.js';
 import { notify } from '../../modules/notifications/notification.service.js';
 import { pushEvent } from '../../modules/sse/sse.service.js';
 import { escalationEmail } from '../../config/emailTemplates.js';
-import { encryptSecret, decryptSecret } from '../../common/utils/encryption.js';
+import { encryptMessage, decryptMessage } from '../../common/utils/encryption.js';
 
 export default async function processAiReply(job) {
   const { tenantId, conversationId, messageId } = job.data;
@@ -57,13 +57,13 @@ export default async function processAiReply(job) {
       tenantId,
       conversationId,
       customerId: conversation.customerId,
-      message: decryptSecret(message.content)
+      message: decryptMessage(message.content)
     });
   } catch (err) {
     logger.error({ err: err?.message, conversationId }, '[aiReply] AI service failed, escalating');
 
     const fallback = 'Sorry, I could not process your message right now. A human will reply shortly.';
-    const fallbackMessage = await prisma.message.create({ data: { conversationId, role: 'ai', content: encryptSecret(fallback), meta: { aiForMessageId: messageId } } });
+    const fallbackMessage = await prisma.message.create({ data: { conversationId, role: 'ai', content: encryptMessage(fallback), meta: { aiForMessageId: messageId } } });
     pushEvent(tenantId, 'ai_message', {
       conversationId,
       message: { id: fallbackMessage.id, role: 'ai', content: fallback, createdAt: fallbackMessage.createdAt },
@@ -87,7 +87,7 @@ export default async function processAiReply(job) {
       title: `Human needed — AI couldn't handle ${customerName}`,
       body: `The AI failed to respond to a message from ${customerName}. The conversation has been escalated and needs your attention.`,
       emailSubject: `Action needed: AI escalation from ${customerName}`,
-      emailHtml: escalationEmail({ customerName, reason: 'The AI ran into an error trying to reply and couldn\'t recover.', lastMessage: decryptSecret(message.content) }),
+      emailHtml: escalationEmail({ customerName, reason: 'The AI ran into an error trying to reply and couldn\'t recover.', lastMessage: decryptMessage(message.content) }),
       metadata: { conversationId },
     }).catch(() => {});
 
@@ -99,7 +99,7 @@ export default async function processAiReply(job) {
     data: {
       conversationId,
       role: 'ai',
-      content: encryptSecret(aiResponse.reply),
+      content: encryptMessage(aiResponse.reply),
       meta: { aiForMessageId: messageId }
     }
   });
@@ -122,7 +122,7 @@ export default async function processAiReply(job) {
       title: `Human needed — AI couldn't resolve ${customerName}'s query`,
       body: `The AI reached its limit trying to help ${customerName}. The conversation has been escalated and needs your attention.`,
       emailSubject: `Action needed: AI escalation from ${customerName}`,
-      emailHtml: escalationEmail({ customerName, reason: 'The AI made several attempts but couldn\'t resolve this on its own.', lastMessage: decryptSecret(message.content) }),
+      emailHtml: escalationEmail({ customerName, reason: 'The AI made several attempts but couldn\'t resolve this on its own.', lastMessage: decryptMessage(message.content) }),
       metadata: { conversationId },
     }).catch(() => {});
   }

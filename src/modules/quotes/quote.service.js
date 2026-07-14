@@ -3,7 +3,7 @@ import { NotFoundError } from '../../common/errors/index.js';
 import { sendMessage } from '../whatsapp/whatsapp.service.js';
 import { pushEvent } from '../sse/sse.service.js';
 import { logger } from '../../config/logger.js';
-import { encryptSecret } from '../../common/utils/encryption.js';
+import { encryptMessage } from '../../common/utils/encryption.js';
 
 const quoteSelect = {
   id: true,
@@ -135,7 +135,7 @@ export const createQuote = async (tenantId, data) => {
           data: {
             conversationId: quote.conversationId,
             role: 'staff',
-            content: encryptSecret(text),
+            content: encryptMessage(text),
             meta: { quoteId: quote.id },
           },
         });
