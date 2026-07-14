@@ -9,11 +9,22 @@ import './jobs/cartRecovery.cron.js';
 
 const app = createApp();
 
-const server = app.listen(config.port, async () => {
+const server = app.listen(config.port, () => {
   logger.info(`API listening on http://localhost:${config.port}${config.apiPrefix}`);
-  await bootstrapSuperAdmin();
-  await bootstrapVectorDb();
-  await startWorker();
+});
+
+// Run independently of the HTTP listener and each other — previously
+// startWorker() was awaited behind bootstrapSuperAdmin()/bootstrapVectorDb()
+// inside the listen() callback, so the API was already accepting webhooks
+// (and enqueueing pg-boss jobs) for several seconds before the worker had
+// even started polling. Nothing here depends on the others, so there's no
+// reason to serialize them.
+Promise.all([
+  bootstrapSuperAdmin(),
+  bootstrapVectorDb(),
+  startWorker(),
+]).catch((err) => {
+  logger.error({ err: err.message }, '[server] startup task failed');
 });
 
 const shutdown = async (signal) => {
