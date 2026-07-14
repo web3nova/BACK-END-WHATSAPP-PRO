@@ -9,6 +9,8 @@ const extensionByMime = {
   'image/png': 'png',
   'image/webp': 'webp',
   'image/gif': 'gif',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
   'application/pdf': 'pdf',
 };
 

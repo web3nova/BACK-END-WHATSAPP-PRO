@@ -19,12 +19,12 @@ const enforceProductLimit = requireFeature('maxProducts', (tenantId) =>
 );
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (IMAGE_MIME_TYPES.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new BadRequestError('Only JPG and PNG images are accepted.'));
+      cb(new BadRequestError(`Unsupported file type: ${file.mimetype}. Allowed: jpg, png, heic`));
     }
   },
 });
