@@ -29,6 +29,14 @@ async function resolveItemPrices(items = [], tenantId) {
 const sumItems = (items = []) =>
   items.reduce((acc, it) => acc + (it.priceMinor ?? 0) * (it.qty ?? 1), 0);
 
+// Identifies *what* was ordered, not just the total — matching on totalMinor
+// alone means two different products that happen to cost the same
+// (e.g. two ₦22,000 items) within the same 5-minute webhook-redelivery
+// window collide: the second, genuinely distinct order is silently dropped
+// and the first order's id is returned in its place.
+const itemsFingerprint = (items = []) =>
+  items.map((it) => `${it.productId || it.name}:${it.qty ?? 1}`).sort().join('|');
+
 // Tool: generate a quotation for the customer.
 export const createQuote = {
   name: 'create_quote',
@@ -59,17 +67,20 @@ export const createQuote = {
   async handler({ items, currency = 'NGN', details = {} }, ctx) {
     const resolvedItems = await resolveItemPrices(items, ctx.tenantId);
     const amountMinor = sumItems(resolvedItems);
+    const fingerprint = itemsFingerprint(resolvedItems);
 
     // Same webhook-redelivery duplicate risk as create_order — see comment there.
+    // Matched on the actual items, not just amountMinor, so two different
+    // items that happen to cost the same don't collide.
     if (ctx.conversationId) {
-      const recent = await prisma.quote.findFirst({
+      const candidates = await prisma.quote.findMany({
         where: {
           conversationId: ctx.conversationId,
-          amountMinor,
           createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) },
         },
         orderBy: { createdAt: 'desc' },
       });
+      const recent = candidates.find((c) => itemsFingerprint(c.details?.items) === fingerprint);
       if (recent) {
         return { quoteId: recent.id, amountMinor: recent.amountMinor, currency: recent.currency, status: recent.status, deduplicated: true };
       }
@@ -119,22 +130,24 @@ export const createOrder = {
   async handler({ items, measurements = {}, currency = 'NGN', quoteId }, ctx) {
     const resolvedItems = await resolveItemPrices(items, ctx.tenantId);
     const totalMinor = sumItems(resolvedItems);
+    const fingerprint = itemsFingerprint(resolvedItems);
 
     // Idempotency guard: WhatsApp redelivers webhooks it doesn't get a fast
     // 200 for, which can spin up a second AI turn for the same customer
     // confirmation before the first has finished. Without this, that
-    // produces two identical orders a few seconds apart. If an order for
-    // this conversation with the same total was just created, return it
-    // instead of creating a duplicate.
+    // produces two identical orders a few seconds apart. Matched on the
+    // actual items (not just totalMinor) so a second, genuinely different
+    // order placed minutes later isn't mistaken for a duplicate just because
+    // it happens to add up to the same total.
     if (ctx.conversationId) {
-      const recent = await prisma.order.findFirst({
+      const candidates = await prisma.order.findMany({
         where: {
           conversationId: ctx.conversationId,
-          totalMinor,
           createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) },
         },
         orderBy: { createdAt: 'desc' },
       });
+      const recent = candidates.find((c) => itemsFingerprint(c.items) === fingerprint);
       if (recent) {
         return { orderId: recent.id, totalMinor: recent.totalMinor, currency: recent.currency, status: recent.status, deduplicated: true };
       }
