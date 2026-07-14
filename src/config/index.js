@@ -130,6 +130,9 @@ export const config = {
     email:    process.env.SUPERADMIN_EMAIL,
     password: process.env.SUPERADMIN_PASSWORD,
   },
+
+  vercelToken: process.env.VERCEL_TOKEN,
+  vercelProjectId: process.env.VERCEL_PROJECT_ID,
 };
 
 export default config;
