@@ -11,6 +11,9 @@ import path from 'path';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './config/swagger.js';
 import * as websiteController from './modules/website/website.controller.js';
+import { getAssetUrl } from './common/utils/uploadAsset.js';
+import { BadRequestError } from './common/errors/index.js';
+import { asyncHandler } from './common/utils/asyncHandler.js';
 
 export function createApp() {
   const app = express();
@@ -64,12 +67,21 @@ export function createApp() {
   // Serve locally stored files (media) at /storage
   app.use('/storage', express.static(path.join(process.cwd(), 'storage')));
 
-  // Public, unauthenticated website-image redirect. Registered at the app
-  // root (not under config.apiPrefix) so the served path is exactly
-  // `/assets/website-images/...` — matching websiteService.publicAssetUrl(),
-  // which builds `${config.appUrl}/assets/<storageKey>` and is what gets
-  // stored permanently in builder JSON (gallery, hero, About, page images).
-  app.get(/^\/assets\/website-images\/(.+)$/, websiteController.getPublicAsset);
+  // Public, unauthenticated asset redirects. Registered at the app root (not
+  // under config.apiPrefix). Website images use websiteService.publicAssetUrl()
+  // which builds `${config.appUrl}/assets/<storageKey>`. Product images now
+  // use the same pattern: the frontend proxies `/assets/product-images/*` to
+  // this endpoint, which redirects to a fresh short-lived signed URL.
+  app.get('/assets/website-images/:path(*)', websiteController.getPublicAsset);
+  app.get('/assets/product-images/:path(*)', asyncHandler(async (req, res) => {
+    const path = req.params.path || '';
+    if (!path || path.includes('..')) {
+      throw new BadRequestError('Invalid asset key.');
+    }
+    const url = await getAssetUrl(path);
+    res.set('Cache-Control', 'public, max-age=1800');
+    return res.redirect(302, url);
+  }));
 
   // Swagger UI
   app.use(

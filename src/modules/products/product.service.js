@@ -1,7 +1,7 @@
 import { prisma } from '../../config/prisma.js';
 import { NotFoundError } from '../../common/errors/index.js';
 import { paginate, paginatedResponse } from '../../common/utils/pagination.js';
-import { getAssetUrl, uploadAsset } from '../../common/utils/uploadAsset.js';
+import { uploadAsset } from '../../common/utils/uploadAsset.js';
 import { PRODUCT_CATEGORIES } from '../../common/constants/businessProfile.js';
 
 async function findOwned(id, tenantId) {
@@ -13,42 +13,42 @@ async function findOwned(id, tenantId) {
   return withFreshImageUrls(product);
 }
 
-async function withFreshImageUrl(product) {
+function proxyAssetUrl(storageKey) {
+  return `/assets/product-images/${storageKey}`;
+}
+
+function withFreshImageUrl(product) {
   if (!product?.imageStorageKey) return product;
   return {
     ...product,
-    imageUrl: await getAssetUrl(product.imageStorageKey, product.imageUrl),
+    imageUrl: proxyAssetUrl(product.imageStorageKey),
   };
 }
 
-async function withFreshImageUrls(product) {
+function withFreshImageUrls(product) {
   if (!product) return product;
-  const result = await withFreshImageUrl(product);
+  const result = withFreshImageUrl(product);
   if (result.galleryImages?.length) {
-    result.galleryImages = await Promise.all(
-      result.galleryImages.map(async (img) => {
-        if (img.storageKey) {
-          return { ...img, url: await getAssetUrl(img.storageKey, img.url) };
-        }
-        return img;
-      }),
-    );
+    result.galleryImages = result.galleryImages.map((img) => {
+      if (img.storageKey) {
+        return { ...img, url: proxyAssetUrl(img.storageKey) };
+      }
+      return img;
+    });
   }
   if (result.variants?.length) {
-    result.variants = await Promise.all(
-      result.variants.map(async (v) => {
-        if (v.imageStorageKey) {
-          return { ...v, imageUrl: await getAssetUrl(v.imageStorageKey, v.imageUrl) };
-        }
-        return v;
-      }),
-    );
+    result.variants = result.variants.map((v) => {
+      if (v.imageStorageKey) {
+        return { ...v, imageUrl: proxyAssetUrl(v.imageStorageKey) };
+      }
+      return v;
+    });
   }
   return result;
 }
 
-async function withFreshImageUrlsList(products) {
-  return Promise.all(products.map((product) => withFreshImageUrls(product)));
+function withFreshImageUrlsList(products) {
+  return products.map((product) => withFreshImageUrls(product));
 }
 
 function buildWhere(tenantId, query) {

@@ -470,14 +470,12 @@ export async function getStorefront({ tenantId, slug, domain }) {
     settings: { ...(settings ?? defaultSettings), theme: themeWithDefaults },
     paymentConfig: storefrontPaymentConfig,
     pages,
-    products: await Promise.all(
-      products.map(async ({ imageStorageKey, ...product }) => ({
-        ...product,
-        imageUrl: imageStorageKey
-          ? await getAssetUrl(imageStorageKey, product.imageUrl)
-          : product.imageUrl,
-      })),
-    ),
+    products: products.map(({ imageStorageKey, ...product }) => ({
+      ...product,
+      imageUrl: imageStorageKey
+        ? `/assets/product-images/${imageStorageKey}`
+        : product.imageUrl,
+    })),
   };
 }
 
