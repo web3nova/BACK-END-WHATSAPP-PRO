@@ -3,9 +3,9 @@ import { config } from '../../config/index.js';
 import { logger } from '../../config/logger.js';
 import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
 import * as paymentService from '../payments/payment.service.js';
-import { notify } from '../notifications/notification.service.js';
+import { notify, enqueue } from '../notifications/notification.service.js';
 import { sendMessage } from '../whatsapp/whatsapp.service.js';
-import { newOrderEmail } from '../../config/emailTemplates.js';
+import { newOrderEmail, customerOrderEmail } from '../../config/emailTemplates.js';
 import { priceItems } from './checkout.pricing.js';
 import { aggregateQuantities, trackedShortages } from './stock.js';
 import { resolveDeliveryFee } from './delivery-fees.js';
@@ -127,7 +127,7 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
   if (!tenant) throw new NotFoundError('Tenant not found');
 
   const priced = await priceItems(tenantId, items);
-  const { deliveryOptions, deliveryFees } = await getBusinessSettings(tenantId);
+  const { business, deliveryOptions, deliveryFees } = await getBusinessSettings(tenantId);
   if (deliveryMethod && !deliveryOptions.includes(deliveryMethod)) {
     throw new BadRequestError('Invalid delivery method');
   }
@@ -264,6 +264,27 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
     '',
     'We will keep you updated on your order.',
   ].join('\n')).catch(() => {});
+
+  // Order confirmation to the customer's own inbox — alongside, not instead
+  // of, the WhatsApp message above. The only fallback channel for shoppers
+  // whose WhatsApp number is unreachable or who miss that message.
+  if (customerEmail) {
+    enqueue({
+      tenantId,
+      channel: 'email',
+      to: customerEmail,
+      subject: `Order confirmed #${ref} — ${order.currency} ${amountMajor}`,
+      text: `Your order #${ref} from ${business.displayName || 'the store'} has been received. Total: ${order.currency} ${amountMajor}.`,
+      html: customerOrderEmail({
+        businessName: business.displayName,
+        customerName,
+        amount: `${order.currency} ${amountMajor}`,
+        orderRef: ref,
+        items: order.items,
+        deliveryMethod,
+      }),
+    }).catch(() => {});
+  }
 
   prisma.abandonedCart.deleteMany({ where: { tenantId, customerId: customer.id } }).catch(() => {});
 

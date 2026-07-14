@@ -194,6 +194,34 @@ export function escalationEmail({ customerName, reason }) {
   });
 }
 
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// Sent to the customer's own email, alongside (not instead of) the WhatsApp
+// order confirmation — the only fallback channel for shoppers whose WhatsApp
+// number is unreachable or who never see that message.
+export function customerOrderEmail({ businessName, customerName, amount, orderRef, items, deliveryMethod }) {
+  const name = escapeHtml(customerName) || 'there';
+  const business = escapeHtml(businessName) || 'the store';
+  const itemRows = (items || [])
+    .map(it => `<tr><td style="padding:4px 16px;font-size:14px;color:${INK};">${escapeHtml(it.name)}${it.quantity ? ` × ${it.quantity}` : ''}</td></tr>`)
+    .join('');
+  const bodyHtml = `
+    <p style="margin:0 0 16px;">Hi ${name} — thanks for your order from <strong>${business}</strong>! We've received it and will keep you updated.</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#f4f6ff;border-radius:12px;padding:16px;margin-bottom:16px;">
+      <tr><td style="padding:4px 16px;font-size:14px;color:${MUTED};">Order</td><td style="padding:4px 16px;font-size:14px;font-weight:600;color:${INK};text-align:right;">${orderRef || '—'}</td></tr>
+      ${itemRows}
+      ${deliveryMethod ? `<tr><td style="padding:4px 16px;font-size:14px;color:${MUTED};">Delivery</td><td style="padding:4px 16px;font-size:14px;color:${INK};text-align:right;">${escapeHtml(deliveryMethod)}</td></tr>` : ''}
+      <tr><td style="padding:4px 16px;font-size:14px;color:${MUTED};">Total</td><td style="padding:4px 16px;font-size:16px;font-weight:800;color:${BRAND};text-align:right;">${amount}</td></tr>
+    </table>
+    <p style="margin:0;color:${MUTED};font-size:13px;">We'll notify you here and on WhatsApp as your order progresses.</p>
+  `;
+  return layout({
+    preheader: `Your order ${orderRef || ''} from ${business} — ${amount}`,
+    heading: '🛍️ Order confirmed',
+    bodyHtml,
+  });
+}
+
 export function paymentReceiptEmail({ customerName, summary, orderRef }) {
   const name = customerName || 'A customer';
   const bodyHtml = `
@@ -221,6 +249,7 @@ export default {
   trialEndingEmail,
   renewalReminderEmail,
   newOrderEmail,
+  customerOrderEmail,
   escalationEmail,
   paymentReceiptEmail,
 };
