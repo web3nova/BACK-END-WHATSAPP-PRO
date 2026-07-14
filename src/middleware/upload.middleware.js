@@ -10,7 +10,7 @@ const fileFilter = (_req, file, cb) => {
   if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new BadRequestError(`Unsupported file type: ${file.mimetype}. Allowed: jpeg, png, webp, gif`));
+    cb(new BadRequestError('Only JPG, PNG, WebP, GIF, and HEIC photos are accepted. Please convert your file and try again.'));
   }
 };
 
