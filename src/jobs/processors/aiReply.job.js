@@ -87,7 +87,7 @@ export default async function processAiReply(job) {
       title: `Human needed — AI couldn't handle ${customerName}`,
       body: `The AI failed to respond to a message from ${customerName}. The conversation has been escalated and needs your attention.`,
       emailSubject: `Action needed: AI escalation from ${customerName}`,
-      emailHtml: escalationEmail({ customerName, reason: 'The AI ran into an error trying to reply and couldn\'t recover.' }),
+      emailHtml: escalationEmail({ customerName, reason: 'The AI ran into an error trying to reply and couldn\'t recover.', lastMessage: decryptSecret(message.content) }),
       metadata: { conversationId },
     }).catch(() => {});
 
@@ -122,7 +122,7 @@ export default async function processAiReply(job) {
       title: `Human needed — AI couldn't resolve ${customerName}'s query`,
       body: `The AI reached its limit trying to help ${customerName}. The conversation has been escalated and needs your attention.`,
       emailSubject: `Action needed: AI escalation from ${customerName}`,
-      emailHtml: escalationEmail({ customerName, reason: 'The AI made several attempts but couldn\'t resolve this on its own.' }),
+      emailHtml: escalationEmail({ customerName, reason: 'The AI made several attempts but couldn\'t resolve this on its own.', lastMessage: decryptSecret(message.content) }),
       metadata: { conversationId },
     }).catch(() => {});
   }

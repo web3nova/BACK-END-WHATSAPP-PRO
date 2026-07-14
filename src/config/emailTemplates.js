@@ -81,8 +81,8 @@ export function passwordResetEmail({ resetUrl }) {
 export function paymentConfirmedEmail({ businessName, amountMinor, renewsAt }) {
   const amount = `₦${(amountMinor / 100).toLocaleString()}`;
   const bodyHtml = `
-    <p style="margin:0 0 16px;">Hi ${businessName || 'there'} — your payment of <strong>${amount}</strong> was successful. 🎉</p>
-    <p style="margin:0;">Your subscription is now <strong style="color:#16a34a;">active</strong>${renewsAt ? ` and renews on <strong>${renewsAt.toDateString()}</strong>` : ''}. Thanks for growing with BizIQ!</p>
+    <p style="margin:0 0 16px;">Hi ${businessName || 'there'} — your payment of <strong>${amount}</strong> went through.</p>
+    <p style="margin:0;">You're <strong style="color:#16a34a;">active</strong>${renewsAt ? ` until <strong>${renewsAt.toDateString()}</strong>, when it renews automatically` : ''}. Nothing else to do — your AI agent keeps running.</p>
   `;
   return layout({
     preheader: `Payment of ${amount} confirmed — your subscription is active`,
@@ -176,20 +176,24 @@ export function trialWelcomeEmail({ businessName, trialEndsAt }) {
   });
 }
 
-export function escalationEmail({ customerName, reason }) {
+export function escalationEmail({ customerName, reason, lastMessage }) {
   const name = customerName || 'A customer';
+  const snippet = lastMessage?.trim();
   const bodyHtml = `
-    <p style="margin:0 0 16px;">Your AI sales agent couldn't handle a message from <strong>${name}</strong> and has stepped back — the conversation is waiting for you.</p>
-    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#fef2f2;border-left:3px solid #dc2626;border-radius:8px;padding:14px 16px;margin-bottom:16px;">
-      <tr><td style="font-size:13px;color:#991b1b;line-height:1.5;">${reason || 'The AI ran into an issue processing this message.'}</td></tr>
-    </table>
-    <p style="margin:0;color:${MUTED};font-size:13px;">Reply to the customer directly on WhatsApp to pick things up.</p>
+    <p style="margin:0 0 6px;"><strong>${name}</strong> is waiting on WhatsApp and the AI couldn't get back to them.</p>
+    <p style="margin:0 0 16px;color:${MUTED};font-size:13px;">${escapeHtml(reason) || 'It hit an error mid-reply.'}</p>
+    ${snippet ? `
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#f8f9fb;border-left:3px solid ${BRAND};border-radius:8px;padding:14px 16px;margin-bottom:16px;">
+      <tr><td style="font-size:12px;color:${MUTED};padding-bottom:4px;">${name} said:</td></tr>
+      <tr><td style="font-size:14px;color:${INK};line-height:1.5;font-style:italic;">"${escapeHtml(snippet).slice(0, 300)}${snippet.length > 300 ? '…' : ''}"</td></tr>
+    </table>` : ''}
+    <p style="margin:0;font-size:14px;">Every minute this sits unanswered is a minute they're free to buy from someone else. Jump in on WhatsApp.</p>
   `;
   return layout({
-    preheader: `${name} needs a human reply — the AI couldn't continue`,
-    heading: '⚠️ A customer needs your attention',
+    preheader: `${name} is waiting — the AI couldn't reply`,
+    heading: `${name} needs you right now`,
     bodyHtml,
-    ctaLabel: 'Open Conversation',
+    ctaLabel: 'Reply on WhatsApp',
     ctaUrl: `${APP_URL}/dashboard/whatsapp`,
   });
 }
