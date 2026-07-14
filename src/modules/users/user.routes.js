@@ -9,6 +9,7 @@ import {
   createUserSchema,
   updateUserSchema,
   deleteUserSchema,
+  updateToursSchema,
 } from './user.validation.js';
 
 const router = Router();
@@ -59,6 +60,41 @@ router.use(authMiddleware, tenantMiddleware);
  *         description: Unauthorized
  */
 router.get('/', validate(listUsersSchema, 'query'), controller.list);
+
+/**
+ * @openapi
+ * /users/me/tours:
+ *   get:
+ *     summary: Get the current user's onboarding tour progress
+ *     tags: [Users]
+ *     responses:
+ *       200:
+ *         description: Tour progress JSON keyed by tour id
+ *   patch:
+ *     summary: Update the current user's onboarding tour progress
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [tourId]
+ *             properties:
+ *               tourId:
+ *                 type: string
+ *                 enum: [dashboard, websiteBuilder]
+ *               completedChapters:
+ *                 type: array
+ *                 items: { type: integer, minimum: 0 }
+ *               done:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Updated tour progress JSON
+ */
+router.get('/me/tours', controller.getMyTours);
+router.patch('/me/tours', validate(updateToursSchema, 'body'), controller.patchMyTours);
 
 /**
  * @openapi

@@ -28,3 +28,14 @@ export const remove = asyncHandler(async (req, res) => {
   await userService.deleteUser(req.tenant.id, req.params.id);
   return noContent(res);
 });
+
+export const getMyTours = asyncHandler(async (req, res) => {
+  const data = await userService.getTours(req.user.id);
+  return ok(res, data);
+});
+
+export const patchMyTours = asyncHandler(async (req, res) => {
+  const { tourId, completedChapters, done } = req.body;
+  const data = await userService.updateTours(req.user.id, tourId, { completedChapters, done });
+  return ok(res, data);
+});

@@ -24,3 +24,9 @@ export const updateUserSchema = z.object({
 export const deleteUserSchema = z.object({
   id: z.string().uuid(),
 });
+
+export const updateToursSchema = z.object({
+  tourId: z.enum(['dashboard', 'websiteBuilder']),
+  completedChapters: z.array(z.number().int().min(0)).optional(),
+  done: z.boolean().optional(),
+});

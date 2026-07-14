@@ -2,6 +2,7 @@
 import prisma from '../../config/prisma.js';
 import { hashPassword } from '../../common/utils/hash.js';
 import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
+import { mergeTourProgress } from './tour-progress.js';
 
 const sanitize = (user) => {
   const { passwordHash, ...safe } = user;
@@ -83,4 +84,18 @@ export const deleteUser = async (tenantId, id) => {
   return { id };
 };
 
-export default { listUsers, getUser, createUser, updateUser, deleteUser };
+export const getTours = async (userId) => {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { tours: true } });
+  if (!user) throw new NotFoundError('User not found');
+  return user.tours || {};
+};
+
+export const updateTours = async (userId, tourId, update) => {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { tours: true } });
+  if (!user) throw new NotFoundError('User not found');
+  const tours = mergeTourProgress(user.tours, tourId, update);
+  await prisma.user.update({ where: { id: userId }, data: { tours } });
+  return tours;
+};
+
+export default { listUsers, getUser, createUser, updateUser, deleteUser, getTours, updateTours };
