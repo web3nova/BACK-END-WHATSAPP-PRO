@@ -74,6 +74,13 @@ export const geminiProvider = {
         } catch {
           responsePayload = { result: msg.content };
         }
+        // Gemini's functionResponse.response is a Struct (object), not a
+        // repeated field — a tool that returns a bare array (e.g.
+        // search_products) must be wrapped, or the API 400s with "Proto
+        // field is not repeating, cannot start list".
+        if (Array.isArray(responsePayload)) {
+          responsePayload = { results: responsePayload };
+        }
         parts.push({
           functionResponse: {
             name: msg.name,
