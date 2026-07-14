@@ -14,6 +14,14 @@ import { validateGoogleTokenPayload } from './google-token.js';
 
 const SALT_ROUNDS = 10;
 
+// Signups with no phone (Google OAuth, or email/password without one) get a
+// synthetic placeholder stored in the (required, unique) phone column so
+// login/lookups still work internally — it must never reach the frontend as
+// if it were a real phone (it was showing up in the account menu and
+// pre-filling the checkout form's phone input with garbage like "google_...").
+const isSyntheticPhone = (phone) => typeof phone === 'string' && (phone.startsWith('google_') || phone.startsWith('email_'));
+const publicPhone = (phone) => (isSyntheticPhone(phone) ? null : phone);
+
 export async function signup({ tenantId, name, phone, email, password }) {
   if (!tenantId || !name || !password) {
     throw new BadRequestError('tenantId, name, and password are required');
@@ -64,7 +72,7 @@ export async function signup({ tenantId, name, phone, email, password }) {
   });
 
   return {
-    customer: { id: customer.id, name: customer.name, phone: customer.phone },
+    customer: { id: customer.id, name: customer.name, phone: publicPhone(customer.phone) },
     token,
   };
 }
@@ -112,7 +120,7 @@ export async function login({ tenantId, phone, email, password }) {
   });
 
   return {
-    customer: { id: customer.id, name: customer.name, phone: customer.phone, email: customer.meta?.email || null },
+    customer: { id: customer.id, name: customer.name, phone: publicPhone(customer.phone), email: customer.meta?.email || null },
     token,
   };
 }
@@ -186,7 +194,7 @@ export async function googleLogin({ tenantId, idToken }) {
     customer: {
       id: customer.id,
       name: customer.name,
-      phone: customer.phone,
+      phone: publicPhone(customer.phone),
       email: customer.meta?.email || null,
       picture: customer.meta?.picture || null,
     },
@@ -389,7 +397,7 @@ export async function getProfile(customerId, tenantId) {
   return {
     id: customer.id,
     name: customer.name,
-    phone: customer.phone,
+    phone: publicPhone(customer.phone),
     email: customer.meta?.email || null,
     address: customer.meta?.address || null,
     createdAt: customer.createdAt,
