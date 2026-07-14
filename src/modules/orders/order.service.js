@@ -96,6 +96,12 @@ export const getOrder = async (tenantId, id) => {
 // notify=true only when customer places via storefront/AI; staff-created orders skip it
 export const createOrder = async (tenantId, data, { notify: sendNotify = false } = {}) => {
   const customerId = await ensureCustomerExists(tenantId, data.customerId ?? null);
+
+  // Only link a quote that's actually this tenant's and not already tied to another order.
+  const quote = data.quoteId
+    ? await prisma.quote.findFirst({ where: { id: data.quoteId, tenantId, orderId: null } })
+    : null;
+
   const order = await prisma.order.create({
     data: {
       tenantId,
@@ -109,6 +115,10 @@ export const createOrder = async (tenantId, data, { notify: sendNotify = false }
     },
     select: orderSelect,
   });
+
+  if (quote) {
+    await prisma.quote.update({ where: { id: quote.id }, data: { status: 'accepted', orderId: order.id } });
+  }
 
   const customerMap = await loadCustomers(tenantId, [order.customerId]);
   const result = attachCustomer(order, customerMap);
