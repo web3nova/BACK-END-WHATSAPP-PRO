@@ -41,6 +41,7 @@ model Tenant {
   paymentConfig       PaymentConfig?
   notifications       Notification[]
   websiteVisits       WebsiteVisit[]
+  coupons             Coupon[]
 
   @@map("tenants")
 }
@@ -338,6 +339,26 @@ model Product {
   @@index([isFeatured])
   @@index([isActive])
   @@map("products")
+}
+
+model Coupon {
+  id            String    @id @default(uuid())
+  tenantId      String
+  code          String    // stored uppercase, unique per tenant
+  type          String    // 'percent' | 'fixed'
+  value         Int       // percent: 1-100; fixed: minor units
+  minSubtotal   Int?      // minor units; null = no minimum
+  expiresAt     DateTime?
+  maxUses       Int?      // null = unlimited
+  usedCount     Int       @default(0)
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, code])
+  @@map("coupons")
 }
 
 model ProductVariant {
