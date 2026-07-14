@@ -47,6 +47,7 @@ import customerAuthRoutes from '../modules/customer-auth/customer-auth.routes.js
 import * as paymentController from '../modules/payments/payment.controller.js';
 import { customerAuthMiddleware } from '../middleware/customer-auth.middleware.js';
 import checkoutRoutes from '../modules/checkout/checkout.routes.js';
+import reviewRoutes, { productReviewRoutes } from '../modules/reviews/review.routes.js';
 
 const router = Router();
 
@@ -86,6 +87,11 @@ router.use('/customer-auth', customerAuthRoutes);
 // Checkout — uses customer JWT (middleware inside routes).
 router.use('/checkout', checkoutRoutes);
 
+// Product reviews (public read, customer-authed eligibility/submit — auth
+// applied per-route inside the router). Mounted pre-auth so the public GET
+// isn't gated by the global authMiddleware below.
+router.use('/products', productReviewRoutes);
+
 // Payment gateway webhooks — signature verified inside the provider, no JWT.
 // (The /payments mount below sits behind authMiddleware, so gateways could
 // never reach it; this public registration wins because it responds first.)
@@ -120,6 +126,7 @@ router.use('/onboarding', onboardingRoutes);
 router.use('/business', businessRoutes);
 router.use('/products', productRoutes);
 router.use('/coupons', couponRoutes);
+router.use('/reviews', reviewRoutes);
 router.use('/inventory', inventoryRoutes);
 router.use('/catalog', catalogRoutes);
 router.use('/website', websiteRoutes);
