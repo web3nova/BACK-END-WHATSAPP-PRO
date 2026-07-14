@@ -6,18 +6,37 @@ const money = (minor, currency) => ({ amountMinor: minor, currency, display: `${
 // Matches name, description, category, brand, or tags — not just the exact
 // product name. Customers describe things naturally ("NFT", "smart contract"),
 // not by literal SKU/name, so a name-only search misses real catalog matches.
+//
+// Matched word-by-word (AND across words, OR across fields) rather than as one
+// whole-phrase substring — a customer typing "men kaftan" won't include the
+// apostrophe in "Men's Kaftan", so a single `contains: "men kaftan"` matched
+// nothing. Splitting on words means "men" alone still matches "Men's" as a
+// substring, while "kaftan" matches the rest, regardless of punctuation.
 function productSearchWhere(tenantId, query) {
-  const term = { contains: query, mode: 'insensitive' };
+  const words = query.trim().split(/\s+/).filter(Boolean);
+  const terms = words.length ? words : [query];
   return {
     tenantId,
     isActive: true,
-    OR: [
-      { name: term },
-      { description: term },
-      { category: term },
-      { brand: term },
-      { tags: { has: query } },
-    ],
+    AND: terms.map((word) => {
+      // A glued possessive typed without the apostrophe ("mens") isn't a
+      // substring of the stored "men's" either — try it with a trailing
+      // "s" stripped too, so "mens"/"kaftans" still line up.
+      const variants = [word];
+      if (word.length > 3 && word.toLowerCase().endsWith('s')) {
+        variants.push(word.slice(0, -1));
+      }
+      const fieldMatches = (field) => variants.map((v) => ({ [field]: { contains: v, mode: 'insensitive' } }));
+      return {
+        OR: [
+          ...fieldMatches('name'),
+          ...fieldMatches('description'),
+          ...fieldMatches('category'),
+          ...fieldMatches('brand'),
+          ...variants.map((v) => ({ tags: { has: v } })),
+        ],
+      };
+    }),
   };
 }
 
