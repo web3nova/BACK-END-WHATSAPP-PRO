@@ -23,6 +23,7 @@ import onboardingRoutes from '../modules/onboarding/onboarding.routes.js';
 // ── DEV 2 — Business, Catalog, Website ─────────────────
 import businessRoutes from '../modules/business/business.routes.js';
 import productRoutes from '../modules/products/product.routes.js';
+import couponRoutes from '../modules/coupons/coupon.routes.js';
 import inventoryRoutes from '../modules/inventory/inventory.routes.js';
 import catalogRoutes from '../modules/catalog/catalog.routes.js';
 import websiteRoutes, { publicWebsiteRoutes } from '../modules/website/website.routes.js';
@@ -118,6 +119,7 @@ router.use('/onboarding', onboardingRoutes);
 // Dev 2
 router.use('/business', businessRoutes);
 router.use('/products', productRoutes);
+router.use('/coupons', couponRoutes);
 router.use('/inventory', inventoryRoutes);
 router.use('/catalog', catalogRoutes);
 router.use('/website', websiteRoutes);
