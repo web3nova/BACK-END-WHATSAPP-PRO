@@ -22,7 +22,7 @@ import onboardingRoutes from '../modules/onboarding/onboarding.routes.js';
 
 // ── DEV 2 — Business, Catalog, Website ─────────────────
 import businessRoutes from '../modules/business/business.routes.js';
-import productRoutes from '../modules/products/product.routes.js';
+import productRoutes, { publicProductRoutes } from '../modules/products/product.routes.js';
 import couponRoutes from '../modules/coupons/coupon.routes.js';
 import inventoryRoutes from '../modules/inventory/inventory.routes.js';
 import catalogRoutes from '../modules/catalog/catalog.routes.js';
@@ -91,6 +91,9 @@ router.use('/checkout', checkoutRoutes);
 // applied per-route inside the router). Mounted pre-auth so the public GET
 // isn't gated by the global authMiddleware below.
 router.use('/products', productReviewRoutes);
+
+// Public product OG endpoint (social-preview cards) — same pre-auth mount.
+router.use('/products', publicProductRoutes);
 
 // Payment gateway webhooks — signature verified inside the provider, no JWT.
 // (The /payments mount below sits behind authMiddleware, so gateways could

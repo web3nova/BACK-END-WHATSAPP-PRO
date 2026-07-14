@@ -77,3 +77,8 @@ export const getPopular = asyncHandler(async (req, res) => {
   });
   return ok(res, products);
 });
+
+export const getOg = asyncHandler(async (req, res) => {
+  const data = await productService.getProductOg(req.params.id);
+  return ok(res, data);
+});

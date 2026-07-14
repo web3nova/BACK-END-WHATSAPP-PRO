@@ -13,6 +13,15 @@ import {
   updateProductSchema,
 } from './product.validation.js';
 
+// Public, product-scoped route — mounted before the global auth middleware
+// block in routes/index.js, same pattern as reviews' productReviewRoutes.
+export const publicProductRoutes = Router();
+publicProductRoutes.get(
+  '/:id/og',
+  validate(productParamsSchema, 'params'),
+  productController.getOg,
+);
+
 const router = Router();
 const enforceProductLimit = requireFeature('maxProducts', (tenantId) =>
   prisma.product.count({ where: { tenantId } }),

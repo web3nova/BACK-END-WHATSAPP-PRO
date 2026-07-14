@@ -198,3 +198,30 @@ export async function removeGalleryImage(id, tenantId, storageKey) {
 export function listCategories() {
   return PRODUCT_CATEGORIES;
 }
+
+// Public, trimmed subset for social-preview cards — no auth, no tenant
+// context, so the tenant is resolved through the product itself. Mirrors how
+// getStorefront strips secrets for its public payload.
+export async function getProductOg(id) {
+  const product = await prisma.product.findUnique({
+    where: { id },
+    select: {
+      name: true,
+      description: true,
+      priceMinor: true,
+      imageUrl: true,
+      imageStorageKey: true,
+      tenant: { select: { slug: true, business: { select: { displayName: true } } } },
+    },
+  });
+  if (!product) throw new NotFoundError('Product not found.');
+  const { imageUrl } = withFreshImageUrl({ imageUrl: product.imageUrl, imageStorageKey: product.imageStorageKey });
+  return {
+    name: product.name,
+    description: product.description || '',
+    priceMinor: product.priceMinor,
+    currency: 'NGN',
+    imageUrl,
+    business: { displayName: product.tenant?.business?.displayName || '', slug: product.tenant?.slug || '' },
+  };
+}
