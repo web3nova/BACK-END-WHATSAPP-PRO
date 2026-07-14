@@ -5,6 +5,7 @@ import { bootstrapSuperAdmin, bootstrapVectorDb } from './config/bootstrap.js';
 import { startWorker } from './jobs/worker.js';
 import { boss } from './config/pgboss.js';
 import './jobs/billing.cron.js';
+import './jobs/cartRecovery.cron.js';
 
 const app = createApp();
 
