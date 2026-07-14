@@ -24,7 +24,7 @@ const upload = multer({
     if (IMAGE_MIME_TYPES.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new BadRequestError(`Unsupported file type: ${file.mimetype}. Allowed: jpg, png, heic`));
+      cb(new BadRequestError(`Unsupported file type: ${file.mimetype}. Allowed: jpg, png, webp, heic`));
     }
   },
 });

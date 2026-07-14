@@ -18,7 +18,7 @@ export const PRODUCT_CATEGORIES = [
   'others',
 ];
 
-export const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/heic', 'image/heif'];
+export const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
 
 export default {
   BUSINESS_CATEGORIES,
