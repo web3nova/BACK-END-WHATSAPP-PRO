@@ -34,6 +34,11 @@ router.post('/orders/:id/claim-payment',
   checkoutController.claimPayment
 );
 
+router.post('/cart-ping',
+  customerAuthMiddleware,
+  checkoutController.cartPing
+);
+
 router.post('/webhook/paystack', checkoutController.paystackWebhook);
 
 router.get('/providers', checkoutController.getPaymentProviders);

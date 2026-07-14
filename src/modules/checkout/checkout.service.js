@@ -265,6 +265,8 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
     'We will keep you updated on your order.',
   ].join('\n')).catch(() => {});
 
+  prisma.abandonedCart.deleteMany({ where: { tenantId, customerId: customer.id } }).catch(() => {});
+
   notify(tenantId, {
     type: 'new_order',
     title: `New storefront order from ${customerName}`,
@@ -419,4 +421,19 @@ export async function claimPayment(tenantId, customerId, orderId) {
   }
 
   return toOrderStatusResponse(updated);
+}
+
+export async function pingCart(tenantId, customerId, items, totalMinor) {
+  if (!items || items.length === 0) {
+    await prisma.abandonedCart.deleteMany({ where: { tenantId, customerId } });
+    return { tracked: false };
+  }
+
+  await prisma.abandonedCart.upsert({
+    where: { tenantId_customerId: { tenantId, customerId } },
+    create: { tenantId, customerId, items, totalMinor, lastActiveAt: new Date() },
+    update: { items, totalMinor, lastActiveAt: new Date(), remindedAt: null, recoveredAt: null },
+  });
+
+  return { tracked: true };
 }

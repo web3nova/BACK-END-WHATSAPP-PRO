@@ -37,6 +37,17 @@ export const validateCouponSchema = z.object({
   })).min(1),
 });
 
+export const cartPingSchema = z.object({
+  items: z.array(z.object({
+    productId: z.string(),
+    name: z.string().optional(),
+    priceMinor: z.number().int().min(0).optional(),
+    quantity: z.number().int().min(1).max(100),
+    attributes: z.record(z.any()).optional(),
+  })).optional().default([]),
+  totalMinor: z.number().int().min(0).optional().default(0),
+});
+
 export const paymentInitSchema = z.object({
   orderId: z.string(),
   paymentMethod: z.string(),

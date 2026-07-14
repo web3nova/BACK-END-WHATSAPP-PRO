@@ -4,7 +4,7 @@ import { BadRequestError } from '../../common/errors/index.js';
 import * as checkoutService from './checkout.service.js';
 import * as paymentService from '../payments/payment.service.js';
 import { logger } from '../../config/logger.js';
-import { checkoutInitSchema, paymentInitSchema, completeOrderSchema, validateCouponSchema } from './checkout.validation.js';
+import { checkoutInitSchema, paymentInitSchema, completeOrderSchema, validateCouponSchema, cartPingSchema } from './checkout.validation.js';
 
 export const initializeCheckout = asyncHandler(async (req, res) => {
   const { items, deliveryMethod, paymentMethod, customerName, customerPhone, customerEmail, customerAddress, tenantId, couponCode } = checkoutInitSchema.parse(req.body);
@@ -73,6 +73,15 @@ export const claimPayment = asyncHandler(async (req, res) => {
   }
   const order = await checkoutService.claimPayment(req.customer.tenantId, req.customer.id, req.params.id);
   ok(res, order);
+});
+
+export const cartPing = asyncHandler(async (req, res) => {
+  if (!req.customer) {
+    throw new BadRequestError('Authentication required');
+  }
+  const { items, totalMinor } = cartPingSchema.parse(req.body);
+  const result = await checkoutService.pingCart(req.customer.tenantId, req.customer.id, items, totalMinor);
+  ok(res, result);
 });
 
 export const getPaymentProviders = asyncHandler(async (req, res) => {
