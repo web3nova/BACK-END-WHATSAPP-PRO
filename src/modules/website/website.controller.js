@@ -121,26 +121,6 @@ export const getPublicAsset = asyncHandler(async (req, res) => {
   return res.redirect(302, url);
 });
 
-export const getDomainStatus = asyncHandler(async (req, res) => {
-  const data = await websiteService.getDomainStatus(getTenantId(req));
-  return ok(res, data);
-});
-
-export const startDomainVerification = asyncHandler(async (req, res) => {
-  const data = await websiteService.startDomainVerification(getTenantId(req), req.body.domain);
-  return ok(res, data);
-});
-
-export const verifyDomain = asyncHandler(async (req, res) => {
-  const data = await websiteService.verifyDomain(getTenantId(req));
-  return ok(res, data);
-});
-
-export const removeDomainVerification = asyncHandler(async (req, res) => {
-  const data = await websiteService.removeDomainVerification(getTenantId(req));
-  return ok(res, data);
-});
-
 export const getStorefront = asyncHandler(async (req, res) => {
   const tenantId = req.query.tenantId || req.headers['x-tenant-id'];
   const slug = req.query.slug;
