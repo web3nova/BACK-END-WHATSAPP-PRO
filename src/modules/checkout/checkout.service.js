@@ -82,7 +82,7 @@ export async function initializeCheckout({ tenantId, items, deliveryMethod }) {
 export async function placeOrder({ tenantId, customerId, customerName, customerPhone, customerWhatsapp, customerEmail, customerAddress, customerState, customerCity, customerPostBox, customerLandmark, items, totalMinor, currency, deliveryMethod, paymentMethod }) {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, slug: true },
   });
   if (!tenant) throw new NotFoundError('Tenant not found');
 
@@ -223,7 +223,7 @@ export async function placeOrder({ tenantId, customerId, customerName, customerP
         tenantId, order.id,
         customerEmail || `${customerPhone.replace(/[^0-9]/g, '')}@customer.store`,
         providerName,
-        { callbackUrl: `${config.frontendUrl}/storefront/${tenantId}?order=${order.id}` },
+        { callbackUrl: `${config.frontendUrl}${tenant.slug ? `/b/${tenant.slug}` : `/storefront/${tenantId}`}?order=${order.id}` },
       );
       payment = {
         provider: initResult.provider,
