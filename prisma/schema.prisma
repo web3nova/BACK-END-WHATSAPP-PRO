@@ -42,6 +42,7 @@ model Tenant {
   notifications       Notification[]
   websiteVisits       WebsiteVisit[]
   coupons             Coupon[]
+  abandonedCarts      AbandonedCart[]
 
   @@map("tenants")
 }
@@ -485,11 +486,31 @@ model Customer {
   meta      Json     @default("{}")
   createdAt DateTime @default(now())
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id])
-  conversations Conversation[]
+  tenant         Tenant          @relation(fields: [tenantId], references: [id])
+  conversations  Conversation[]
+  abandonedCarts AbandonedCart[]
 
   @@unique([tenantId, phone])
   @@map("customers")
+}
+
+model AbandonedCart {
+  id           String    @id @default(uuid())
+  tenantId     String
+  customerId   String
+  items        Json
+  totalMinor   Int
+  lastActiveAt DateTime  @default(now())
+  remindedAt   DateTime?
+  recoveredAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@unique([tenantId, customerId])
+  @@map("abandoned_carts")
 }
 
 model Conversation {
