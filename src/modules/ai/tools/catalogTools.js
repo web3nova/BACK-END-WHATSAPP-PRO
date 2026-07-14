@@ -17,6 +17,12 @@ function freshImageUrl(product) {
   return product.imageUrl || null;
 }
 
+const MIME_BY_EXT = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', heif: 'image/heif' };
+function mimeTypeFromKey(key) {
+  const ext = (key || '').split('.').pop()?.toLowerCase();
+  return MIME_BY_EXT[ext] || 'image/jpeg';
+}
+
 // Ranks candidates by whole-word matches against the product's own name —
 // productSearchWhere matches substrings across name/description/category/
 // brand/tags for broad recall, which is fine for search_products (the AI
@@ -167,6 +173,7 @@ export const sendProductImage = {
     // from chat history on reload, and no SSE push means it doesn't show up
     // live in the dashboard either, even though WhatsApp delivered it fine.
     const text = caption || product.name;
+    const mimeType = mimeTypeFromKey(product.imageStorageKey || imageUrl);
     const message = await prisma.message.create({
       data: { conversationId: ctx.conversationId, role: 'ai', content: encryptMessage(text), meta: { productId } },
     });
@@ -175,13 +182,14 @@ export const sendProductImage = {
         tenantId: ctx.tenantId,
         messageId: message.id,
         provider: 'upload',
+        mimeType,
         storageKey: product.imageStorageKey || imageUrl,
         url: imageUrl,
       },
     });
     pushEvent(ctx.tenantId, 'ai_message', {
       conversationId: ctx.conversationId,
-      message: { id: message.id, role: 'ai', content: text, createdAt: message.createdAt, media: [{ mimeType: 'image/jpeg', url: imageUrl }] },
+      message: { id: message.id, role: 'ai', content: text, createdAt: message.createdAt, media: [{ mimeType, url: imageUrl }] },
     });
 
     return { sent: true, message: 'Image queued for delivery.' };
