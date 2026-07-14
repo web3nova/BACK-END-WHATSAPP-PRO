@@ -6,7 +6,6 @@ import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { notify } from '../notifications/notification.service.js';
 import { pushEvent } from '../sse/sse.service.js';
 import processAiReply from '../../jobs/processors/aiReply.job.js';
-import { sendMessage } from '../whatsapp/whatsapp.service.js';
 
 // Enqueue via pg-boss (Postgres-backed, always available). Falls back to
 // in-process only if the enqueue itself fails (e.g. DB unreachable).
@@ -87,7 +86,11 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
   if (text && text.trim().toUpperCase() === 'STOP') {
     const meta = { ...(customer.meta || {}), cartRemindersOptedOut: true };
     await prisma.customer.update({ where: { id: customer.id }, data: { meta } });
-    sendMessage(tenantId, normalizedPhone, "You've been unsubscribed from cart reminders.").catch(() => {});
+    // Dynamic import — matches this file's existing pattern for calling into
+    // whatsapp.service.js, which itself imports this file (circular).
+    import('../whatsapp/whatsapp.service.js').then(({ sendMessage }) =>
+      sendMessage(tenantId, normalizedPhone, "You've been unsubscribed from cart reminders.")
+    ).catch(() => {});
     logger.info({ tenantId, customerId: customer.id }, '[conversation] customer opted out of cart reminders via STOP');
     return;
   }
