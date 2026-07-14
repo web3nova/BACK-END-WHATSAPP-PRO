@@ -43,6 +43,7 @@ model Tenant {
   websiteVisits       WebsiteVisit[]
   coupons             Coupon[]
   abandonedCarts      AbandonedCart[]
+  reviews             ProductReview[]
 
   @@map("tenants")
 }
@@ -334,6 +335,7 @@ model Product {
   tenant    Tenant          @relation(fields: [tenantId], references: [id])
   inventory Inventory?
   variants  ProductVariant[]
+  reviews   ProductReview[]
 
   @@index([tenantId])
   @@index([category])
@@ -489,6 +491,7 @@ model Customer {
   tenant         Tenant          @relation(fields: [tenantId], references: [id])
   conversations  Conversation[]
   abandonedCarts AbandonedCart[]
+  reviews        ProductReview[]
 
   @@unique([tenantId, phone])
   @@map("customers")
@@ -610,6 +613,7 @@ model Order {
   tenant       Tenant        @relation(fields: [tenantId], references: [id])
   conversation Conversation? @relation(fields: [conversationId], references: [id])
   payments     Payment[]
+  reviews      ProductReview[]
 
   @@index([tenantId])
   @@index([conversationId])
@@ -712,6 +716,27 @@ model OnboardingStepData {
   @@index([tenantId])
   @@map("onboarding_step_data")
 }
+model ProductReview {
+  id         String   @id @default(uuid())
+  tenantId   String
+  productId  String
+  customerId String
+  orderId    String
+  rating     Int
+  text       String?
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id])
+  order    Order    @relation(fields: [orderId], references: [id])
+
+  @@unique([productId, orderId])
+  @@map("product_reviews")
+}
+
 model Invite {
   id         String    @id @default(uuid())
   tenantId   String
