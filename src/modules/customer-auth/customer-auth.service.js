@@ -10,6 +10,7 @@ import { BadRequestError, NotFoundError, UnauthorizedError } from '../../common/
 import { signAccessToken } from '../../common/utils/token.js';
 import { logger } from '../../config/logger.js';
 import { config } from '../../config/index.js';
+import { isAllowedOrigin } from '../../common/utils/allowedOrigins.js';
 import { validateGoogleTokenPayload } from './google-token.js';
 
 const SALT_ROUNDS = 10;
@@ -226,16 +227,14 @@ function takeChallenge(key) {
 // WebAuthn's RP ID must be exactly the domain the browser is actually on — a
 // credential registered under one domain cannot verify against another. This
 // app serves the storefront from multiple domains at once (biziq.online, a
-// Vercel preview URL, and now per-tenant custom domains from the storefront
-// roadmap's Phase 4), so a single static RP_ID env var can never be correct
-// for all of them simultaneously. Instead, derive it per-request from the
-// browser's actual Origin header, checked against the same allowlist already
-// used for CORS/passkey origin validation — and store the resolved value
-// alongside the challenge so the *complete* call verifies against the exact
-// origin/RP ID used at *start*, even if the allowlist changes in between.
-function resolveOrigin(originHeader) {
-  const allowed = config.auth.passkeyAllowedOrigins;
-  if (!originHeader || !allowed.includes(originHeader)) {
+// Vercel preview URL, and per-tenant custom domains), so a single static RP_ID
+// env var can never be correct for all of them. Instead, derive it per-request
+// from the browser's actual Origin header, validated against the SAME shared
+// allowlist CORS uses (including tenant custom domains) — and store the
+// resolved value alongside the challenge so the *complete* call verifies
+// against the exact origin/RP ID used at *start*.
+async function resolveOrigin(originHeader) {
+  if (!originHeader || !(await isAllowedOrigin(originHeader))) {
     throw new BadRequestError('Passkeys are not supported from this origin.');
   }
   return originHeader;
@@ -249,7 +248,7 @@ export async function passkeyRegisterStart({ tenantId, customerId, origin }) {
   if (!tenantId || !customerId) {
     throw new BadRequestError('tenantId and customerId are required');
   }
-  const resolvedOrigin = resolveOrigin(origin);
+  const resolvedOrigin = await resolveOrigin(origin);
   const rpID = rpIdFromOrigin(resolvedOrigin);
 
   const customer = await prisma.customer.findFirst({ where: { id: customerId, tenantId } });
@@ -318,7 +317,7 @@ export async function passkeyRegisterComplete({ customerId, credential }) {
 
 export async function passkeyLoginStart({ tenantId, origin }) {
   if (!tenantId) throw new BadRequestError('tenantId is required');
-  const resolvedOrigin = resolveOrigin(origin);
+  const resolvedOrigin = await resolveOrigin(origin);
   const rpID = rpIdFromOrigin(resolvedOrigin);
 
   const options = await generateAuthenticationOptions({
