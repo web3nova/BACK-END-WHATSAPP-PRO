@@ -214,11 +214,16 @@ export const getConversationHistory = async (conversationId, tenantId, { page = 
   const take = Math.min(limit, 100);
   const skip = Math.max(0, (page - 1) * take);
 
+  // Ordered newest-first so page 1 (skip=0) is always the most recent `take`
+  // messages, then reversed back to chronological order for display below.
+  // Fetching oldest-first meant any conversation past `take` messages could
+  // never show anything newer than message #`take` on a fresh load — the
+  // most recent messages were silently unreachable, not just slow to load.
   const [total, messages] = await prisma.$transaction([
     prisma.message.count({ where: { conversationId } }),
     prisma.message.findMany({
       where: { conversationId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' },
       skip,
       take,
       include: {
@@ -227,6 +232,7 @@ export const getConversationHistory = async (conversationId, tenantId, { page = 
       },
     }),
   ]);
+  messages.reverse();
 
   // Stored media URLs are signed with a 1h expiry — re-sign on every read so
   // images/videos in chat history never break.
