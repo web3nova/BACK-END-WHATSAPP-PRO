@@ -1,7 +1,41 @@
 // @owner Dev 3 — AI & Knowledge Engine
 import { prisma } from '../../../config/prisma.js';
+import { config } from '../../../config/index.js';
 
 const money = (minor, currency) => ({ amountMinor: minor, currency, display: `${minor / 100}` });
+
+// product.imageUrl is a presigned S3/R2 URL captured at upload time and
+// expires after ~1hr — every other product-reading path (product.service.js's
+// withFreshImageUrl) rebuilds it from imageStorageKey through the
+// /assets/product-images/:key proxy on each read instead of trusting the
+// stored value. This tool read product.imageUrl directly, so by the time the
+// AI sent it hours later WhatsApp silently failed to fetch the expired URL.
+function freshImageUrl(product) {
+  if (product.imageStorageKey) return `${config.appUrl}/assets/product-images/${product.imageStorageKey}`;
+  return product.imageUrl || null;
+}
+
+// Ranks candidates by whole-word matches against the product's own name —
+// productSearchWhere matches substrings across name/description/category/
+// brand/tags for broad recall, which is fine for search_products (the AI
+// reads the list and disambiguates itself), but get_price needs a single
+// winner. Plain substring scoring picks the wrong product for queries like
+// "men kaftan": "men" is a literal substring of "Women's Kaftan" too, so
+// score by whole words (split on non-alphanumeric) instead.
+function bestMatch(candidates, query) {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  let best = candidates[0];
+  let bestScore = -1;
+  for (const c of candidates) {
+    const nameWords = c.name.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    const score = words.reduce((n, w) => {
+      const stripped = w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : null;
+      return n + (nameWords.includes(w) || (stripped && nameWords.includes(stripped)) ? 1 : 0);
+    }, 0);
+    if (score > bestScore) { bestScore = score; best = c; }
+  }
+  return best;
+}
 
 // Matches name, description, category, brand, or tags — not just the exact
 // product name. Customers describe things naturally ("NFT", "smart contract"),
@@ -65,7 +99,7 @@ export const searchProducts = {
       price: money(p.priceMinor, p.currency),
       stock: p.stock,
       attributes: p.attributes,
-      hasImage: !!p.imageUrl,
+      hasImage: !!(p.imageStorageKey || p.imageUrl),
     }));
   },
 };
@@ -82,11 +116,13 @@ export const getPrice = {
     required: ['productName'],
   },
   async handler({ productName }, ctx) {
-    const product = await prisma.product.findFirst({
+    const candidates = await prisma.product.findMany({
       where: productSearchWhere(ctx.tenantId, productName),
+      take: 10,
     });
-    if (!product) return { found: false, message: `No product matching "${productName}".` };
-    return { found: true, name: product.name, price: money(product.priceMinor, product.currency), hasImage: !!product.imageUrl };
+    if (!candidates.length) return { found: false, message: `No product matching "${productName}".` };
+    const product = bestMatch(candidates, productName);
+    return { found: true, name: product.name, price: money(product.priceMinor, product.currency), hasImage: !!(product.imageStorageKey || product.imageUrl) };
   },
 };
 
@@ -108,7 +144,8 @@ export const sendProductImage = {
   async handler({ productId, caption }, ctx) {
     const product = await prisma.product.findFirst({ where: { id: productId, tenantId: ctx.tenantId } });
     if (!product) return { sent: false, message: 'Product not found.' };
-    if (!product.imageUrl) return { sent: false, message: 'This product has no image to send.' };
+    const imageUrl = freshImageUrl(product);
+    if (!imageUrl) return { sent: false, message: 'This product has no image to send.' };
 
     const customer = ctx.customerId
       ? await prisma.customer.findUnique({ where: { id: ctx.customerId }, select: { phone: true } })
@@ -119,7 +156,7 @@ export const sendProductImage = {
     await sendMessage(ctx.tenantId, customer.phone, {
       type: 'media',
       mediaType: 'image',
-      url: product.imageUrl,
+      url: imageUrl,
       caption: caption || product.name,
     });
 
