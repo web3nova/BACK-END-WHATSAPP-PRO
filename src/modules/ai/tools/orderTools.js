@@ -1,5 +1,31 @@
 import { prisma } from '../../../config/prisma.js';
 
+// The AI supplies items[].priceMinor itself, straight from the conversation —
+// nothing previously checked that against the real catalog price before it
+// became a payable order/quote total (createPaymentLink etc. trust
+// order.totalMinor unconditionally). A model slip, a long negotiation-style
+// exchange, or a customer pushing "you said ₦2,000 earlier" could produce a
+// real checkout link for less than the true price. For any item carrying a
+// productId, override the AI-supplied price with the catalog's real
+// priceMinor; items with no productId are genuinely custom/bespoke work with
+// no catalog price to check against, so those stay AI/staff-negotiated.
+async function resolveItemPrices(items = [], tenantId) {
+  const productIds = [...new Set(items.map((it) => it.productId).filter(Boolean))];
+  const products = productIds.length
+    ? await prisma.product.findMany({ where: { id: { in: productIds }, tenantId }, select: { id: true, priceMinor: true, name: true } })
+    : [];
+  const byId = new Map(products.map((p) => [p.id, p]));
+
+  return items.map((it) => {
+    if (!it.productId) return it;
+    const product = byId.get(it.productId);
+    // productId didn't resolve (wrong tenant, deleted, or hallucinated) —
+    // don't silently fall back to trusting the AI's own price for it.
+    if (!product) return { ...it, priceMinor: 0, name: it.name ? `${it.name} (unverified — product not found)` : 'Unverified item' };
+    return { ...it, name: it.name || product.name, priceMinor: product.priceMinor };
+  });
+}
+
 const sumItems = (items = []) =>
   items.reduce((acc, it) => acc + (it.priceMinor ?? 0) * (it.qty ?? 1), 0);
 
@@ -19,7 +45,8 @@ export const createQuote = {
           properties: {
             name: { type: 'string' },
             qty: { type: 'number' },
-            priceMinor: { type: 'number', description: 'Unit price in minor units (e.g. kobo)' },
+            priceMinor: { type: 'number', description: 'Unit price in minor units (e.g. kobo). Ignored/overridden for catalog items if productId is given — the real catalog price always wins.' },
+            productId: { type: 'string', description: 'The product id from search_products/get_price, if this line item is a real catalog product (not a custom/bespoke item). When given, the actual catalog price is used instead of priceMinor.' },
           },
           required: ['name'],
         },
@@ -30,7 +57,8 @@ export const createQuote = {
     required: ['items'],
   },
   async handler({ items, currency = 'NGN', details = {} }, ctx) {
-    const amountMinor = sumItems(items);
+    const resolvedItems = await resolveItemPrices(items, ctx.tenantId);
+    const amountMinor = sumItems(resolvedItems);
 
     // Same webhook-redelivery duplicate risk as create_order — see comment there.
     if (ctx.conversationId) {
@@ -55,7 +83,7 @@ export const createQuote = {
         status: 'sent',
         amountMinor,
         currency,
-        details: { items, ...details },
+        details: { items: resolvedItems, ...details },
       },
     });
     return { quoteId: quote.id, amountMinor, currency, status: quote.status };
@@ -76,7 +104,8 @@ export const createOrder = {
           properties: {
             name: { type: 'string' },
             qty: { type: 'number' },
-            priceMinor: { type: 'number' },
+            priceMinor: { type: 'number', description: 'Ignored/overridden for catalog items if productId is given — the real catalog price always wins.' },
+            productId: { type: 'string', description: 'The product id from search_products/get_price, if this line item is a real catalog product (not a custom/bespoke item). When given, the actual catalog price is used instead of priceMinor.' },
           },
           required: ['name'],
         },
@@ -88,7 +117,8 @@ export const createOrder = {
     required: ['items'],
   },
   async handler({ items, measurements = {}, currency = 'NGN', quoteId }, ctx) {
-    const totalMinor = sumItems(items);
+    const resolvedItems = await resolveItemPrices(items, ctx.tenantId);
+    const totalMinor = sumItems(resolvedItems);
 
     // Idempotency guard: WhatsApp redelivers webhooks it doesn't get a fast
     // 200 for, which can spin up a second AI turn for the same customer
@@ -123,7 +153,7 @@ export const createOrder = {
         status: 'pending',
         totalMinor,
         currency,
-        items,
+        items: resolvedItems,
         measurements,
       },
     });
