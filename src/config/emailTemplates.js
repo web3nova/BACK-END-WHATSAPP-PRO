@@ -192,7 +192,7 @@ export function escalationEmail({ customerName, reason, lastMessage }) {
   return layout({
     preheader: `${name} is waiting — the AI couldn't reply`,
     heading: `${name} needs you right now`,
-    bodyHtml,
+    bodyHtml: bodyHtml + '<!-- tmpl:escalation-v2 -->',
     ctaLabel: 'Reply on WhatsApp',
     ctaUrl: `${APP_URL}/dashboard/whatsapp`,
   });
