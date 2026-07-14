@@ -5,6 +5,16 @@ import { hashPassword } from '../../common/utils/hash.js';
 import { sendMail } from '../../config/mailer.js';
 import { superAdminWelcomeEmail } from '../../config/emailTemplates.js';
 import { logger } from '../../config/logger.js';
+import { getAssetUrl } from '../../common/utils/uploadAsset.js';
+
+// Resolves a business logo to a fresh URL (signed URLs expire) — mirrors
+// business.service.js's withFreshLogoUrl, applied to the tenant.business relation.
+async function withLogoUrl(tenant) {
+  if (!tenant) return tenant;
+  const { business, ...rest } = tenant;
+  if (!business) return { ...rest, logoUrl: null };
+  return { ...rest, logoUrl: await getAssetUrl(business.logoStorageKey, business.logoUrl) };
+}
 
 const ADMIN_URL = process.env.ADMIN_URL || 'https://admin.biziq.online';
 
@@ -51,12 +61,13 @@ export const listTenants = async ({ page = 1, limit = 25, search = '' } = {}) =>
       select: {
         id: true, name: true, slug: true, domain: true, status: true, createdAt: true,
         subscription: { select: { status: true, plan: { select: { name: true } } } },
+        business: { select: { logoUrl: true, logoStorageKey: true } },
         _count: { select: { users: true, orders: true } },
       },
     }),
   ]);
 
-  return { data: tenants, meta: { total, page, limit: take } };
+  return { data: await Promise.all(tenants.map(withLogoUrl)), meta: { total, page, limit: take } };
 };
 
 export const getTenantDetail = async (id) => {
@@ -67,11 +78,12 @@ export const getTenantDetail = async (id) => {
       subscription: {
         select: { id: true, status: true, planId: true, renewsAt: true, trialEndsAt: true, plan: { select: { id: true, name: true, label: true } } },
       },
+      business: { select: { logoUrl: true, logoStorageKey: true } },
       _count: { select: { users: true, orders: true, customers: true } },
     },
   });
   if (!tenant) throw new NotFoundError('Tenant not found');
-  return tenant;
+  return withLogoUrl(tenant);
 };
 
 export const suspendTenant = async (id) => {
