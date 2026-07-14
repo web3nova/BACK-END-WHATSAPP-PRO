@@ -96,6 +96,7 @@ model User {
   roleId       String?
   isSuperAdmin Boolean  @default(false)
   isBanned     Boolean  @default(false)
+  tours        Json     @default("{}")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
