@@ -5,6 +5,9 @@ import { getAssetUrl, uploadAsset, deleteAsset } from '../../common/utils/upload
 import { logger } from '../../config/logger.js';
 import { config } from '../../config/index.js';
 import { withBuilderDefaults } from './builder-defaults.js';
+import { isValidDomain, matchesVerifyToken } from './domain-verification.js';
+import { addDomain, removeDomain } from './vercel-domains.js';
+import crypto from 'node:crypto';
 
 
 async function requireBusiness(tenantId) {
@@ -512,4 +515,103 @@ export async function recordVisit({ tenantId, referrer, host }) {
     }
   }
   await prisma.websiteVisit.create({ data: { tenantId, source, referrer: referrer || null } });
+}
+
+// ── Custom domain verification ──────────────────────────
+// Dashboard-authed only. A pending domain must prove ownership via a DNS TXT
+// record before it becomes the tenant's live `domain` and gets attached on
+// Vercel.
+
+function domainStatusShape({ domain, domainPending, domainVerifyToken, domainVerifiedAt }) {
+  return {
+    domain,
+    domainPending,
+    verifyRecord: domainPending
+      ? { name: `_biziq-verify.${domainPending}`, type: 'TXT', value: domainVerifyToken }
+      : null,
+    domainVerifiedAt,
+  };
+}
+
+export async function getDomainStatus(tenantId) {
+  await requireBusiness(tenantId);
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { domain: true, domainPending: true, domainVerifyToken: true, domainVerifiedAt: true },
+  });
+  if (!tenant) throw new NotFoundError('Tenant not found.');
+  return domainStatusShape(tenant);
+}
+
+export async function startDomainVerification(tenantId, domain) {
+  await requireBusiness(tenantId);
+  if (!isValidDomain(domain)) throw new BadRequestError('Invalid domain');
+  const normalized = domain.trim().toLowerCase();
+
+  const conflict = await prisma.tenant.findFirst({
+    where: { id: { not: tenantId }, OR: [{ domain: normalized }, { domainPending: normalized }] },
+  });
+  if (conflict) throw new BadRequestError('Domain already in use');
+
+  const token = crypto.randomUUID();
+  const tenant = await prisma.tenant.update({
+    where: { id: tenantId },
+    data: { domainPending: normalized, domainVerifyToken: token, domainVerifiedAt: null },
+    select: { domain: true, domainPending: true, domainVerifyToken: true, domainVerifiedAt: true },
+  });
+  return domainStatusShape(tenant);
+}
+
+export async function verifyDomain(tenantId) {
+  await requireBusiness(tenantId);
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { domainPending: true, domainVerifyToken: true },
+  });
+  if (!tenant?.domainPending) {
+    throw new BadRequestError('No domain verification in progress');
+  }
+
+  const { resolveTxt } = await import('node:dns/promises');
+  const records = await resolveTxt(`_biziq-verify.${tenant.domainPending}`).catch(() => []);
+
+  if (matchesVerifyToken(records, tenant.domainVerifyToken)) {
+    const updated = await prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        domain: tenant.domainPending,
+        domainPending: null,
+        domainVerifyToken: null,
+        domainVerifiedAt: new Date(),
+      },
+      select: { domain: true },
+    });
+    const result = await addDomain(updated.domain);
+    if (result?.error) {
+      logger.warn({ domain: updated.domain, error: result.error }, '[website] Vercel domain attach failed (best-effort)');
+    }
+    return { verified: true, domain: updated.domain };
+  }
+
+  return { verified: false, reason: 'txt_not_found' };
+}
+
+export async function removeDomainVerification(tenantId) {
+  await requireBusiness(tenantId);
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { domain: true },
+  });
+  await prisma.tenant.update({
+    where: { id: tenantId },
+    data: { domain: null, domainPending: null, domainVerifyToken: null, domainVerifiedAt: null },
+  });
+  if (tenant?.domain) {
+    try {
+      await removeDomain(tenant.domain);
+    } catch (err) {
+      logger.warn({ domain: tenant.domain, err: err.message }, '[website] Vercel domain remove failed (best-effort)');
+    }
+  }
+  return { removed: true };
 }

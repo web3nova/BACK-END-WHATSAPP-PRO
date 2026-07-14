@@ -61,6 +61,10 @@ export const revisionParamsSchema = z.object({
   id: z.string().uuid(),
 });
 
+export const startDomainVerificationSchema = z.object({
+  domain: z.string().trim().min(3).max(253),
+});
+
 export const storefrontQuerySchema = z
   .object({
     tenantId: z.string().uuid().optional(),

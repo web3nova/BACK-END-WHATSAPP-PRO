@@ -13,6 +13,7 @@ import {
   pageParamsSchema,
   publishPageSchema,
   revisionParamsSchema,
+  startDomainVerificationSchema,
   storefrontQuerySchema,
   updateWebsiteSettingsSchema,
   updatePageSchema,
@@ -33,6 +34,65 @@ router.use(requireFeature('websiteBuilder'));
  *       200: { description: Website settings }
  */
 router.get('/settings', websiteController.getSettings);
+
+/**
+ * @openapi
+ * /website/domain:
+ *   get:
+ *     tags: [Website]
+ *     summary: Get the tenant's custom domain status (live domain, pending verification, TXT record to add)
+ *     responses:
+ *       200: { description: Domain status }
+ */
+router.get('/domain', websiteController.getDomainStatus);
+
+/**
+ * @openapi
+ * /website/domain:
+ *   post:
+ *     tags: [Website]
+ *     summary: Start verification for a custom domain — returns a TXT record to add at the tenant's DNS provider
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [domain]
+ *             properties:
+ *               domain: { type: string }
+ *     responses:
+ *       200: { description: Domain status with verifyRecord }
+ *       400: { description: Invalid domain or already in use }
+ */
+router.post(
+  '/domain',
+  validate(startDomainVerificationSchema, 'body'),
+  websiteController.startDomainVerification,
+);
+
+/**
+ * @openapi
+ * /website/domain/verify:
+ *   post:
+ *     tags: [Website]
+ *     summary: Check DNS for the verification TXT record and, if found, promote the pending domain to live
+ *     responses:
+ *       200: { description: "{ verified: boolean, domain? , reason? }" }
+ *       400: { description: No domain verification in progress }
+ */
+router.post('/domain/verify', websiteController.verifyDomain);
+
+/**
+ * @openapi
+ * /website/domain:
+ *   delete:
+ *     tags: [Website]
+ *     summary: Remove the tenant's custom domain (live or pending) and detach it from Vercel
+ *     responses:
+ *       200: { description: "{ removed: true }" }
+ */
+router.delete('/domain', websiteController.removeDomainVerification);
 
 /**
  * @openapi
