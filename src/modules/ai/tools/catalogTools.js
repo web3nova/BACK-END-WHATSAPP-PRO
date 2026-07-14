@@ -1,6 +1,8 @@
 // @owner Dev 3 — AI & Knowledge Engine
 import { prisma } from '../../../config/prisma.js';
 import { config } from '../../../config/index.js';
+import { pushEvent } from '../../sse/sse.service.js';
+import { encryptMessage } from '../../../common/utils/encryption.js';
 
 const money = (minor, currency) => ({ amountMinor: minor, currency, display: `${minor / 100}` });
 
@@ -158,6 +160,28 @@ export const sendProductImage = {
       mediaType: 'image',
       url: imageUrl,
       caption: caption || product.name,
+    });
+
+    // Record it the same way sendStaffMedia does — otherwise the image only
+    // ever exists on the customer's phone: no Message row means it's gone
+    // from chat history on reload, and no SSE push means it doesn't show up
+    // live in the dashboard either, even though WhatsApp delivered it fine.
+    const text = caption || product.name;
+    const message = await prisma.message.create({
+      data: { conversationId: ctx.conversationId, role: 'ai', content: encryptMessage(text), meta: { productId } },
+    });
+    await prisma.mediaAsset.create({
+      data: {
+        tenantId: ctx.tenantId,
+        messageId: message.id,
+        provider: 'upload',
+        storageKey: product.imageStorageKey || imageUrl,
+        url: imageUrl,
+      },
+    });
+    pushEvent(ctx.tenantId, 'ai_message', {
+      conversationId: ctx.conversationId,
+      message: { id: message.id, role: 'ai', content: text, createdAt: message.createdAt, media: [{ mimeType: 'image/jpeg', url: imageUrl }] },
     });
 
     return { sent: true, message: 'Image queued for delivery.' };
