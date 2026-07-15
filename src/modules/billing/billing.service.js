@@ -6,6 +6,7 @@ import { sendMail } from '../../config/mailer.js';
 import { BadRequestError, NotFoundError } from '../../common/errors/index.js';
 import { notify } from '../notifications/notification.service.js';
 import { trialWelcomeEmail, paymentConfirmedEmail, trialEndingEmail, renewalReminderEmail } from '../../config/emailTemplates.js';
+import { trackEvent } from '../../services/tiktok.js';
 
 const TRIAL_DAYS = 14;
 
@@ -61,6 +62,8 @@ export const startTrial = async (tenantId) => {
     emailHtml: trialWelcomeEmail({ businessName: tenant?.name, trialEndsAt }),
     outbound: true,
   }).catch(() => {});
+
+  trackEvent({ event: 'StartTrial', context: {} });
 
   return sub;
 };
@@ -215,6 +218,12 @@ export const handleWebhook = async (payload, signature) => {
     metadata: { reference: paymentReference, planId },
     outbound: true,
   }).catch(() => {});
+
+  trackEvent({
+    event: 'Subscribe',
+    properties: { planId, amount: payment.amountMinor, currency: payment.currency },
+    context: { email: ownerEmail },
+  });
 
   return { success: true };
 };

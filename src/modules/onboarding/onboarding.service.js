@@ -1,4 +1,5 @@
 import { prisma } from '../../config/prisma.js';
+import { trackEvent } from '../../services/tiktok.js';
 
 // Steps that reflect real, verifiable state and can't be forced.
 // 'account' is always true if you've reached this endpoint at all.
@@ -246,7 +247,21 @@ export async function submitOnboarding(tenantId, dbFields, rawInput) {
     dbFields.settings = { ...(existing?.settings ?? {}), ...extra };
   }
 
-  return saveBusinessProfile(tenantId, dbFields, rawInput);
+  const result = await saveBusinessProfile(tenantId, dbFields, rawInput);
+
+  if (result.allPanelsDone) {
+    const owner = await prisma.user.findFirst({
+      where: { tenantId, teamRole: 'owner' },
+      select: { email: true, name: true },
+    });
+    trackEvent({
+      event: 'CompleteOnboarding',
+      properties: { businessName: result.business?.displayName },
+      context: { email: owner?.email },
+    });
+  }
+
+  return result;
 }
 
 /**
