@@ -62,7 +62,7 @@ export const listTenants = async ({ page = 1, limit = 25, search = '' } = {}) =>
       select: {
         id: true, name: true, slug: true, domain: true, status: true, createdAt: true,
         subscription: { select: { status: true, plan: { select: { name: true } } } },
-        business: { select: { logoUrl: true, logoStorageKey: true } },
+      business: { select: { logoUrl: true, logoStorageKey: true, phone: true, whatsappNumber: true } },
         _count: { select: { users: true, orders: true } },
       },
     }),
@@ -79,7 +79,7 @@ export const getTenantDetail = async (id) => {
       subscription: {
         select: { id: true, status: true, planId: true, renewsAt: true, trialEndsAt: true, plan: { select: { id: true, name: true, label: true } } },
       },
-      business: { select: { logoUrl: true, logoStorageKey: true } },
+      business: { select: { logoUrl: true, logoStorageKey: true, phone: true, whatsappNumber: true } },
       _count: { select: { users: true, orders: true, customers: true } },
     },
   });
