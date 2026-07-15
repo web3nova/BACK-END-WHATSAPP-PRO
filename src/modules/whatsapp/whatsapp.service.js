@@ -7,6 +7,7 @@ import processOutbox from '../../jobs/processors/outbox.job.js';
 import { parseMessage, isMediaMessage, extractMediaId } from './whatsapp.parser.js';
 import { notify } from '../notifications/notification.service.js';
 import { decryptSecret } from '../../common/utils/encryption.js';
+import { platformAlertEmail } from '../../config/emailTemplates.js';
 
 const GRAPH_BASE = `https://graph.facebook.com/${process.env.WHATSAPP_API_VERSION || 'v20.0'}`;
 
@@ -223,14 +224,18 @@ const processAccountEvent = async (field, value) => {
         const quality = value.current_limit ?? value.quality ?? 'UNKNOWN';
         const phone = value.display_phone_number ?? '';
         const isLow = ['LIMITED', 'FLAGGED', 'RATE_LIMITED'].includes(quality?.toUpperCase());
-        await notify(tenantId, {
-          type: 'phone_quality_update',
-          title: isLow ? 'WhatsApp quality rating is low' : 'WhatsApp quality rating updated',
-          body: `${phone ? phone + ' — ' : ''}Quality rating: ${quality}. ${isLow ? 'High spam reports may restrict your messaging. Review your messages.' : 'Your number is in good standing.'}`,
-          emailSubject: `WhatsApp number quality update — ${quality}`,
-          metadata: { quality, phone },
-          outbound: isLow, // only email if quality is low
-        });
+        {
+          const message = `${phone ? phone + ' — ' : ''}Quality rating: ${quality}. ${isLow ? 'High spam reports may restrict your messaging. Review your messages.' : 'Your number is in good standing.'}`;
+          await notify(tenantId, {
+            type: 'phone_quality_update',
+            title: isLow ? 'WhatsApp quality rating is low' : 'WhatsApp quality rating updated',
+            body: message,
+            emailSubject: `WhatsApp number quality update — ${quality}`,
+            emailHtml: platformAlertEmail({ heading: isLow ? 'Quality rating is low' : 'Quality rating updated', message, tone: isLow ? 'bad' : 'good', emoji: isLow ? '⚠️' : '✅' }),
+            metadata: { quality, phone },
+            outbound: isLow, // only email if quality is low
+          });
+        }
         break;
       }
 
@@ -246,30 +251,40 @@ const processAccountEvent = async (field, value) => {
           PARTNER_REMOVED:    { title: 'Partner removed from WhatsApp account', body: 'A partner has been removed from your WhatsApp Business account.', email: false },
         };
         const msg = messages[event] ?? { title: `WhatsApp account update: ${event}`, body: JSON.stringify(value), email: false };
-        await notify(tenantId, {
-          type: 'account_update',
-          title: msg.title,
-          body: banInfo ? `${msg.body} Reason: ${banInfo.waba_ban_state ?? banInfo.ban_state ?? 'see Meta dashboard'}.` : msg.body,
-          emailSubject: msg.title,
-          metadata: { event, value },
-          outbound: msg.email,
-        });
+        {
+          const message = banInfo ? `${msg.body} Reason: ${banInfo.waba_ban_state ?? banInfo.ban_state ?? 'see Meta dashboard'}.` : msg.body;
+          const isBad = ['DISABLED_UPDATE', 'FLAGGED_UPDATE', 'RESTRICTED_UPDATE'].includes(event);
+          await notify(tenantId, {
+            type: 'account_update',
+            title: msg.title,
+            body: message,
+            emailSubject: msg.title,
+            emailHtml: platformAlertEmail({ heading: msg.title, message, tone: isBad ? 'bad' : 'good', emoji: isBad ? '⚠️' : 'ℹ️' }),
+            metadata: { event, value },
+            outbound: msg.email,
+          });
+        }
         break;
       }
 
       case 'account_review_update': {
         const decision = value.decision ?? '';
         const approved = decision === 'APPROVED';
-        await notify(tenantId, {
-          type: 'account_review',
-          title: approved ? 'WhatsApp account review approved' : 'WhatsApp account review decision',
-          body: approved
+        {
+          const message = approved
             ? 'Your WhatsApp Business account has been approved. You can now send messages at scale.'
-            : `Account review decision: ${decision}. Check your Meta Business Manager for details.`,
-          emailSubject: `WhatsApp account review — ${decision}`,
-          metadata: { decision },
-          outbound: true,
-        });
+            : `Account review decision: ${decision}. Check your Meta Business Manager for details.`;
+          const heading = approved ? 'Account review approved' : 'Account review decision';
+          await notify(tenantId, {
+            type: 'account_review',
+            title: approved ? 'WhatsApp account review approved' : 'WhatsApp account review decision',
+            body: message,
+            emailSubject: `WhatsApp account review — ${decision}`,
+            emailHtml: platformAlertEmail({ heading, message, tone: approved ? 'good' : 'warn', emoji: approved ? '✅' : '⚠️' }),
+            metadata: { decision },
+            outbound: true,
+          });
+        }
         break;
       }
 
@@ -278,44 +293,57 @@ const processAccountEvent = async (field, value) => {
         const name = value.requested_verified_name ?? value.display_name ?? '';
         const phone = value.display_phone_number ?? '';
         const approved = decision === 'APPROVED';
-        await notify(tenantId, {
-          type: 'phone_name_update',
-          title: approved ? 'WhatsApp display name approved' : 'WhatsApp display name rejected',
-          body: approved
+        {
+          const message = approved
             ? `"${name}" has been approved as your WhatsApp display name${phone ? ` for ${phone}` : ''}.`
-            : `Display name "${name}" was rejected by Meta${phone ? ` for ${phone}` : ''}. Please submit a compliant name.`,
-          emailSubject: `WhatsApp display name ${approved ? 'approved' : 'rejected'}`,
-          metadata: { decision, name, phone },
-          outbound: true,
-        });
+            : `Display name "${name}" was rejected by Meta${phone ? ` for ${phone}` : ''}. Please submit a compliant name.`;
+          await notify(tenantId, {
+            type: 'phone_name_update',
+            title: approved ? 'WhatsApp display name approved' : 'WhatsApp display name rejected',
+            body: message,
+            emailSubject: `WhatsApp display name ${approved ? 'approved' : 'rejected'}`,
+            emailHtml: platformAlertEmail({ heading: approved ? 'Display name approved' : 'Display name rejected', message, tone: approved ? 'good' : 'bad', emoji: approved ? '✅' : '❌' }),
+            metadata: { decision, name, phone },
+            outbound: true,
+          });
+        }
         break;
       }
 
       case 'account_alerts': {
         const alertType = value.alert_type ?? value.type ?? 'UNKNOWN';
-        await notify(tenantId, {
-          type: 'account_alert',
-          title: 'WhatsApp account alert',
-          body: `Alert type: ${alertType}. Log in to Meta Business Manager to review and take action before your account is restricted.`,
-          emailSubject: `WhatsApp account alert — ${alertType}`,
-          metadata: { alertType, value },
-          outbound: true,
-        });
+        {
+          const message = `Alert type: ${alertType}. Log in to Meta Business Manager to review and take action before your account is restricted.`;
+          await notify(tenantId, {
+            type: 'account_alert',
+            title: 'WhatsApp account alert',
+            body: message,
+            emailSubject: `WhatsApp account alert — ${alertType}`,
+            emailHtml: platformAlertEmail({ heading: 'Account alert', message, tone: 'warn', emoji: '⚠️' }),
+            metadata: { alertType, value },
+            outbound: true,
+          });
+        }
         break;
       }
 
       case 'business_status_update': {
         const status = value.status ?? '';
-        await notify(tenantId, {
-          type: 'business_status',
-          title: `WhatsApp business verification: ${status}`,
-          body: status === 'VERIFIED'
+        {
+          const isVerified = status === 'VERIFIED';
+          const message = isVerified
             ? 'Your business is now verified on Meta. This increases your messaging limits.'
-            : `Business verification status changed to ${status}. Check Meta Business Manager for next steps.`,
-          emailSubject: `WhatsApp business status — ${status}`,
-          metadata: { status, value },
-          outbound: true,
-        });
+            : `Business verification status changed to ${status}. Check Meta Business Manager for next steps.`;
+          await notify(tenantId, {
+            type: 'business_status',
+            title: `WhatsApp business verification: ${status}`,
+            body: message,
+            emailSubject: `WhatsApp business status — ${status}`,
+            emailHtml: platformAlertEmail({ heading: `Business verification: ${status}`, message, tone: isVerified ? 'good' : 'warn', emoji: isVerified ? '✅' : 'ℹ️' }),
+            metadata: { status, value },
+            outbound: true,
+          });
+        }
         break;
       }
 
@@ -323,14 +351,18 @@ const processAccountEvent = async (field, value) => {
         const name = value.message_template_name ?? '';
         const status = value.event ?? value.status ?? '';
         const approved = ['APPROVED', 'REINSTATED'].includes(status);
-        await notify(tenantId, {
-          type: 'template_status',
-          title: `Message template ${approved ? 'approved' : 'rejected'}`,
-          body: `Template "${name}" status: ${status}.${!approved ? ' Review Meta\'s policies and resubmit.' : ''}`,
-          emailSubject: `WhatsApp template ${approved ? 'approved' : 'rejected'}: ${name}`,
-          metadata: { name, status },
-          outbound: true,
-        });
+        {
+          const message = `Template "${name}" status: ${status}.${!approved ? ' Review Meta\'s policies and resubmit.' : ''}`;
+          await notify(tenantId, {
+            type: 'template_status',
+            title: `Message template ${approved ? 'approved' : 'rejected'}`,
+            body: message,
+            emailSubject: `WhatsApp template ${approved ? 'approved' : 'rejected'}: ${name}`,
+            emailHtml: platformAlertEmail({ heading: `Template ${approved ? 'approved' : 'rejected'}`, message, tone: approved ? 'good' : 'bad', emoji: approved ? '✅' : '❌' }),
+            metadata: { name, status },
+            outbound: true,
+          });
+        }
         break;
       }
 

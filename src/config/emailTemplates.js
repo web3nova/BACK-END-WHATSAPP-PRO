@@ -200,6 +200,54 @@ export function escalationEmail({ customerName, reason, lastMessage }) {
 
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+export function whatsappConnectedEmail({ phoneNumber }) {
+  const bodyHtml = `
+    <p style="margin:0 0 16px;">Great news — <strong>${escapeHtml(phoneNumber) || 'your WhatsApp number'}</strong> is connected and ready to receive messages.</p>
+    <p style="margin:0;color:${MUTED};font-size:13px;">Your AI sales agent can now reply to customers on WhatsApp automatically, day or night.</p>
+  `;
+  return layout({
+    preheader: `${phoneNumber || 'Your WhatsApp number'} is connected and ready to receive messages.`,
+    heading: '✅ WhatsApp connected',
+    bodyHtml,
+    ctaLabel: 'Open WhatsApp Inbox',
+    ctaUrl: `${APP_URL}/dashboard/whatsapp`,
+  });
+}
+
+const TONE_COLORS = { good: '#16a34a', warn: '#d97706', bad: '#dc2626' };
+
+// Shared by all Meta/WhatsApp platform-status webhooks (quality updates,
+// account reviews, template decisions, alerts) so they get consistent
+// branding instead of each falling back to a bare <p> of plain text.
+export function platformAlertEmail({ heading, message, tone, emoji }) {
+  const accent = TONE_COLORS[tone] || BRAND;
+  const bodyHtml = `
+    <div style="display:inline-block;background:${accent}1a;color:${accent};font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;margin-bottom:14px;">Meta Platform Update</div>
+    <p style="margin:0;">${message}</p>
+  `;
+  return layout({
+    preheader: heading,
+    heading: `${emoji ? emoji + ' ' : ''}${heading}`,
+    bodyHtml,
+    ctaLabel: 'Open Dashboard',
+    ctaUrl: `${APP_URL}/dashboard/whatsapp`,
+  });
+}
+
+export function paymentClaimedEmail({ orderRef }) {
+  const bodyHtml = `
+    <p style="margin:0 0 16px;">A customer says they've completed a bank transfer for order <strong>${escapeHtml(orderRef) || '—'}</strong>.</p>
+    <p style="margin:0;color:${MUTED};font-size:13px;">The AI has not marked this order as paid — please verify the transfer in your bank account before confirming.</p>
+  `;
+  return layout({
+    preheader: `Customer claims payment for order ${orderRef || ''}`,
+    heading: '💰 Payment claim needs verification',
+    bodyHtml,
+    ctaLabel: 'Review Order',
+    ctaUrl: `${APP_URL}/dashboard/whatsapp`,
+  });
+}
+
 // Sent to the customer's own email, alongside (not instead of) the WhatsApp
 // order confirmation — the only fallback channel for shoppers whose WhatsApp
 // number is unreachable or who never see that message.
@@ -256,4 +304,7 @@ export default {
   customerOrderEmail,
   escalationEmail,
   paymentReceiptEmail,
+  whatsappConnectedEmail,
+  platformAlertEmail,
+  paymentClaimedEmail,
 };

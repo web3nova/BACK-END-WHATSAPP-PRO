@@ -5,7 +5,7 @@ import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
 import * as paymentService from '../payments/payment.service.js';
 import { notify, enqueue } from '../notifications/notification.service.js';
 import { sendMessage } from '../whatsapp/whatsapp.service.js';
-import { newOrderEmail, customerOrderEmail } from '../../config/emailTemplates.js';
+import { newOrderEmail, customerOrderEmail, paymentClaimedEmail } from '../../config/emailTemplates.js';
 import { priceItems } from './checkout.pricing.js';
 import { aggregateQuantities, trackedShortages } from './stock.js';
 import { resolveDeliveryFee } from './delivery-fees.js';
@@ -436,6 +436,8 @@ export async function claimPayment(tenantId, customerId, orderId) {
       type: 'payment_claimed',
       title: `Customer says they've paid order #${ref}`,
       body: `Please verify the bank transfer and confirm order #${ref}.`,
+      emailSubject: `Payment claimed for order #${ref} — please verify`,
+      emailHtml: paymentClaimedEmail({ orderRef: ref }),
       metadata: { orderId: order.id },
       outbound: true,
     }).catch(() => {});

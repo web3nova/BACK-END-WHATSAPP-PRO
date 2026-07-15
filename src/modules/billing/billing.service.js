@@ -197,26 +197,21 @@ export const handleWebhook = async (payload, signature) => {
     }),
   ]);
 
-  // Send confirmation email
+  // Notify — in-app record + a single branded confirmation email (this used
+  // to also fire a separate sendMail() with the same subject, so merchants
+  // were getting the same "payment confirmed" news twice: once nicely
+  // branded, once as a plain-text notify() fallback).
   const tenant = await prisma.tenant.findUnique({
     where:   { id: payment.tenantId },
-    include: { users: { take: 1, orderBy: { createdAt: 'asc' } } },
+    select:  { name: true },
   });
-
-  const ownerEmail = tenant?.users[0]?.email;
-  if (ownerEmail) {
-    await sendMail({
-      to:      ownerEmail,
-      subject: 'Payment confirmed — your subscription is active',
-      html: paymentConfirmedEmail({ businessName: tenant.name, amountMinor: payment.amountMinor, renewsAt }),
-    });
-  }
 
   notify(payment.tenantId, {
     type: 'payment_received',
     title: 'Payment confirmed — subscription active',
     body: `₦${(payment.amountMinor / 100).toLocaleString()} received. Your subscription is now active${renewsAt ? ` until ${renewsAt.toDateString()}` : ''}.`,
     emailSubject: 'Payment confirmed — your subscription is active',
+    emailHtml: paymentConfirmedEmail({ businessName: tenant?.name, amountMinor: payment.amountMinor, renewsAt }),
     metadata: { reference: paymentReference, planId },
     outbound: true,
   }).catch(() => {});

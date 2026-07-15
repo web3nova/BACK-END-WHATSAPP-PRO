@@ -4,6 +4,7 @@ import { BadRequestError } from '../../common/errors/index.js';
 import { logger } from '../../config/logger.js';
 import { notify } from '../notifications/notification.service.js';
 import { encryptSecret } from '../../common/utils/encryption.js';
+import { whatsappConnectedEmail, platformAlertEmail } from '../../config/emailTemplates.js';
 
 const GRAPH_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v20.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
@@ -62,6 +63,7 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
 
   // 3. Register the phone number via Cloud API (moves status from Pending → Active)
   let twoStepPin = null;
+  let phoneRegistered = false;
   try {
     twoStepPin = String(randomInt(100000, 999999));
     const regBody = new URLSearchParams({ messaging_product: 'whatsapp', pin: twoStepPin });
@@ -77,6 +79,7 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
     if (!regRes.ok) {
       logger.warn({ status: regRes.status, body: regJson }, '[whatsapp] phone number registration failed — number may stay pending');
     } else {
+      phoneRegistered = true;
       logger.info({ phoneNumberId }, '[whatsapp] phone number registered successfully');
     }
   } catch (err) {
@@ -111,6 +114,7 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
   }
 
   // 5. Subscribe app to this WABA's webhook events
+  let webhookSubscribed = false;
   try {
     const subRes = await fetch(`${GRAPH_BASE}/${wabaId}/subscribed_apps`, {
       method: 'POST',
@@ -120,6 +124,7 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
     if (!subRes.ok) {
       logger.warn({ wabaId, body: subJson }, '[whatsapp] WABA webhook subscription failed');
     } else {
+      webhookSubscribed = true;
       logger.info({ wabaId }, '[whatsapp] WABA webhook subscribed successfully');
     }
   } catch (err) {
@@ -135,14 +140,39 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
     create: { tenantId, accessToken: encryptedAccessToken, wabaId, phoneNumberId, phoneNumber, ...(encryptedPin && { twoStepPin: encryptedPin }), verified: true },
   });
 
-  notify(tenantId, {
-    type: 'whatsapp_connected',
-    title: 'WhatsApp Business connected',
-    body: phoneNumber ? `${phoneNumber} is now connected and ready to receive messages.` : 'Your WhatsApp number is now connected and ready to receive messages.',
-    emailSubject: 'WhatsApp Business number connected successfully',
-    metadata: { wabaId, phoneNumberId, phoneNumber },
-    outbound: true,
-  }).catch(() => {});
+  // Only declare full success once the number is actually registered AND
+  // webhook events are subscribed — otherwise the "connected" email would be
+  // sent even though messages can't yet flow (registration pending / no
+  // webhook = no inbound messages), which is a confusing thing to promise.
+  const fullyConnected = phoneRegistered && webhookSubscribed && !!phoneNumber;
+
+  if (fullyConnected) {
+    notify(tenantId, {
+      type: 'whatsapp_connected',
+      title: 'WhatsApp Business connected',
+      body: `${phoneNumber} is now connected and ready to receive messages.`,
+      emailSubject: 'WhatsApp Business number connected successfully',
+      emailHtml: whatsappConnectedEmail({ phoneNumber }),
+      metadata: { wabaId, phoneNumberId, phoneNumber },
+      outbound: true,
+    }).catch(() => {});
+  } else {
+    const issues = [
+      !phoneRegistered && 'phone number registration',
+      !webhookSubscribed && 'webhook subscription',
+      !phoneNumber && 'display number lookup',
+    ].filter(Boolean).join(', ');
+    const message = `Your WhatsApp number was linked, but ${issues} didn't complete. Messaging may not work correctly yet — reconnect from your dashboard or contact support if this persists.`;
+    notify(tenantId, {
+      type: 'whatsapp_connected',
+      title: 'WhatsApp Business linked — setup incomplete',
+      body: message,
+      emailSubject: 'WhatsApp Business setup needs attention',
+      emailHtml: platformAlertEmail({ heading: 'WhatsApp setup incomplete', message, tone: 'warn', emoji: '⚠️' }),
+      metadata: { wabaId, phoneNumberId, phoneNumber, phoneRegistered, webhookSubscribed },
+      outbound: true,
+    }).catch(() => {});
+  }
 
   return { tenantId, wabaId, phoneNumberId, phoneNumber, verified: true };
 }
