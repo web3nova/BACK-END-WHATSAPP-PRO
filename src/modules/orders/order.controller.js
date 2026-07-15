@@ -24,7 +24,7 @@ export const getOne = asyncHandler(async (req, res) => {
 
 export const create = asyncHandler(async (req, res) => {
   const tenant = tenantId(req);
-  const data = await orderService.createOrder(tenant, req.body);
+  const data = await orderService.createOrder(tenant, req.body, { senderUserId: req.user?.id ?? null });
   created(res, data);
 });
 

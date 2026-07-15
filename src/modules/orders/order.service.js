@@ -95,7 +95,7 @@ export const getOrder = async (tenantId, id) => {
 };
 
 // notify=true only when customer places via storefront/AI; staff-created orders skip it
-export const createOrder = async (tenantId, data, { notify: sendNotify = false } = {}) => {
+export const createOrder = async (tenantId, data, { notify: sendNotify = false, senderUserId = null } = {}) => {
   const customerId = await ensureCustomerExists(tenantId, data.customerId ?? null);
 
   // Only link a quote that's actually this tenant's and not already tied to another order.
@@ -144,12 +144,20 @@ export const createOrder = async (tenantId, data, { notify: sendNotify = false }
     try {
       await sendMessage(tenantId, phone, text);
       if (order.conversationId) {
+        // Attributed to whoever clicked "Convert to Order" (or created the
+        // order directly) — same as sendStaffMessage — so it doesn't render
+        // as an anonymous "Staff" bubble in chat history when it's really
+        // someone specific.
         const message = await prisma.message.create({
-          data: { conversationId: order.conversationId, role: 'staff', content: encryptMessage(text), meta: { orderId: order.id } },
+          data: { conversationId: order.conversationId, role: 'staff', content: encryptMessage(text), meta: { orderId: order.id }, senderUserId },
+          include: { senderUser: { select: { id: true, name: true, email: true } } },
         });
         pushEvent(tenantId, 'staff_message', {
           conversationId: order.conversationId,
-          message: { id: message.id, role: 'staff', content: text, createdAt: message.createdAt },
+          message: {
+            id: message.id, role: 'staff', content: text, createdAt: message.createdAt,
+            sender: message.senderUser ? { name: message.senderUser.name, email: message.senderUser.email } : null,
+          },
         });
       }
     } catch (err) {
