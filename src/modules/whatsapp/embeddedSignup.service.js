@@ -3,7 +3,7 @@ import { randomInt } from 'crypto';
 import { BadRequestError } from '../../common/errors/index.js';
 import { logger } from '../../config/logger.js';
 import { notify } from '../notifications/notification.service.js';
-import { encryptSecret } from '../../common/utils/encryption.js';
+import { encryptSecret, decryptSecret } from '../../common/utils/encryption.js';
 import { whatsappConnectedEmail, platformAlertEmail } from '../../config/emailTemplates.js';
 
 const GRAPH_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v20.0';
@@ -61,12 +61,20 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
 
   const accessToken = longTokenJson.access_token;
 
-  // 3. Register the phone number via Cloud API (moves status from Pending → Active)
-  let twoStepPin = null;
+  // 3. Register the phone number via Cloud API (moves status from Pending → Active).
+  // If this tenant connected before, Meta already has a 2-step-verification PIN
+  // set on the number from that prior registration — generating a fresh random
+  // PIN on every reconnect fails with "(#133005) Two step verification PIN
+  // Mismatch". Reuse the stored PIN when we have one; only mint a new PIN for a
+  // genuinely first-time connection.
+  const existingAccount = await prisma.whatsappAccount.findUnique({ where: { tenantId }, select: { twoStepPin: true } });
+  const existingPin = existingAccount?.twoStepPin ? decryptSecret(existingAccount.twoStepPin) : null;
+
+  let twoStepPin = existingPin || String(randomInt(100000, 999999));
   let phoneRegistered = false;
-  try {
-    twoStepPin = String(randomInt(100000, 999999));
-    const regBody = new URLSearchParams({ messaging_product: 'whatsapp', pin: twoStepPin });
+
+  const attemptRegister = async (pin) => {
+    const regBody = new URLSearchParams({ messaging_product: 'whatsapp', pin });
     const regRes = await fetch(`${GRAPH_BASE}/${phoneNumberId}/register`, {
       method: 'POST',
       headers: {
@@ -76,8 +84,21 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
       body: regBody.toString(),
     });
     const regJson = await regRes.json().catch(() => ({}));
-    if (!regRes.ok) {
-      logger.warn({ status: regRes.status, body: regJson }, '[whatsapp] phone number registration failed — number may stay pending');
+    return { ok: regRes.ok, status: regRes.status, json: regJson };
+  };
+
+  try {
+    let result = await attemptRegister(twoStepPin);
+    // PIN mismatch (133005) using the stored PIN means the number's actual PIN
+    // on Meta's side has drifted (e.g. reset from another client) — fall back
+    // to minting a fresh one rather than staying stuck.
+    if (!result.ok && result.json?.error?.code === 133005 && existingPin) {
+      logger.warn('[whatsapp] stored 2FA PIN rejected — retrying registration with a new PIN');
+      twoStepPin = String(randomInt(100000, 999999));
+      result = await attemptRegister(twoStepPin);
+    }
+    if (!result.ok) {
+      logger.warn({ status: result.status, body: result.json }, '[whatsapp] phone number registration failed — number may stay pending');
     } else {
       phoneRegistered = true;
       logger.info({ phoneNumberId }, '[whatsapp] phone number registered successfully');
