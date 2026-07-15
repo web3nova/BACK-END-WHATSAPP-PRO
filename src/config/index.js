@@ -126,6 +126,12 @@ export const config = {
 
   frontendUrl: process.env.FRONTEND_URL,
 
+  tiktok: {
+    pixelId: process.env.TIKTOK_PIXEL_ID || '',
+    accessToken: process.env.TIKTOK_ACCESS_TOKEN || '',
+    testEventCode: process.env.TIKTOK_TEST_EVENT_CODE || 'TEST77505',
+  },
+
   superAdmin: {
     email:    process.env.SUPERADMIN_EMAIL,
     password: process.env.SUPERADMIN_PASSWORD,

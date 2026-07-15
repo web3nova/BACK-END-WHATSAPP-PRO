@@ -17,6 +17,7 @@ import { sendMail } from '../../config/mailer.js';
 import { logger } from '../../config/logger.js';
 import { startTrial } from '../billing/billing.service.js';
 import { otpEmail, passwordResetEmail } from '../../config/emailTemplates.js';
+import { trackEvent } from '../../services/tiktok.js';
 
 const INACTIVITY_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 const OTP_TTL_MINS = 10;
@@ -82,6 +83,12 @@ export const register = async ({ email, password, name, tenantName }) => {
   });
 
   await startTrial(tenant.id);
+
+  trackEvent({
+    event: 'CompleteRegistration',
+    properties: { email, name },
+    context: { email },
+  });
 
   const tokens = await issueTokens(user);
   return { user: sanitizeUser(user), ...tokens };
