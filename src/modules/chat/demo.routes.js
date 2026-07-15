@@ -5,6 +5,20 @@ import { logger } from '../../config/logger.js';
 
 const router = Router();
 
+const CALL_TIMEOUT_MS = 20_000;
+
+// Some providers (e.g. the Anthropic SDK) have a default timeout measured in
+// minutes, which is fine for a background WhatsApp reply job but way too
+// long for a visitor watching a typing indicator on the landing page. Race
+// against our own timeout so a slow/hung upstream call fails fast instead of
+// leaving the widget spinning forever with no error ever shown.
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`AI call timed out after ${ms}ms`)), ms)),
+  ]);
+}
+
 const SYSTEM_PROMPT = `You are BizIQ's AI assistant on the BizIQ website. BizIQ is a WhatsApp business automation platform built for African SMBs, primarily in Nigeria.
 
 WHAT BIZIQ DOES:
@@ -54,13 +68,16 @@ router.post(
       { role: 'user', content: message.trim() },
     ];
 
+    const provider = getChatProvider();
     try {
-      const provider = getChatProvider();
-      const result = await provider.chat({ system: SYSTEM_PROMPT, messages, tools: [] });
+      const result = await withTimeout(
+        provider.chat({ system: SYSTEM_PROMPT, messages, tools: [] }),
+        CALL_TIMEOUT_MS
+      );
       const reply = result?.text || "I'm not sure how to answer that. Try asking me about BizIQ's features or pricing!";
       return res.json({ reply });
     } catch (err) {
-      logger.error('[demo-chat] AI error:', err.message);
+      logger.error({ provider: provider.name, status: err?.status, message: err?.message }, '[demo-chat] AI provider failed');
       return res.status(500).json({ error: 'AI is unavailable right now — please try again shortly.' });
     }
   }
