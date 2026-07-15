@@ -46,7 +46,7 @@ const normalizePhone = (phone) => {
  * Resolves the tenant, saves the customer/conversation/message to Prisma,
  * and enqueues an aiReply job.
  */
-export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, senderName, text, messageId, media = [] }) => {
+export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, senderName, text, messageId, media = [], structured }) => {
   // 0. Basic validations
   if (!phoneNumberId) {
     logger.error('[conversation] Missing phoneNumberId in payload');
@@ -119,7 +119,7 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
     }
 
     const message = await tx.message.create({
-      data: { conversationId: conversation.id, role: 'customer', content: encryptMessage(text), externalId: messageId, meta: { whatsappMessageId: messageId } }
+      data: { conversationId: conversation.id, role: 'customer', content: encryptMessage(text), externalId: messageId, meta: { whatsappMessageId: messageId, ...(structured && { structured }) } }
     });
 
     if (media && media.length) {
@@ -158,6 +158,7 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
       content: text,
       createdAt: new Date().toISOString(),
       media: (media || []).map((m) => ({ mimeType: m.mimeType, url: m.url })),
+      meta: structured ? { structured } : undefined,
     },
     senderPhone,
     senderName,

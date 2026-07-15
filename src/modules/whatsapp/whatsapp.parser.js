@@ -30,16 +30,24 @@ export function parseMessage(message) {
   } else if (type === 'location') {
     const loc = message.location || {};
     const label = loc.name || loc.address;
-    text = (loc.latitude != null && loc.longitude != null)
-      ? `[Customer shared their location${label ? `: ${label}` : ''} (${loc.latitude}, ${loc.longitude})]`
-      : `[Received location message]`;
+    if (loc.latitude != null && loc.longitude != null) {
+      text = `[Customer shared their location${label ? `: ${label}` : ''} (${loc.latitude}, ${loc.longitude})]`;
+      return { type, text, structured: { location: { latitude: loc.latitude, longitude: loc.longitude, name: loc.name || null, address: loc.address || null } } };
+    }
+    text = `[Received location message]`;
   } else if (type === 'contacts') {
     const contacts = message.contacts || [];
     const names = contacts.map(c => c.name?.formatted_name).filter(Boolean);
     const phones = contacts.flatMap(c => (c.phones || []).map(p => p.phone)).filter(Boolean);
-    text = names.length
-      ? `[Customer shared a contact card: ${names.join(', ')}${phones.length ? ` (${phones.join(', ')})` : ''}]`
-      : `[Received contacts message]`;
+    if (names.length) {
+      text = `[Customer shared a contact card: ${names.join(', ')}${phones.length ? ` (${phones.join(', ')})` : ''}]`;
+      const structuredContacts = contacts.map(c => ({
+        name: c.name?.formatted_name || null,
+        phones: (c.phones || []).map(p => p.phone).filter(Boolean),
+      }));
+      return { type, text, structured: { contacts: structuredContacts } };
+    }
+    text = `[Received contacts message]`;
   } else if (type === 'sticker') {
     text = `[Received sticker message]`;
   } else {
