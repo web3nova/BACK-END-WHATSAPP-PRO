@@ -21,8 +21,27 @@ export function parseMessage(message) {
     }
   } else if (MEDIA_TYPES.has(type)) {
     text = message[type]?.caption || `[Received ${type} - media]`;
-  } else if (type === 'sticker' || type === 'contacts' || type === 'location') {
-    text = `[Received ${type} message]`;
+  } else if (type === 'reaction') {
+    // Meta sends { message_id, emoji } — emoji is omitted entirely when the
+    // customer removes a previously-set reaction, not when they react with a
+    // literal empty string, so that's the correct signal to check.
+    const emoji = message.reaction?.emoji;
+    text = emoji ? `[Customer reacted ${emoji} to your previous message]` : `[Customer removed their reaction to your previous message]`;
+  } else if (type === 'location') {
+    const loc = message.location || {};
+    const label = loc.name || loc.address;
+    text = (loc.latitude != null && loc.longitude != null)
+      ? `[Customer shared their location${label ? `: ${label}` : ''} (${loc.latitude}, ${loc.longitude})]`
+      : `[Received location message]`;
+  } else if (type === 'contacts') {
+    const contacts = message.contacts || [];
+    const names = contacts.map(c => c.name?.formatted_name).filter(Boolean);
+    const phones = contacts.flatMap(c => (c.phones || []).map(p => p.phone)).filter(Boolean);
+    text = names.length
+      ? `[Customer shared a contact card: ${names.join(', ')}${phones.length ? ` (${phones.join(', ')})` : ''}]`
+      : `[Received contacts message]`;
+  } else if (type === 'sticker') {
+    text = `[Received sticker message]`;
   } else {
     text = `[Received ${type} message - unsupported by AI currently]`;
   }
