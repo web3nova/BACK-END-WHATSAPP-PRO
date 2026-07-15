@@ -87,6 +87,23 @@ export const register = async ({ email, password, name, tenantName }) => {
   return { user: sanitizeUser(user), ...tokens };
 };
 
+// Shared by verifyOtp and the reviewer-account bypass in login() below, so
+// both produce an identical final response — the bypass reuses this instead
+// of duplicating it, so it can't silently drift out of sync.
+async function completeLogin(user) {
+  // Super admins have no tenant (tenantId is null) — skip the lookup rather
+  // than querying a non-nullable unique column with null, which Prisma rejects.
+  const subscription = user.tenantId
+    ? await prisma.subscription.findUnique({
+        where: { tenantId: user.tenantId },
+        select: { id: true, plan: true, status: true, trialEndsAt: true },
+      })
+    : null;
+
+  const tokens = await issueTokens(user);
+  return { user: sanitizeUser(user), subscription, ...tokens };
+}
+
 export const login = async ({ email, password }) => {
   const user = await prisma.user.findFirst({ where: { email } });
   if (!user) throw new UnauthorizedError('Invalid credentials');
@@ -95,6 +112,18 @@ export const login = async ({ email, password }) => {
 
   const valid = await comparePassword(password, user.passwordHash);
   if (!valid) throw new UnauthorizedError('Invalid credentials');
+
+  // App-store/platform reviewer account (e.g. Meta App Review): automated
+  // reviewers can't receive a real OTP email, so this ONE exact,
+  // env-configured account skips OTP and logs straight in — password is
+  // still required and already checked above. Does nothing at all unless
+  // REVIEWER_TEST_EMAIL is explicitly set, and never applies to any other
+  // account regardless of what email is submitted.
+  const reviewerEmail = process.env.REVIEWER_TEST_EMAIL?.toLowerCase().trim();
+  if (reviewerEmail && email.toLowerCase().trim() === reviewerEmail) {
+    logger.warn({ userId: user.id, email: user.email }, '[auth] reviewer test-account login — OTP skipped');
+    return completeLogin(user);
+  }
 
   // Invalidate any prior unused OTPs for this user
   await prisma.otpToken.updateMany({ where: { userId: user.id, used: false }, data: { used: true } });
@@ -126,17 +155,7 @@ export const verifyOtp = async ({ userId, code }) => {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new NotFoundError('User not found');
 
-  // Super admins have no tenant (tenantId is null) — skip the lookup rather
-  // than querying a non-nullable unique column with null, which Prisma rejects.
-  const subscription = user.tenantId
-    ? await prisma.subscription.findUnique({
-        where: { tenantId: user.tenantId },
-        select: { id: true, plan: true, status: true, trialEndsAt: true },
-      })
-    : null;
-
-  const tokens = await issueTokens(user);
-  return { user: sanitizeUser(user), subscription, ...tokens };
+  return completeLogin(user);
 };
 
 export const refresh = async ({ refreshToken }) => {
