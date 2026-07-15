@@ -13,8 +13,10 @@ import { proxyAssetUrl } from '../../common/utils/uploadAsset.js';
 function withLogoUrl(tenant) {
   if (!tenant) return tenant;
   const { business, ...rest } = tenant;
-  if (!business?.logoStorageKey) return { ...rest, logoUrl: business?.logoUrl || null };
-  return { ...rest, logoUrl: proxyAssetUrl('business-logos', business.logoStorageKey) };
+  const logoUrl = business?.logoStorageKey
+    ? proxyAssetUrl('business-logos', business.logoStorageKey)
+    : (business?.logoUrl || null);
+  return { ...rest, business, logoUrl };
 }
 
 const ADMIN_URL = process.env.ADMIN_URL || 'https://admin.biziq.online';
