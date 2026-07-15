@@ -107,14 +107,22 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
     logger.warn({ err: err?.message }, '[whatsapp] phone number registration request failed');
   }
 
-  // 4. Fetch the human-readable display phone number from Meta
+  // 4. Fetch the human-readable display phone number (and live status) from Meta.
+  // The status check matters because /register failing doesn't necessarily mean
+  // the number can't send/receive: a number that was already CONNECTED from a
+  // prior registration stays fully functional even if a later re-register call
+  // fails on a stale PIN — registration only actually blocks a genuinely
+  // PENDING number. Trusting the register call alone produces false "setup
+  // incomplete" warnings for numbers that are demonstrably working.
   let phoneNumber = null;
+  let phoneStatus = null;
   try {
     // Try direct phone number ID lookup first
     const phoneRes = await fetch(
-      `${GRAPH_BASE}/${phoneNumberId}?fields=display_phone_number,verified_name&access_token=${accessToken}`
+      `${GRAPH_BASE}/${phoneNumberId}?fields=display_phone_number,verified_name,status&access_token=${accessToken}`
     );
     const phoneJson = await phoneRes.json().catch(() => ({}));
+    phoneStatus = phoneJson.status ?? null;
     if (phoneJson.display_phone_number) {
       phoneNumber = phoneJson.display_phone_number;
     } else {
@@ -161,11 +169,11 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
     create: { tenantId, accessToken: encryptedAccessToken, wabaId, phoneNumberId, phoneNumber, ...(encryptedPin && { twoStepPin: encryptedPin }), verified: true },
   });
 
-  // Only declare full success once the number is actually registered AND
-  // webhook events are subscribed — otherwise the "connected" email would be
-  // sent even though messages can't yet flow (registration pending / no
-  // webhook = no inbound messages), which is a confusing thing to promise.
-  const fullyConnected = phoneRegistered && webhookSubscribed && !!phoneNumber;
+  // Full success = webhook subscribed (required for inbound messages) AND the
+  // number is actually usable — either this call registered it, or Meta
+  // already reports it as CONNECTED from a prior registration (so a failed
+  // re-register, e.g. a stale 2FA PIN, doesn't matter).
+  const fullyConnected = webhookSubscribed && !!phoneNumber && (phoneRegistered || phoneStatus === 'CONNECTED');
 
   if (fullyConnected) {
     notify(tenantId, {
@@ -179,7 +187,7 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
     }).catch(() => {});
   } else {
     const issues = [
-      !phoneRegistered && 'phone number registration',
+      !phoneRegistered && phoneStatus !== 'CONNECTED' && 'phone number registration',
       !webhookSubscribed && 'webhook subscription',
       !phoneNumber && 'display number lookup',
     ].filter(Boolean).join(', ');
@@ -190,7 +198,7 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
       body: message,
       emailSubject: 'WhatsApp Business setup needs attention',
       emailHtml: platformAlertEmail({ heading: 'WhatsApp setup incomplete', message, tone: 'warn', emoji: '⚠️' }),
-      metadata: { wabaId, phoneNumberId, phoneNumber, phoneRegistered, webhookSubscribed },
+      metadata: { wabaId, phoneNumberId, phoneNumber, phoneRegistered, phoneStatus, webhookSubscribed },
       outbound: true,
     }).catch(() => {});
   }

@@ -57,9 +57,20 @@ export const getAccountWithStatus = async (tenantId) => {
   return { ...safe, status, qualityRating };
 };
 
-/** Remove the tenant's WhatsApp account record (disconnect). */
+/**
+ * Disconnect the tenant's WhatsApp account. Clears the connection fields but
+ * deliberately keeps twoStepPin: Meta remembers the number's 2-step-verification
+ * PIN on its own servers regardless of what we do locally, so a hard delete
+ * here just means our next /register call sends the wrong (random) PIN and
+ * fails with "(#133005) Two step verification PIN Mismatch". The frontend
+ * already treats `!account.verified` as disconnected, so leaving the row in
+ * place (with the connection fields cleared) is behaviourally identical.
+ */
 export const disconnectAccount = async (tenantId) => {
-  await prisma.whatsappAccount.deleteMany({ where: { tenantId } });
+  await prisma.whatsappAccount.updateMany({
+    where: { tenantId },
+    data: { accessToken: null, wabaId: null, phoneNumberId: null, phoneNumber: null, verified: false },
+  });
   return { disconnected: true };
 };
 
