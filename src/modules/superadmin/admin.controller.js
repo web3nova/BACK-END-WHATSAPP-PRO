@@ -33,6 +33,11 @@ export const activate = asyncHandler(async (req, res) => {
   return ok(res, tenant);
 });
 
+export const remove = asyncHandler(async (req, res) => {
+  const result = await adminService.deleteTenant(req.params.id, req.body.confirmName);
+  return ok(res, result);
+});
+
 export const listAdmins = asyncHandler(async (req, res) => {
   const admins = await adminService.listSuperAdmins();
   return ok(res, admins);

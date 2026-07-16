@@ -4,6 +4,32 @@ const BRAND = '#4166F5';
 const INK = '#1e293b';
 const MUTED = '#64748b';
 const APP_URL = process.env.FRONTEND_URL || 'https://www.biziq.online';
+const SOCIAL_LINKS = {
+  instagram: 'https://www.instagram.com/biziq.online',
+  tiktok: 'https://www.tiktok.com/@biziq.online',
+};
+
+// Shared social icon row — exported so the handful of templates that build
+// their own HTML instead of going through layout() (team invite/removal,
+// weekly report) can still include it instead of duplicating the markup.
+export function socialFooterHtml() {
+  return `
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 14px;">
+      <tr>
+        <td style="padding-right:8px;">
+          <a href="${SOCIAL_LINKS.instagram}" style="display:inline-block;width:32px;height:32px;line-height:32px;text-align:center;background:#E1306C;border-radius:999px;">
+            <img src="https://img.icons8.com/ios-filled/32/FFFFFF/instagram-new.png" width="16" height="16" alt="Instagram" style="display:inline-block;vertical-align:middle;border:0;" />
+          </a>
+        </td>
+        <td>
+          <a href="${SOCIAL_LINKS.tiktok}" style="display:inline-block;width:32px;height:32px;line-height:32px;text-align:center;background:#000000;border-radius:999px;">
+            <img src="https://img.icons8.com/ios-filled/32/FFFFFF/tiktok--v1.png" width="16" height="16" alt="TikTok" style="display:inline-block;vertical-align:middle;border:0;" />
+          </a>
+        </td>
+      </tr>
+    </table>
+  `;
+}
 
 function layout({ preheader = '', heading, bodyHtml, ctaLabel, ctaUrl }) {
   return `<!doctype html>
@@ -39,6 +65,7 @@ function layout({ preheader = '', heading, bodyHtml, ctaLabel, ctaUrl }) {
                 You're receiving this because your business is on BizIQ.
                 <br/>This is an automated message from an unmonitored inbox.
               </p>
+              ${socialFooterHtml()}
               <p style="margin:0;font-size:11px;color:#a3abba;">
                 BizIQ · Run Your Business Smarter · <a href="${APP_URL}" style="color:#a3abba;">biziq.online</a>
               </p>
@@ -248,6 +275,76 @@ export function paymentClaimedEmail({ orderRef }) {
   });
 }
 
+export function tenantSuspendedEmail({ businessName }) {
+  const business = escapeHtml(businessName) || 'Your business';
+  const bodyHtml = `
+    <p style="margin:0 0 16px;">${business}'s account on BizIQ has been <strong style="color:#dc2626;">suspended</strong> by our team.</p>
+    <p style="margin:0 0 16px;">While suspended, your WhatsApp AI agent, storefront, and dashboard access are unavailable to you and your customers.</p>
+    <p style="margin:0;color:${MUTED};font-size:13px;">If you believe this is a mistake, please reach out to our support team so we can look into it.</p>
+  `;
+  return layout({
+    preheader: `${business}'s BizIQ account has been suspended`,
+    heading: '⛔ Your account has been suspended',
+    bodyHtml,
+  });
+}
+
+export function tenantActivatedEmail({ businessName }) {
+  const business = escapeHtml(businessName) || 'Your business';
+  const bodyHtml = `
+    <p style="margin:0 0 16px;">Good news — ${business}'s account on BizIQ has been <strong style="color:#16a34a;">reactivated</strong>.</p>
+    <p style="margin:0;">Your WhatsApp AI agent, storefront, and dashboard are all back up and running.</p>
+  `;
+  return layout({
+    preheader: `${business}'s BizIQ account has been reactivated`,
+    heading: '✅ Your account is active again',
+    bodyHtml,
+    ctaLabel: 'Go to Dashboard',
+    ctaUrl: `${APP_URL}/dashboard`,
+  });
+}
+
+export function tenantDeletedEmail({ businessName }) {
+  const business = escapeHtml(businessName) || 'Your business';
+  const bodyHtml = `
+    <p style="margin:0 0 16px;">${business}'s account on BizIQ has been permanently deleted by our team.</p>
+    <p style="margin:0;color:${MUTED};font-size:13px;">All associated data — orders, customers, conversations, and settings — has been removed and cannot be recovered. If you believe this is a mistake, please reach out to our support team as soon as possible.</p>
+  `;
+  return layout({
+    preheader: `${business}'s BizIQ account has been deleted`,
+    heading: 'Your account has been deleted',
+    bodyHtml,
+  });
+}
+
+export function userBannedEmail({ name, businessName }) {
+  const business = escapeHtml(businessName) || 'your business account';
+  const bodyHtml = `
+    <p style="margin:0 0 16px;">Hi ${escapeHtml(name) || 'there'} — your access to <strong>${business}</strong> on BizIQ has been <strong style="color:#dc2626;">suspended</strong> by our team.</p>
+    <p style="margin:0;color:${MUTED};font-size:13px;">You will not be able to sign in until this is lifted. If you believe this is a mistake, please reach out to our support team.</p>
+  `;
+  return layout({
+    preheader: 'Your BizIQ account access has been suspended',
+    heading: '⛔ Your account access has been suspended',
+    bodyHtml,
+  });
+}
+
+export function userUnbannedEmail({ name, businessName }) {
+  const business = escapeHtml(businessName) || 'your business account';
+  const bodyHtml = `
+    <p style="margin:0 0 16px;">Hi ${escapeHtml(name) || 'there'} — your access to <strong>${business}</strong> on BizIQ has been <strong style="color:#16a34a;">restored</strong>.</p>
+    <p style="margin:0;">You can sign in as normal now.</p>
+  `;
+  return layout({
+    preheader: 'Your BizIQ account access has been restored',
+    heading: '✅ Your account access has been restored',
+    bodyHtml,
+    ctaLabel: 'Sign In',
+    ctaUrl: `${APP_URL}/login`,
+  });
+}
+
 // Sent to the customer's own email, alongside (not instead of) the WhatsApp
 // order confirmation — the only fallback channel for shoppers whose WhatsApp
 // number is unreachable or who never see that message.
@@ -307,4 +404,9 @@ export default {
   whatsappConnectedEmail,
   platformAlertEmail,
   paymentClaimedEmail,
+  tenantSuspendedEmail,
+  tenantActivatedEmail,
+  tenantDeletedEmail,
+  userBannedEmail,
+  userUnbannedEmail,
 };

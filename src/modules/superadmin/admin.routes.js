@@ -146,6 +146,45 @@ router.patch('/tenants/:id/activate', controller.activate);
 
 /**
  * @openapi
+ * /admin/tenants/{id}:
+ *   delete:
+ *     summary: Permanently delete a tenant and every row that belongs to it (irreversible)
+ *     tags: [SuperAdmin]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [confirmName]
+ *             properties:
+ *               confirmName:
+ *                 type: string
+ *                 description: Must exactly match the tenant's current name — a deliberate confirmation step for a destructive, irreversible action.
+ *     responses:
+ *       200:
+ *         description: Tenant and all related data deleted
+ *       400:
+ *         description: confirmName did not match the tenant's name
+ *       403:
+ *         description: Super admin only
+ *       404:
+ *         description: Tenant not found
+ */
+router.delete(
+  '/tenants/:id',
+  validate(z.object({ id: z.string().uuid() }), 'params'),
+  validate(z.object({ confirmName: z.string().min(1) }), 'body'),
+  controller.remove
+);
+
+/**
+ * @openapi
  * /admin/tenants/{id}/plan:
  *   patch:
  *     summary: Manually override a tenant's subscription plan

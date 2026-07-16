@@ -3,7 +3,7 @@ import prisma from '../../config/prisma.js';
 import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
 import { hashPassword } from '../../common/utils/hash.js';
 import { sendMail } from '../../config/mailer.js';
-import { superAdminWelcomeEmail } from '../../config/emailTemplates.js';
+import { superAdminWelcomeEmail, tenantSuspendedEmail, tenantActivatedEmail, tenantDeletedEmail, userBannedEmail, userUnbannedEmail } from '../../config/emailTemplates.js';
 import { logger } from '../../config/logger.js';
 import { proxyAssetUrl } from '../../common/utils/uploadAsset.js';
 
@@ -90,29 +90,154 @@ export const getTenantDetail = async (id) => {
 };
 
 export const suspendTenant = async (id) => {
-  const tenant = await prisma.tenant.findUnique({ where: { id } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { id },
+    include: { users: { take: 1, orderBy: { createdAt: 'asc' } } },
+  });
   if (!tenant) throw new NotFoundError('Tenant not found');
   if (tenant.status === 'SUSPENDED') {
     throw new BadRequestError('Tenant is already suspended');
   }
 
-  return prisma.tenant.update({
+  const updated = await prisma.tenant.update({
     where: { id },
     data: { status: 'SUSPENDED' },
   });
+
+  const ownerEmail = tenant.users[0]?.email;
+  if (ownerEmail) {
+    sendMail({
+      to: ownerEmail,
+      subject: 'Your BizIQ account has been suspended',
+      html: tenantSuspendedEmail({ businessName: tenant.name }),
+    }).catch((err) => logger.error(`[admin] Tenant suspended email failed for ${ownerEmail}: ${err.message}`));
+  }
+
+  return updated;
 };
 
 export const activateTenant = async (id) => {
-  const tenant = await prisma.tenant.findUnique({ where: { id } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { id },
+    include: { users: { take: 1, orderBy: { createdAt: 'asc' } } },
+  });
   if (!tenant) throw new NotFoundError('Tenant not found');
   if (tenant.status === 'ACTIVE') {
     throw new BadRequestError('Tenant is already active');
   }
 
-  return prisma.tenant.update({
+  const updated = await prisma.tenant.update({
     where: { id },
     data: { status: 'ACTIVE' },
   });
+
+  const ownerEmail = tenant.users[0]?.email;
+  if (ownerEmail) {
+    sendMail({
+      to: ownerEmail,
+      subject: 'Your BizIQ account has been reactivated',
+      html: tenantActivatedEmail({ businessName: tenant.name }),
+    }).catch((err) => logger.error(`[admin] Tenant activated email failed for ${ownerEmail}: ${err.message}`));
+  }
+
+  return updated;
+};
+
+// Irreversibly wipes a tenant and every row that belongs to it. Only
+// `Invite` and product-child tables (ProductVariant, Inventory, ProductReview
+// via their `product` relation, RefreshToken via `user`) have onDelete:
+// Cascade in the schema — everything else here would otherwise block the
+// final tenant delete on a foreign-key violation, so this deletes explicitly
+// in dependency order (children before the parents they reference) rather
+// than trust that every relevant migration applied cascade exactly as
+// schema.prisma declares it. Wrapped in one transaction: if any step fails,
+// nothing is deleted.
+export const deleteTenant = async (id, confirmName) => {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id },
+    include: { users: { take: 1, orderBy: { createdAt: 'asc' } } },
+  });
+  if (!tenant) throw new NotFoundError('Tenant not found');
+  // Require the caller to echo back the tenant's exact name — the same
+  // "type the name to confirm" pattern as any other irreversible-delete UI,
+  // enforced server-side so it can't be skipped by calling the API directly.
+  if (confirmName !== tenant.name) {
+    throw new BadRequestError('Tenant name confirmation does not match.');
+  }
+  // Captured before the transaction below deletes the user rows — this is
+  // the last point the owner's email is still readable.
+  const ownerEmail = tenant.users[0]?.email;
+
+  const business = await prisma.business.findUnique({ where: { tenantId: id }, select: { id: true } });
+
+  await prisma.$transaction([
+    // Rows with no dependents of their own, or that reference two tenant-
+    // scoped parents at once (must go before either parent) — deleted first.
+    prisma.productReview.deleteMany({ where: { tenantId: id } }),
+    prisma.mediaAsset.deleteMany({ where: { tenantId: id } }),
+    prisma.outboxMessage.deleteMany({ where: { tenantId: id } }),
+    // Message has no tenantId column — filtered through its conversation.
+    prisma.message.deleteMany({ where: { conversation: { tenantId: id } } }),
+    prisma.abandonedCart.deleteMany({ where: { tenantId: id } }),
+    prisma.quote.deleteMany({ where: { tenantId: id } }),
+    prisma.payment.deleteMany({ where: { tenantId: id } }),
+    prisma.order.deleteMany({ where: { tenantId: id } }),
+    prisma.conversation.deleteMany({ where: { tenantId: id } }),
+    prisma.customer.deleteMany({ where: { tenantId: id } }),
+
+    prisma.productVariant.deleteMany({ where: { product: { tenantId: id } } }),
+    prisma.inventory.deleteMany({ where: { tenantId: id } }),
+    prisma.product.deleteMany({ where: { tenantId: id } }),
+    prisma.coupon.deleteMany({ where: { tenantId: id } }),
+    prisma.catalog.deleteMany({ where: { tenantId: id } }),
+
+    prisma.documentChunk.deleteMany({ where: { tenantId: id } }),
+    prisma.document.deleteMany({ where: { tenantId: id } }),
+
+    // Website tables key off businessId, not tenantId directly.
+    ...(business ? [
+      prisma.websiteMedia.deleteMany({ where: { businessId: business.id } }),
+      prisma.websitePage.deleteMany({ where: { businessId: business.id } }),
+      prisma.websiteSettingsRevision.deleteMany({ where: { businessId: business.id } }),
+      prisma.websiteSettings.deleteMany({ where: { businessId: business.id } }),
+    ] : []),
+    prisma.business.deleteMany({ where: { tenantId: id } }),
+
+    prisma.whatsappAccount.deleteMany({ where: { tenantId: id } }),
+    prisma.paymentConfig.deleteMany({ where: { tenantId: id } }),
+    prisma.onboardingStepData.deleteMany({ where: { tenantId: id } }),
+    prisma.onboardingProgress.deleteMany({ where: { tenantId: id } }),
+    prisma.onboardingOverride.deleteMany({ where: { tenantId: id } }),
+    prisma.notification.deleteMany({ where: { tenantId: id } }),
+    prisma.websiteVisit.deleteMany({ where: { tenantId: id } }),
+    prisma.subscription.deleteMany({ where: { tenantId: id } }),
+
+    // User-owned tokens without cascade (RefreshToken has it, but included
+    // here too for clarity/defense-in-depth). Must precede the User delete.
+    prisma.passwordResetToken.deleteMany({ where: { user: { tenantId: id } } }),
+    prisma.otpToken.deleteMany({ where: { user: { tenantId: id } } }),
+    prisma.refreshToken.deleteMany({ where: { user: { tenantId: id } } }),
+    prisma.user.deleteMany({ where: { tenantId: id } }),
+
+    // Tenant-scoped custom roles (platform roles have tenantId: null — untouched).
+    prisma.role.deleteMany({ where: { tenantId: id } }),
+
+    // Invite already cascades via the schema; deleted explicitly too so this
+    // function doesn't silently depend on that staying true.
+    prisma.invite.deleteMany({ where: { tenantId: id } }),
+
+    prisma.tenant.delete({ where: { id } }),
+  ]);
+
+  if (ownerEmail) {
+    sendMail({
+      to: ownerEmail,
+      subject: 'Your BizIQ account has been deleted',
+      html: tenantDeletedEmail({ businessName: tenant.name }),
+    }).catch((err) => logger.error(`[admin] Tenant deleted email failed for ${ownerEmail}: ${err.message}`));
+  }
+
+  return { id, name: tenant.name, deleted: true };
 };
 
 // ── User management ──
@@ -141,11 +266,20 @@ export const banUser = async (userId) => {
   if (user.isSuperAdmin) throw new BadRequestError('Cannot ban a super admin');
   if (user.isBanned) throw new BadRequestError('User is already banned');
 
-  return prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id: userId },
     data: { isBanned: true },
     select: { id: true, email: true, name: true, isBanned: true },
   });
+
+  const tenant = user.tenantId ? await prisma.tenant.findUnique({ where: { id: user.tenantId }, select: { name: true } }) : null;
+  sendMail({
+    to: updated.email,
+    subject: 'Your BizIQ account access has been suspended',
+    html: userBannedEmail({ name: updated.name, businessName: tenant?.name }),
+  }).catch((err) => logger.error(`[admin] User banned email failed for ${updated.email}: ${err.message}`));
+
+  return updated;
 };
 
 export const unbanUser = async (userId) => {
@@ -153,11 +287,20 @@ export const unbanUser = async (userId) => {
   if (!user) throw new NotFoundError('User not found');
   if (!user.isBanned) throw new BadRequestError('User is not banned');
 
-  return prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id: userId },
     data: { isBanned: false },
     select: { id: true, email: true, name: true, isBanned: true },
   });
+
+  const tenant = user.tenantId ? await prisma.tenant.findUnique({ where: { id: user.tenantId }, select: { name: true } }) : null;
+  sendMail({
+    to: updated.email,
+    subject: 'Your BizIQ account access has been restored',
+    html: userUnbannedEmail({ name: updated.name, businessName: tenant?.name }),
+  }).catch((err) => logger.error(`[admin] User unbanned email failed for ${updated.email}: ${err.message}`));
+
+  return updated;
 };
 
 export const assignRole = async (userId, roleId) => {
