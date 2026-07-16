@@ -53,7 +53,7 @@ export async function getApprovedReviews(tenantId, productId, { page = 1, limit 
 
 export async function checkEligibility(tenantId, customerId, productId) {
   const orders = await prisma.order.findMany({
-    where: { tenantId, customerId, status: 'delivered' },
+    where: { tenantId, customerId, status: 'fulfilled' },
     orderBy: { createdAt: 'desc' },
     select: { id: true, items: true },
   });

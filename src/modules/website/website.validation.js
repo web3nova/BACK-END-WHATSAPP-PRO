@@ -66,5 +66,10 @@ export const storefrontQuerySchema = z
     tenantId: z.string().uuid().optional(),
     slug: z.string().trim().min(1).optional(),
     domain: z.string().trim().min(1).optional(),
+    // The storefront page's own document.referrer (who linked the visitor
+    // here), sent explicitly by the client — req.headers.referer on this
+    // request reflects the fetch's own same-origin caller, not the visitor's
+    // actual navigation history, so it can't be used for this. See recordVisit.
+    referrer: z.string().trim().max(2048).optional(),
   })
   .strict();

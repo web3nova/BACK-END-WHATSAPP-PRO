@@ -440,7 +440,11 @@ export async function getStorefront({ tenantId, slug, domain }) {
     builder: withBuilderDefaults(mergedTheme.builder, business, pc),
   };
   const storefrontPaymentConfig = {
-    manual: pc.manual ? { isActive: !!pc.manual.isActive, bankAccount: pc.manual.isActive ? (pc.manual.bankAccount || null) : null } : { isActive: false, bankAccount: null },
+    // bankAccount deliberately omitted here — this payload loads on every
+    // storefront page view (no auth), but the account number is only ever
+    // shown once a customer reaches the bank-transfer step of checkout.
+    // Fetched on demand there instead, via getStorefrontBankDetails below.
+    manual: pc.manual ? { isActive: !!pc.manual.isActive } : { isActive: false },
     paystack: pc.paystack ? { isActive: !!pc.paystack.isActive, publicKey: pc.paystack.publicKey || '' } : { isActive: false, publicKey: '' },
     monnify: pc.monnify ? { isActive: !!pc.monnify.isActive, contractCode: pc.monnify.contractCode || '' } : { isActive: false, contractCode: '' },
     blockradar: pc.blockradar ? { isActive: !!pc.blockradar.isActive } : { isActive: false },
@@ -481,6 +485,20 @@ export async function getStorefront({ tenantId, slug, domain }) {
   };
 }
 
+// Bank transfer account details for a storefront — split out of getStorefront
+// (public, loads on every page view) so the account number is only fetched
+// when a customer actually reaches the bank-transfer step of checkout.
+// Still no-auth (checkout itself is unauthenticated), just on-demand.
+export async function getStorefrontBankDetails({ tenantId, slug, domain }) {
+  const tenant = await resolveStorefrontTenant({ tenantId, slug, domain });
+  const paymentConfig = await prisma.paymentConfig.findUnique({
+    where: { tenantId: tenant.id },
+    select: { data: true },
+  });
+  const manual = paymentConfig?.data?.manual;
+  return { bankAccount: manual?.isActive ? (manual.bankAccount || null) : null };
+}
+
 // Own-platform hosts — when the referrer is the BizIQ dashboard itself (the
 // business previewing their own storefront, or clicking "View Site"), that's
 // not a real customer visit and must not be counted, or every owner preview
@@ -496,9 +514,14 @@ function isPlatformOrigin(referrerUrl) {
 }
 
 // Classify a storefront visit into one of the 4 buckets the Analytics page
-// shows, from the Referer header — no cookies/fingerprinting, just an
-// aggregate count. Caller (the controller) never awaits this — a logging
-// failure must never affect or slow down the actual storefront response.
+// shows, from the visitor's document.referrer (passed explicitly by the
+// client as a query param — no cookies/fingerprinting, just an aggregate
+// count). Must NOT be req.headers.referer: that reflects the storefront
+// page's own fetch call, whose Referer is always the storefront's own
+// origin, not wherever the visitor actually came from — using the header
+// here silently drops ~all real traffic on the shared biziq.online domain.
+// Caller (the controller) never awaits this — a logging failure must never
+// affect or slow down the actual storefront response.
 export async function recordVisit({ tenantId, referrer, host }) {
   if (referrer && isPlatformOrigin(referrer)) return; // owner previewing their own storefront
 

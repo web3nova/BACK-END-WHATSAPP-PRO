@@ -222,6 +222,22 @@ publicWebsiteRoutes.get(
 
 /**
  * @openapi
+ * /website/storefront/bank-details:
+ *   get:
+ *     tags: [Website]
+ *     summary: Public — bank transfer account details, fetched on demand at checkout (not part of the general storefront payload)
+ *     responses:
+ *       200: { description: Bank account details, or null if manual payment isn't active }
+ *       404: { description: Business profile not set up }
+ */
+publicWebsiteRoutes.get(
+  '/storefront/bank-details',
+  validate(storefrontQuerySchema, 'query'),
+  websiteController.getStorefrontBankDetails,
+);
+
+/**
+ * @openapi
  * /website/pages:
  *   get:
  *     tags: [Website]

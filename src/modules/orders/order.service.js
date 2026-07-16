@@ -182,12 +182,15 @@ export const createOrder = async (tenantId, data, { notify: sendNotify = false, 
   return result;
 };
 
-const NOTIFIABLE_STATUSES = new Set(['confirmed', 'shipped', 'delivered', 'cancelled']);
+// Must match the real status vocabulary (order.validation.js's orderStatusSchema
+// and Orders.jsx's dropdown): pending, confirmed, paid, fulfilled, cancelled.
+// 'shipped'/'delivered' don't exist as order statuses in this product.
+const NOTIFIABLE_STATUSES = new Set(['confirmed', 'paid', 'fulfilled', 'cancelled']);
 
 const STATUS_UPDATE_LINES = {
   confirmed: 'Your order has been confirmed ✅',
-  shipped: 'Your order is on its way 🚚',
-  delivered: 'Your order has been delivered 🎉',
+  paid: 'Payment confirmed 💰',
+  fulfilled: 'Your order is complete 🎉',
   cancelled: 'Your order has been cancelled. Contact us if this is unexpected.',
 };
 

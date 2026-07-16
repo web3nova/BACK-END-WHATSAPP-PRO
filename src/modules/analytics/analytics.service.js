@@ -15,18 +15,35 @@ function sameDay(a, b) {
   return new Date(a).toDateString() === new Date(b).toDateString();
 }
 
-// Everything the Analytics dashboard page needs beyond what it already
-// computes client-side from orders (revenue/orders/top-products stay as-is).
+// Day-span (inclusive) between two dates, e.g. Jan 1 -> Jan 1 is 1 day.
+function daySpan(since, until) {
+  const ms = until.setHours(0, 0, 0, 0) - new Date(since).setHours(0, 0, 0, 0);
+  return Math.max(1, Math.round(ms / 86400000) + 1);
+}
+
+// Everything the Analytics/Overview dashboard pages need for a date range —
+// revenue/orders/top-products used to be computed client-side from a capped
+// `listOrders({ limit: 200 })` fetch, silently undercounting past 200
+// lifetime orders. Computed here instead, bounded by the actual date range
+// rather than an arbitrary row count.
 export async function getOverview(tenantId, query) {
-  const days = resolveDays(query.days);
-  const since = new Date();
-  since.setDate(since.getDate() - (days - 1));
-  since.setHours(0, 0, 0, 0);
+  let days;
+  let since;
+  if (query.since) {
+    since = new Date(query.since);
+    since.setHours(0, 0, 0, 0);
+    days = daySpan(since, new Date());
+  } else {
+    days = resolveDays(query.days);
+    since = new Date();
+    since.setDate(since.getDate() - (days - 1));
+    since.setHours(0, 0, 0, 0);
+  }
 
   // Each data source is independent — a problem with one (e.g. a table
   // temporarily unavailable) must not take down the metrics that have
   // nothing to do with it. Missing data degrades to zeros, not a 500.
-  const [visitsResult, customersResult, messagesResult, allCustomersResult] = await Promise.allSettled([
+  const [visitsResult, customersResult, messagesResult, allCustomersResult, ordersResult] = await Promise.allSettled([
     prisma.websiteVisit.findMany({
       where: { tenantId, createdAt: { gte: since } },
       select: { source: true, createdAt: true },
@@ -45,11 +62,16 @@ export async function getOverview(tenantId, query) {
       where: { tenantId },
       select: { source: true },
     }),
+    prisma.order.findMany({
+      where: { tenantId, createdAt: { gte: since } },
+      select: { totalMinor: true, createdAt: true, items: true },
+    }),
   ]);
   const visits = visitsResult.status === 'fulfilled' ? visitsResult.value : [];
   const customers = customersResult.status === 'fulfilled' ? customersResult.value : [];
   const messages = messagesResult.status === 'fulfilled' ? messagesResult.value : [];
   const allCustomers = allCustomersResult.status === 'fulfilled' ? allCustomersResult.value : [];
+  const orders = ordersResult.status === 'fulfilled' ? ordersResult.value : [];
 
   const dayKeys = Array.from({ length: days }, (_, i) => {
     const d = new Date(since);
@@ -89,11 +111,39 @@ export async function getOverview(tenantId, query) {
     if (m.role in messagesBySender) messagesBySender[m.role] += 1;
   }
 
+  const revenue = orders.reduce((sum, o) => sum + (o.totalMinor || 0), 0);
+  const orderCount = orders.length;
+
+  const dailyRevenue = dayKeys.map((d) => {
+    const dayOrders = orders.filter((o) => sameDay(o.createdAt, d));
+    return {
+      day: dayLabel(d),
+      revenue: dayOrders.reduce((sum, o) => sum + (o.totalMinor || 0), 0),
+      orders: dayOrders.length,
+    };
+  });
+
+  const productCounts = {};
+  for (const o of orders) {
+    for (const item of o.items || []) {
+      const id = item.productId || item.name || 'unknown';
+      const name = item.name || item.productName || 'Unknown';
+      if (!productCounts[id]) productCounts[id] = { name, sales: 0, revenue: 0 };
+      productCounts[id].sales += item.quantity || 1;
+      productCounts[id].revenue += (item.priceMinor || 0) * (item.quantity || 1);
+    }
+  }
+  const topProducts = Object.values(productCounts).sort((a, b) => b.sales - a.sales).slice(0, 5);
+
   return {
     websiteVisits: { total: visits.length, daily: dailyVisits },
     trafficSources,
     customerSources,
     customerGrowth,
     messagesBySender,
+    revenue,
+    orderCount,
+    dailyRevenue,
+    topProducts,
   };
 }

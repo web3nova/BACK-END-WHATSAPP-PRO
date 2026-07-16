@@ -63,7 +63,7 @@ productReviewRoutes.get(
  * /products/{id}/reviews:
  *   post:
  *     tags: [Reviews]
- *     summary: Submit a review for a product (customer must have a delivered order containing it)
+ *     summary: Submit a review for a product (customer must have a fulfilled order containing it)
  *     parameters:
  *       - in: path
  *         name: id

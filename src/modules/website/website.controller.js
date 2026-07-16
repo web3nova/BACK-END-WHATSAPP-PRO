@@ -132,9 +132,21 @@ export const getStorefront = asyncHandler(async (req, res) => {
   websiteService
     .recordVisit({
       tenantId: data.tenant.id,
-      referrer: req.headers.referer || req.headers.referrer,
+      // The client-supplied document.referrer, NOT req.headers.referer — that
+      // header would be this fetch's own same-origin caller (the storefront
+      // page itself), not the page that actually linked the visitor here.
+      referrer: req.query.referrer || null,
       host: req.headers['x-forwarded-host'] || req.headers.host,
     })
     .catch(() => {});
+  return ok(res, data);
+});
+
+export const getStorefrontBankDetails = asyncHandler(async (req, res) => {
+  const tenantId = req.query.tenantId || req.headers['x-tenant-id'];
+  const slug = req.query.slug;
+  const domain =
+    req.query.domain || normalizeHost(req.headers['x-forwarded-host'] || req.headers.host);
+  const data = await websiteService.getStorefrontBankDetails({ tenantId, slug, domain });
   return ok(res, data);
 });
