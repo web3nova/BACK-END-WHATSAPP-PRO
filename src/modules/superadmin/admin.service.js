@@ -3,7 +3,7 @@ import prisma from '../../config/prisma.js';
 import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
 import { hashPassword } from '../../common/utils/hash.js';
 import { sendMail } from '../../config/mailer.js';
-import { superAdminWelcomeEmail } from '../../config/emailTemplates.js';
+import { superAdminWelcomeEmail, tenantSuspendedEmail, tenantActivatedEmail, tenantDeletedEmail, userBannedEmail, userUnbannedEmail } from '../../config/emailTemplates.js';
 import { logger } from '../../config/logger.js';
 import { proxyAssetUrl } from '../../common/utils/uploadAsset.js';
 
@@ -90,29 +90,57 @@ export const getTenantDetail = async (id) => {
 };
 
 export const suspendTenant = async (id) => {
-  const tenant = await prisma.tenant.findUnique({ where: { id } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { id },
+    include: { users: { take: 1, orderBy: { createdAt: 'asc' } } },
+  });
   if (!tenant) throw new NotFoundError('Tenant not found');
   if (tenant.status === 'SUSPENDED') {
     throw new BadRequestError('Tenant is already suspended');
   }
 
-  return prisma.tenant.update({
+  const updated = await prisma.tenant.update({
     where: { id },
     data: { status: 'SUSPENDED' },
   });
+
+  const ownerEmail = tenant.users[0]?.email;
+  if (ownerEmail) {
+    sendMail({
+      to: ownerEmail,
+      subject: 'Your BizIQ account has been suspended',
+      html: tenantSuspendedEmail({ businessName: tenant.name }),
+    }).catch((err) => logger.error(`[admin] Tenant suspended email failed for ${ownerEmail}: ${err.message}`));
+  }
+
+  return updated;
 };
 
 export const activateTenant = async (id) => {
-  const tenant = await prisma.tenant.findUnique({ where: { id } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { id },
+    include: { users: { take: 1, orderBy: { createdAt: 'asc' } } },
+  });
   if (!tenant) throw new NotFoundError('Tenant not found');
   if (tenant.status === 'ACTIVE') {
     throw new BadRequestError('Tenant is already active');
   }
 
-  return prisma.tenant.update({
+  const updated = await prisma.tenant.update({
     where: { id },
     data: { status: 'ACTIVE' },
   });
+
+  const ownerEmail = tenant.users[0]?.email;
+  if (ownerEmail) {
+    sendMail({
+      to: ownerEmail,
+      subject: 'Your BizIQ account has been reactivated',
+      html: tenantActivatedEmail({ businessName: tenant.name }),
+    }).catch((err) => logger.error(`[admin] Tenant activated email failed for ${ownerEmail}: ${err.message}`));
+  }
+
+  return updated;
 };
 
 // Irreversibly wipes a tenant and every row that belongs to it. Only
@@ -125,7 +153,10 @@ export const activateTenant = async (id) => {
 // schema.prisma declares it. Wrapped in one transaction: if any step fails,
 // nothing is deleted.
 export const deleteTenant = async (id, confirmName) => {
-  const tenant = await prisma.tenant.findUnique({ where: { id } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { id },
+    include: { users: { take: 1, orderBy: { createdAt: 'asc' } } },
+  });
   if (!tenant) throw new NotFoundError('Tenant not found');
   // Require the caller to echo back the tenant's exact name — the same
   // "type the name to confirm" pattern as any other irreversible-delete UI,
@@ -133,6 +164,9 @@ export const deleteTenant = async (id, confirmName) => {
   if (confirmName !== tenant.name) {
     throw new BadRequestError('Tenant name confirmation does not match.');
   }
+  // Captured before the transaction below deletes the user rows — this is
+  // the last point the owner's email is still readable.
+  const ownerEmail = tenant.users[0]?.email;
 
   const business = await prisma.business.findUnique({ where: { tenantId: id }, select: { id: true } });
 
@@ -195,6 +229,14 @@ export const deleteTenant = async (id, confirmName) => {
     prisma.tenant.delete({ where: { id } }),
   ]);
 
+  if (ownerEmail) {
+    sendMail({
+      to: ownerEmail,
+      subject: 'Your BizIQ account has been deleted',
+      html: tenantDeletedEmail({ businessName: tenant.name }),
+    }).catch((err) => logger.error(`[admin] Tenant deleted email failed for ${ownerEmail}: ${err.message}`));
+  }
+
   return { id, name: tenant.name, deleted: true };
 };
 
@@ -224,11 +266,20 @@ export const banUser = async (userId) => {
   if (user.isSuperAdmin) throw new BadRequestError('Cannot ban a super admin');
   if (user.isBanned) throw new BadRequestError('User is already banned');
 
-  return prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id: userId },
     data: { isBanned: true },
     select: { id: true, email: true, name: true, isBanned: true },
   });
+
+  const tenant = user.tenantId ? await prisma.tenant.findUnique({ where: { id: user.tenantId }, select: { name: true } }) : null;
+  sendMail({
+    to: updated.email,
+    subject: 'Your BizIQ account access has been suspended',
+    html: userBannedEmail({ name: updated.name, businessName: tenant?.name }),
+  }).catch((err) => logger.error(`[admin] User banned email failed for ${updated.email}: ${err.message}`));
+
+  return updated;
 };
 
 export const unbanUser = async (userId) => {
@@ -236,11 +287,20 @@ export const unbanUser = async (userId) => {
   if (!user) throw new NotFoundError('User not found');
   if (!user.isBanned) throw new BadRequestError('User is not banned');
 
-  return prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id: userId },
     data: { isBanned: false },
     select: { id: true, email: true, name: true, isBanned: true },
   });
+
+  const tenant = user.tenantId ? await prisma.tenant.findUnique({ where: { id: user.tenantId }, select: { name: true } }) : null;
+  sendMail({
+    to: updated.email,
+    subject: 'Your BizIQ account access has been restored',
+    html: userUnbannedEmail({ name: updated.name, businessName: tenant?.name }),
+  }).catch((err) => logger.error(`[admin] User unbanned email failed for ${updated.email}: ${err.message}`));
+
+  return updated;
 };
 
 export const assignRole = async (userId, roleId) => {
