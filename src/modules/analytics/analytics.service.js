@@ -62,8 +62,11 @@ export async function getOverview(tenantId, query) {
       where: { tenantId },
       select: { source: true },
     }),
+    // Cancelled orders never happened — excluded so they can't inflate
+    // revenue, order counts, or top-product sales. Every other status
+    // (pending/confirmed/paid/fulfilled) still counts.
     prisma.order.findMany({
-      where: { tenantId, createdAt: { gte: since } },
+      where: { tenantId, createdAt: { gte: since }, status: { not: 'cancelled' } },
       select: { totalMinor: true, createdAt: true, items: true },
     }),
   ]);
