@@ -115,6 +115,89 @@ export const activateTenant = async (id) => {
   });
 };
 
+// Irreversibly wipes a tenant and every row that belongs to it. Only
+// `Invite` and product-child tables (ProductVariant, Inventory, ProductReview
+// via their `product` relation, RefreshToken via `user`) have onDelete:
+// Cascade in the schema — everything else here would otherwise block the
+// final tenant delete on a foreign-key violation, so this deletes explicitly
+// in dependency order (children before the parents they reference) rather
+// than trust that every relevant migration applied cascade exactly as
+// schema.prisma declares it. Wrapped in one transaction: if any step fails,
+// nothing is deleted.
+export const deleteTenant = async (id, confirmName) => {
+  const tenant = await prisma.tenant.findUnique({ where: { id } });
+  if (!tenant) throw new NotFoundError('Tenant not found');
+  // Require the caller to echo back the tenant's exact name — the same
+  // "type the name to confirm" pattern as any other irreversible-delete UI,
+  // enforced server-side so it can't be skipped by calling the API directly.
+  if (confirmName !== tenant.name) {
+    throw new BadRequestError('Tenant name confirmation does not match.');
+  }
+
+  const business = await prisma.business.findUnique({ where: { tenantId: id }, select: { id: true } });
+
+  await prisma.$transaction([
+    // Rows with no dependents of their own, or that reference two tenant-
+    // scoped parents at once (must go before either parent) — deleted first.
+    prisma.productReview.deleteMany({ where: { tenantId: id } }),
+    prisma.mediaAsset.deleteMany({ where: { tenantId: id } }),
+    prisma.outboxMessage.deleteMany({ where: { tenantId: id } }),
+    // Message has no tenantId column — filtered through its conversation.
+    prisma.message.deleteMany({ where: { conversation: { tenantId: id } } }),
+    prisma.abandonedCart.deleteMany({ where: { tenantId: id } }),
+    prisma.quote.deleteMany({ where: { tenantId: id } }),
+    prisma.payment.deleteMany({ where: { tenantId: id } }),
+    prisma.order.deleteMany({ where: { tenantId: id } }),
+    prisma.conversation.deleteMany({ where: { tenantId: id } }),
+    prisma.customer.deleteMany({ where: { tenantId: id } }),
+
+    prisma.productVariant.deleteMany({ where: { product: { tenantId: id } } }),
+    prisma.inventory.deleteMany({ where: { tenantId: id } }),
+    prisma.product.deleteMany({ where: { tenantId: id } }),
+    prisma.coupon.deleteMany({ where: { tenantId: id } }),
+    prisma.catalog.deleteMany({ where: { tenantId: id } }),
+
+    prisma.documentChunk.deleteMany({ where: { tenantId: id } }),
+    prisma.document.deleteMany({ where: { tenantId: id } }),
+
+    // Website tables key off businessId, not tenantId directly.
+    ...(business ? [
+      prisma.websiteMedia.deleteMany({ where: { businessId: business.id } }),
+      prisma.websitePage.deleteMany({ where: { businessId: business.id } }),
+      prisma.websiteSettingsRevision.deleteMany({ where: { businessId: business.id } }),
+      prisma.websiteSettings.deleteMany({ where: { businessId: business.id } }),
+    ] : []),
+    prisma.business.deleteMany({ where: { tenantId: id } }),
+
+    prisma.whatsappAccount.deleteMany({ where: { tenantId: id } }),
+    prisma.paymentConfig.deleteMany({ where: { tenantId: id } }),
+    prisma.onboardingStepData.deleteMany({ where: { tenantId: id } }),
+    prisma.onboardingProgress.deleteMany({ where: { tenantId: id } }),
+    prisma.onboardingOverride.deleteMany({ where: { tenantId: id } }),
+    prisma.notification.deleteMany({ where: { tenantId: id } }),
+    prisma.websiteVisit.deleteMany({ where: { tenantId: id } }),
+    prisma.subscription.deleteMany({ where: { tenantId: id } }),
+
+    // User-owned tokens without cascade (RefreshToken has it, but included
+    // here too for clarity/defense-in-depth). Must precede the User delete.
+    prisma.passwordResetToken.deleteMany({ where: { user: { tenantId: id } } }),
+    prisma.otpToken.deleteMany({ where: { user: { tenantId: id } } }),
+    prisma.refreshToken.deleteMany({ where: { user: { tenantId: id } } }),
+    prisma.user.deleteMany({ where: { tenantId: id } }),
+
+    // Tenant-scoped custom roles (platform roles have tenantId: null — untouched).
+    prisma.role.deleteMany({ where: { tenantId: id } }),
+
+    // Invite already cascades via the schema; deleted explicitly too so this
+    // function doesn't silently depend on that staying true.
+    prisma.invite.deleteMany({ where: { tenantId: id } }),
+
+    prisma.tenant.delete({ where: { id } }),
+  ]);
+
+  return { id, name: tenant.name, deleted: true };
+};
+
 // ── User management ──
 export const listTenantUsers = async (tenantId) => {
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
