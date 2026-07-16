@@ -5,6 +5,7 @@ import { logger } from '../../config/logger.js';
 import { mainQueue } from '../../jobs/queue.js';
 // mainQueue now backed by pg-boss — no Redis dependency
 import { prisma } from '../../config/prisma.js';
+import { socialFooterHtml } from '../../config/emailTemplates.js';
 
 /**
  * Send a notification via one or more channels.
@@ -267,10 +268,11 @@ export async function sendWeeklyReports() {
           </div>
 
           <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:16px 32px;text-align:center">
-            <p style="color:#94a3b8;font-size:11px;margin:0">
+            <p style="color:#94a3b8;font-size:11px;margin:0 0 12px">
               You're receiving this because weekly reports are enabled in your BizIQ notification settings.
-              <br>BizIQ · AI-powered business platform
             </p>
+            ${socialFooterHtml()}
+            <p style="color:#94a3b8;font-size:11px;margin:0">BizIQ · AI-powered business platform</p>
           </div>
         </div>
       `;

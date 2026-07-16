@@ -5,6 +5,7 @@ import { sendMail } from '../../config/mailer.js';
 import { config } from '../../config/index.js';
 import { logger } from '../../config/logger.js';
 import { proxyAssetUrl } from '../../common/utils/uploadAsset.js';
+import { socialFooterHtml } from '../../config/emailTemplates.js';
 
 const INVITE_TTL_HOURS = 48;
 
@@ -125,10 +126,11 @@ export const sendInvite = async (tenantId, { email, role = 'member' }, inviterNa
 
         <!-- Footer -->
         <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:16px 32px;text-align:center">
-          <p style="color:#94a3b8;font-size:11px;margin:0">
+          <p style="color:#94a3b8;font-size:11px;margin:0 0 12px">
             If you weren't expecting this invite, you can safely ignore this email. It will expire automatically.
           </p>
-          <p style="color:#94a3b8;font-size:11px;margin:6px 0 0">
+          ${socialFooterHtml()}
+          <p style="color:#94a3b8;font-size:11px;margin:0">
             BizIQ · AI-powered business platform
           </p>
         </div>
@@ -208,6 +210,7 @@ export const removeMember = async (tenantId, userId, requesterId, requesterName)
         </div>
 
         <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:16px 32px;text-align:center">
+          ${socialFooterHtml()}
           <p style="color:#94a3b8;font-size:11px;margin:0">BizIQ · AI-powered business platform</p>
         </div>
       </div>
