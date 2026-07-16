@@ -4,6 +4,10 @@ const BRAND = '#4166F5';
 const INK = '#1e293b';
 const MUTED = '#64748b';
 const APP_URL = process.env.FRONTEND_URL || 'https://www.biziq.online';
+const SOCIAL_LINKS = {
+  instagram: 'https://www.instagram.com/biziq.online',
+  tiktok: 'https://www.tiktok.com/@biziq.online',
+};
 
 function layout({ preheader = '', heading, bodyHtml, ctaLabel, ctaUrl }) {
   return `<!doctype html>
@@ -39,6 +43,16 @@ function layout({ preheader = '', heading, bodyHtml, ctaLabel, ctaUrl }) {
                 You're receiving this because your business is on BizIQ.
                 <br/>This is an automated message from an unmonitored inbox.
               </p>
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 14px;">
+                <tr>
+                  <td style="padding-right:8px;">
+                    <a href="${SOCIAL_LINKS.instagram}" style="display:inline-block;text-decoration:none;font-size:11px;font-weight:600;color:#ffffff;background:#E1306C;border-radius:999px;padding:5px 12px;">Instagram</a>
+                  </td>
+                  <td>
+                    <a href="${SOCIAL_LINKS.tiktok}" style="display:inline-block;text-decoration:none;font-size:11px;font-weight:600;color:#ffffff;background:#000000;border-radius:999px;padding:5px 12px;">TikTok</a>
+                  </td>
+                </tr>
+              </table>
               <p style="margin:0;font-size:11px;color:#a3abba;">
                 BizIQ · Run Your Business Smarter · <a href="${APP_URL}" style="color:#a3abba;">biziq.online</a>
               </p>
