@@ -137,6 +137,7 @@ export const getStorefront = asyncHandler(async (req, res) => {
       // page itself), not the page that actually linked the visitor here.
       referrer: req.query.referrer || null,
       host: req.headers['x-forwarded-host'] || req.headers.host,
+      utmSource: req.query.utm_source || null,
     })
     .catch(() => {});
   return ok(res, data);

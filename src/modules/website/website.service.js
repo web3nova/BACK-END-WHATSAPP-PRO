@@ -522,11 +522,20 @@ function isPlatformOrigin(referrerUrl) {
 // here silently drops ~all real traffic on the shared biziq.online domain.
 // Caller (the controller) never awaits this — a logging failure must never
 // affect or slow down the actual storefront response.
-export async function recordVisit({ tenantId, referrer, host }) {
+const VALID_SOURCES = new Set(['whatsapp', 'website', 'referral', 'direct']);
+
+export async function recordVisit({ tenantId, referrer, host, utmSource }) {
   if (referrer && isPlatformOrigin(referrer)) return; // owner previewing their own storefront
 
   let source = 'direct';
-  if (referrer) {
+  // An explicit ?utm_source=whatsapp on the link (added to every storefront
+  // link we send via WhatsApp, e.g. cart recovery) beats referrer sniffing —
+  // WhatsApp's in-app browser frequently strips or omits document.referrer
+  // on navigation, which is why "whatsapp" traffic sat at 0 despite real
+  // clicks happening.
+  if (utmSource && VALID_SOURCES.has(utmSource)) {
+    source = utmSource;
+  } else if (referrer) {
     const ref = referrer.toLowerCase();
     if (ref.includes('whatsapp') || ref.includes('wa.me')) {
       source = 'whatsapp';

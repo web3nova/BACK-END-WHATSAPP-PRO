@@ -30,7 +30,7 @@ export default async function processCartRecovery(job) {
 
   const { tenant, customer } = cart;
   const businessName = tenant?.business?.displayName || tenant?.name || 'our store';
-  const url = `${config.frontendUrl}${tenant.slug ? `/b/${tenant.slug}` : `/storefront/${tenant.id}`}`;
+  const url = `${config.frontendUrl}${tenant.slug ? `/b/${tenant.slug}` : `/storefront/${tenant.id}`}?utm_source=whatsapp`;
 
   const message = `🛒 You left items in your cart at ${businessName}! Come back and check out: ${url}\n\nReply STOP to stop these reminders.`;
 
