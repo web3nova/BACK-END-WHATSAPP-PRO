@@ -219,17 +219,46 @@ export const sendProductImage = {
   },
 };
 
-// Tool: fetch the latest JSONB catalog payload (diagram: "JSONB Catalogs").
+// Tool: fetch the latest JSONB catalog payload (diagram: "JSONB Catalogs") —
+// a separate, optional bulk-upload feature (CSV/form import), distinct from
+// the structured Product records search_products/get_price read from.
+//
+// Most tenants never use the bulk-upload feature, so this returned
+// "No catalog uploaded yet." even when the tenant has a real, populated
+// product catalog — and models reach for this tool on broad "what do you
+// have" / "list everything" questions since its description reads as the
+// authoritative "give me everything" call. That false-empty message then
+// got paraphrased straight to the customer as "our catalog is empty",
+// contradicted by however many real products actually existed. Falls back to
+// the real product list so the answer is correct regardless of which tool a
+// given request reaches for.
 export const fetchCatalog = {
   name: 'fetch_catalog',
-  description: 'Fetch the latest full catalog (categories, items, pricing) for this business.',
+  description: 'Fetch the latest bulk-uploaded catalog (categories, items, pricing) for this business, if one was ever CSV/form-imported. For "what products/items do you have" or "list everything", prefer search_products — it reads the actual, always-current product catalog; this tool only covers a separate, optional bulk-import feature most businesses never use.',
   parameters: { type: 'object', properties: {} },
   async handler(_input, ctx) {
     const catalog = await prisma.catalog.findFirst({
       where: { tenantId: ctx.tenantId },
       orderBy: { createdAt: 'desc' },
     });
-    return catalog?.data ?? { message: 'No catalog uploaded yet.' };
+    if (catalog?.data) return catalog.data;
+
+    const products = await prisma.product.findMany({
+      where: { tenantId: ctx.tenantId, isActive: true },
+      take: 50,
+    });
+    if (!products.length) return { message: 'No catalog uploaded, and no products in the catalog yet.' };
+    return {
+      source: 'products',
+      items: products.map((p) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        price: money(p.priceMinor, p.currency),
+        stock: p.stock,
+        category: p.category,
+      })),
+    };
   },
 };
 
