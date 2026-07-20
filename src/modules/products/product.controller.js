@@ -20,6 +20,11 @@ export const create = asyncHandler(async (req, res) => {
   return created(res, data);
 });
 
+export const suggest = asyncHandler(async (req, res) => {
+  const data = await productService.suggestDetails(req.body);
+  return ok(res, data);
+});
+
 export const update = asyncHandler(async (req, res) => {
   const data = await productService.update(req.params.id, getTenantId(req), req.body);
   return ok(res, data);

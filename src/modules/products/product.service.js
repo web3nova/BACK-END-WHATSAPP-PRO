@@ -1,8 +1,9 @@
 import { prisma } from '../../config/prisma.js';
-import { NotFoundError } from '../../common/errors/index.js';
+import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
 import { paginate, paginatedResponse } from '../../common/utils/pagination.js';
 import { uploadAsset } from '../../common/utils/uploadAsset.js';
 import { PRODUCT_CATEGORIES } from '../../common/constants/businessProfile.js';
+import { getChatProvider } from '../ai/providers/index.js';
 
 async function findOwned(id, tenantId) {
   const product = await prisma.product.findFirst({
@@ -197,6 +198,43 @@ export async function removeGalleryImage(id, tenantId, storageKey) {
 
 export function listCategories() {
   return PRODUCT_CATEGORIES;
+}
+
+// AI-assisted product listing: given just a name (what a merchant would
+// naturally type first), suggest a description and a few tags — the tedious
+// part of adding a product one-by-one during onboarding. Deliberately does
+// NOT suggest a price: the AI has no idea what this merchant actually
+// charges, and a wrong hallucinated number silently accepted into a catalog
+// is worse than an empty field.
+export async function suggestDetails({ name, brand }) {
+  if (!name || !name.trim()) throw new BadRequestError('Product name is required to generate suggestions.');
+
+  const system = `You write concise, appealing e-commerce product listings for WhatsApp-first businesses in Nigeria. Given a product name (and optionally a brand), respond with ONLY a JSON object, no markdown, no commentary:
+{"description": "2-3 sentence sales-friendly description", "tags": ["tag1", "tag2", "tag3"]}
+Keep the description under 300 characters. Tags should be short, lowercase, relevant search/browse keywords (max 5).`;
+
+  const provider = getChatProvider();
+  const result = await provider.chat({
+    system,
+    messages: [{ role: 'user', content: `Product name: ${name.trim()}${brand ? `\nBrand: ${brand.trim()}` : ''}` }],
+    tools: [],
+  });
+
+  const raw = result?.text || '';
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) throw new BadRequestError('AI suggestion failed — please write the details manually.');
+
+  let parsed;
+  try {
+    parsed = JSON.parse(match[0]);
+  } catch {
+    throw new BadRequestError('AI suggestion failed — please write the details manually.');
+  }
+
+  return {
+    description: typeof parsed.description === 'string' ? parsed.description.slice(0, 500) : '',
+    tags: Array.isArray(parsed.tags) ? parsed.tags.filter((t) => typeof t === 'string').slice(0, 5) : [],
+  };
 }
 
 // Public, trimmed subset for social-preview cards — no auth, no tenant

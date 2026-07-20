@@ -51,6 +51,27 @@ router.get('/categories', productController.listCategories);
 
 /**
  * @openapi
+ * /products/suggest:
+ *   post:
+ *     tags: [Products]
+ *     summary: AI-generate a description and tags from a product name
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string }
+ *               brand: { type: string }
+ *     responses:
+ *       200: { description: Suggested description and tags }
+ */
+router.post('/suggest', productController.suggest);
+
+/**
+ * @openapi
  * /products:
  *   get:
  *     tags: [Products]
