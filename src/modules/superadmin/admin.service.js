@@ -9,14 +9,17 @@ import { proxyAssetUrl } from '../../common/utils/uploadAsset.js';
 
 // Resolves a business logo to a stable URL (raw signed URLs expire, ~1hr) —
 // mirrors business.service.js's withFreshLogoUrl, applied to the
-// tenant.business relation.
+// tenant.business relation. Also surfaces the tenant's actual current name:
+// tenant.name is set once at signup and never updated again, while
+// business.displayName is what the owner sets in Settings and can change any
+// time — showing tenant.name in admin meant a rename never appeared there.
 function withLogoUrl(tenant) {
   if (!tenant) return tenant;
   const { business, ...rest } = tenant;
   const logoUrl = business?.logoStorageKey
     ? proxyAssetUrl('business-logos', business.logoStorageKey)
     : (business?.logoUrl || null);
-  return { ...rest, business, logoUrl };
+  return { ...rest, name: business?.displayName || rest.name, business, logoUrl };
 }
 
 const ADMIN_URL = process.env.ADMIN_URL || 'https://admin.biziq.online';
@@ -64,7 +67,7 @@ export const listTenants = async ({ page = 1, limit = 25, search = '' } = {}) =>
       select: {
         id: true, name: true, slug: true, domain: true, status: true, createdAt: true,
         subscription: { select: { status: true, plan: { select: { name: true } } } },
-      business: { select: { logoUrl: true, logoStorageKey: true, phone: true, whatsappNumber: true } },
+      business: { select: { displayName: true, logoUrl: true, logoStorageKey: true, phone: true, whatsappNumber: true } },
         _count: { select: { users: true, orders: true } },
       },
     }),
@@ -81,7 +84,7 @@ export const getTenantDetail = async (id) => {
       subscription: {
         select: { id: true, status: true, planId: true, renewsAt: true, trialEndsAt: true, plan: { select: { id: true, name: true, label: true } } },
       },
-      business: { select: { logoUrl: true, logoStorageKey: true, phone: true, whatsappNumber: true } },
+      business: { select: { displayName: true, logoUrl: true, logoStorageKey: true, phone: true, whatsappNumber: true } },
       _count: { select: { users: true, orders: true, customers: true } },
     },
   });
@@ -92,7 +95,10 @@ export const getTenantDetail = async (id) => {
 export const suspendTenant = async (id) => {
   const tenant = await prisma.tenant.findUnique({
     where: { id },
-    include: { users: { take: 1, orderBy: { createdAt: 'asc' } } },
+    include: {
+      users: { take: 1, orderBy: { createdAt: 'asc' } },
+      business: { select: { displayName: true } },
+    },
   });
   if (!tenant) throw new NotFoundError('Tenant not found');
   if (tenant.status === 'SUSPENDED') {
@@ -109,7 +115,7 @@ export const suspendTenant = async (id) => {
     sendMail({
       to: ownerEmail,
       subject: 'Your BizIQ account has been suspended',
-      html: tenantSuspendedEmail({ businessName: tenant.name }),
+      html: tenantSuspendedEmail({ businessName: tenant.business?.displayName || tenant.name }),
     }).catch((err) => logger.error(`[admin] Tenant suspended email failed for ${ownerEmail}: ${err.message}`));
   }
 
@@ -119,7 +125,10 @@ export const suspendTenant = async (id) => {
 export const activateTenant = async (id) => {
   const tenant = await prisma.tenant.findUnique({
     where: { id },
-    include: { users: { take: 1, orderBy: { createdAt: 'asc' } } },
+    include: {
+      users: { take: 1, orderBy: { createdAt: 'asc' } },
+      business: { select: { displayName: true } },
+    },
   });
   if (!tenant) throw new NotFoundError('Tenant not found');
   if (tenant.status === 'ACTIVE') {
@@ -136,7 +145,7 @@ export const activateTenant = async (id) => {
     sendMail({
       to: ownerEmail,
       subject: 'Your BizIQ account has been reactivated',
-      html: tenantActivatedEmail({ businessName: tenant.name }),
+      html: tenantActivatedEmail({ businessName: tenant.business?.displayName || tenant.name }),
     }).catch((err) => logger.error(`[admin] Tenant activated email failed for ${ownerEmail}: ${err.message}`));
   }
 
@@ -155,13 +164,19 @@ export const activateTenant = async (id) => {
 export const deleteTenant = async (id, confirmName) => {
   const tenant = await prisma.tenant.findUnique({
     where: { id },
-    include: { users: { take: 1, orderBy: { createdAt: 'asc' } } },
+    include: {
+      users: { take: 1, orderBy: { createdAt: 'asc' } },
+      business: { select: { displayName: true } },
+    },
   });
   if (!tenant) throw new NotFoundError('Tenant not found');
-  // Require the caller to echo back the tenant's exact name — the same
-  // "type the name to confirm" pattern as any other irreversible-delete UI,
-  // enforced server-side so it can't be skipped by calling the API directly.
-  if (confirmName !== tenant.name) {
+  // Require the caller to echo back the name exactly as shown on the detail
+  // page — which is business.displayName when set (see withLogoUrl), not the
+  // raw tenant.name that never updates after a rename — the same "type the
+  // name to confirm" pattern as any other irreversible-delete UI, enforced
+  // server-side so it can't be skipped by calling the API directly.
+  const displayedName = tenant.business?.displayName || tenant.name;
+  if (confirmName !== displayedName) {
     throw new BadRequestError('Tenant name confirmation does not match.');
   }
   // Captured before the transaction below deletes the user rows — this is
@@ -233,11 +248,11 @@ export const deleteTenant = async (id, confirmName) => {
     sendMail({
       to: ownerEmail,
       subject: 'Your BizIQ account has been deleted',
-      html: tenantDeletedEmail({ businessName: tenant.name }),
+      html: tenantDeletedEmail({ businessName: displayedName }),
     }).catch((err) => logger.error(`[admin] Tenant deleted email failed for ${ownerEmail}: ${err.message}`));
   }
 
-  return { id, name: tenant.name, deleted: true };
+  return { id, name: displayedName, deleted: true };
 };
 
 // ── User management ──
