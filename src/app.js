@@ -23,8 +23,14 @@ export function createApp() {
   app.set('trust proxy', 1);
 
   app.use(helmet({
-  contentSecurityPolicy: false,
-}));
+    contentSecurityPolicy: false,
+    // Helmet's default (same-origin) blocks every cross-origin image load —
+    // business logos, product photos, storefront galleries — from anywhere
+    // that isn't this exact API origin: the admin dashboard, the storefront
+    // domain, emails, generated PDFs. That's the entire point of the
+    // /assets/* proxy routes, so this can't be same-origin.
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }));
   app.use(cors({
     origin(origin, callback) {
       // No Origin header (server-to-server, curl, webhooks) — allow.
