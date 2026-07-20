@@ -62,11 +62,16 @@ export async function getOverview(tenantId, query) {
       where: { tenantId },
       select: { source: true },
     }),
-    // Cancelled orders never happened — excluded so they can't inflate
-    // revenue, order counts, or top-product sales. Every other status
-    // (pending/confirmed/paid/fulfilled) still counts.
+    // Only count orders where money has actually reached the vendor:
+    // 'paid' is set exclusively by a successful payment-provider webhook
+    // (payment.service.js), and 'fulfilled' is the terminal "done" state.
+    // 'pending' and 'confirmed' are both pre-money states here — notably
+    // 'confirmed' is the status a cash-on-delivery order gets *at creation*,
+    // before the courier has collected anything (checkout.service.js) — so
+    // including it would reintroduce the same premature-counting problem
+    // cancelled orders had.
     prisma.order.findMany({
-      where: { tenantId, createdAt: { gte: since }, status: { not: 'cancelled' } },
+      where: { tenantId, createdAt: { gte: since }, status: { in: ['paid', 'fulfilled'] } },
       select: { totalMinor: true, createdAt: true, items: true },
     }),
   ]);
