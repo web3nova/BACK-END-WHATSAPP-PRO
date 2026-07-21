@@ -152,6 +152,7 @@ export const createOrder = async (tenantId, data, { notify: sendNotify = false, 
           data: { conversationId: order.conversationId, role: 'staff', content: encryptMessage(text), meta: { orderId: order.id }, senderUserId },
           include: { senderUser: { select: { id: true, name: true, email: true } } },
         });
+        await prisma.conversation.update({ where: { id: order.conversationId }, data: { updatedAt: new Date() } }).catch(() => {});
         pushEvent(tenantId, 'staff_message', {
           conversationId: order.conversationId,
           message: {

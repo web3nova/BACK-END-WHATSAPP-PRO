@@ -207,6 +207,7 @@ export const sendProductImage = {
           url: imageUrl,
         },
       });
+      await prisma.conversation.update({ where: { id: ctx.conversationId }, data: { updatedAt: new Date() } }).catch(() => {});
       pushEvent(ctx.tenantId, 'ai_message', {
         conversationId: ctx.conversationId,
         message: { id: message.id, role: 'ai', content: text, createdAt: message.createdAt, media: [{ mimeType, url: imageUrl }] },

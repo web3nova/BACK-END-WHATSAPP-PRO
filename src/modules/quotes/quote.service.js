@@ -139,6 +139,7 @@ export const createQuote = async (tenantId, data) => {
             meta: { quoteId: quote.id },
           },
         });
+        await prisma.conversation.update({ where: { id: quote.conversationId }, data: { updatedAt: new Date() } }).catch(() => {});
         pushEvent(tenantId, 'staff_message', {
           conversationId: quote.conversationId,
           message: { id: message.id, role: 'staff', content: text, createdAt: message.createdAt },

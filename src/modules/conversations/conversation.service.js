@@ -122,6 +122,12 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
       data: { conversationId: conversation.id, role: 'customer', content: encryptMessage(text), externalId: messageId, meta: { whatsappMessageId: messageId, ...(structured && { structured }) } }
     });
 
+    // Every new message should bump the conversation to the top of the
+    // inbox — message.create() alone doesn't touch the parent row, so an
+    // ongoing (already-open) conversation would otherwise sit frozen at
+    // whatever updatedAt it had when it was first created/reopened.
+    await tx.conversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
+
     if (media && media.length) {
       for (const m of media) {
         try {
@@ -353,6 +359,7 @@ export const sendStaffMessage = async (conversationId, tenantId, text, senderUse
     data: { conversationId, role: 'staff', content: encryptMessage(text), senderUserId },
     include: { senderUser: { select: { id: true, name: true, email: true } } },
   });
+  await prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
 
   // Send via WhatsApp
   const { sendMessage } = await import('../whatsapp/whatsapp.service.js');
@@ -417,6 +424,7 @@ export const sendStaffMedia = async (conversationId, tenantId, file, caption = '
       url,
     },
   });
+  await prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
 
   const { sendMessage } = await import('../whatsapp/whatsapp.service.js');
   await sendMessage(tenantId, conv.customer.phone, {

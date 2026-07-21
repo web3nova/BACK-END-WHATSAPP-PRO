@@ -64,6 +64,7 @@ export default async function processAiReply(job) {
 
     const fallback = 'Sorry, I could not process your message right now. A human will reply shortly.';
     const fallbackMessage = await prisma.message.create({ data: { conversationId, role: 'ai', content: encryptMessage(fallback), meta: { aiForMessageId: messageId } } });
+    await prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } }).catch(() => {});
     pushEvent(tenantId, 'ai_message', {
       conversationId,
       message: { id: fallbackMessage.id, role: 'ai', content: fallback, createdAt: fallbackMessage.createdAt },
@@ -103,6 +104,7 @@ export default async function processAiReply(job) {
       meta: { aiForMessageId: messageId }
     }
   });
+  await prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } }).catch(() => {});
 
   // Push AI reply to connected dashboard tabs so it appears without a refresh
   pushEvent(tenantId, 'ai_message', {
