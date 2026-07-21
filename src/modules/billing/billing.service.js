@@ -10,6 +10,14 @@ import { trackEvent } from '../../services/tiktok.js';
 
 const TRIAL_DAYS = 14;
 
+// We don't auto-debit renewals (no card-on-file/recurring charge — Monnify
+// checkout is a one-off manual payment each period), so cutting access the
+// instant renewsAt passes would punish a business owner who's just a day
+// late on a bank transfer, not one who's actually churned. This grace
+// window keeps them active past renewsAt so a late-but-genuine renewal
+// doesn't break an in-progress customer conversation.
+const RENEWAL_GRACE_DAYS = 3;
+
 // ── Is this tenant currently allowed to use the product? ─────────────────────
 // Shared by the route-level requireActiveSubscription() middleware AND the AI
 // reply job — a lapsed tenant shouldn't just lose dashboard access, their
@@ -21,10 +29,14 @@ export const isSubscriptionActive = async (tenantId) => {
 
   const sub = await prisma.subscription.findUnique({ where: { tenantId } });
   if (!sub) return false;
-  if (sub.status === 'ACTIVE') return true;
+  // renewsAt is when the current paid period runs out — a lifetime/no-expiry
+  // ACTIVE row (renewsAt null, e.g. an admin override) stays active.
+  if (sub.status === 'ACTIVE' && (!sub.renewsAt || graceDeadline(sub.renewsAt) > new Date())) return true;
   if (sub.status === 'TRIAL' && sub.trialEndsAt > new Date()) return true;
   return false;
 };
+
+const graceDeadline = (renewsAt) => new Date(renewsAt.getTime() + RENEWAL_GRACE_DAYS * 24 * 60 * 60 * 1000);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -99,13 +111,16 @@ export const getSubscription = async (tenantId) => {
 
   const now = new Date();
   const isTrialExpired = sub.status === 'TRIAL' && sub.trialEndsAt && sub.trialEndsAt < now;
-  const isExpired = sub.status === 'ACTIVE' && sub.currentPeriodEnd && sub.currentPeriodEnd < now;
+  // renewsAt null means no expiry (e.g. an admin-set lifetime override) — not
+  // expired. Past renewsAt but still inside RENEWAL_GRACE_DAYS isn't expired
+  // either — see the comment on RENEWAL_GRACE_DAYS above.
+  const isExpired = sub.status === 'ACTIVE' && sub.renewsAt && graceDeadline(sub.renewsAt) < now;
 
   return {
     status: isTrialExpired || isExpired ? 'EXPIRED' : sub.status,
     plan: sub.planId ?? null,
     trialEndsAt: sub.trialEndsAt ?? null,
-    currentPeriodEnd: sub.currentPeriodEnd ?? null,
+    currentPeriodEnd: sub.renewsAt ?? null,
     isActive: !isTrialExpired && !isExpired && (sub.status === 'TRIAL' || sub.status === 'ACTIVE'),
     hasUsedTrial: sub.hasUsedTrial,
     // MVP/onboarding phase — see config.billing.enforceGate comment in
@@ -134,6 +149,15 @@ export const initializePayment = async (tenantId, planId) => {
     include: { subscription: true, users: { take: 1, orderBy: { createdAt: 'asc' } } },
   });
   if (!tenant) throw new NotFoundError('Tenant not found');
+
+  // Already paid and mid-cycle — you can only pick a plan again once the
+  // current paid period ends. Otherwise the webhook would blindly overwrite
+  // renewsAt/planId on a second purchase, which can shorten (not extend)
+  // time already paid for, or silently swap the plan they're currently on.
+  const currentSub = tenant.subscription;
+  if (currentSub?.status === 'ACTIVE' && currentSub.renewsAt && currentSub.renewsAt > new Date()) {
+    throw new BadRequestError(`You already have an active subscription until ${currentSub.renewsAt.toDateString()}. You can choose a new plan once your current period ends.`);
+  }
 
   const plan = await prisma.billingPlan.findUnique({ where: { id: planId } });
   if (!plan) throw new NotFoundError('Billing plan not found');
@@ -212,8 +236,13 @@ export const handleWebhook = async (payload, signature) => {
   const planId = payment.meta?.planId;
   const plan   = planId ? await prisma.billingPlan.findUnique({ where: { id: planId } }) : null;
 
+  // Extend from whichever is later — "now" for a fresh/lapsed subscriber, or
+  // their existing renewsAt if they still had paid time left (e.g. an early
+  // renewal) — never shorten time they've already paid for.
+  const existingSub = await prisma.subscription.findUnique({ where: { tenantId: payment.tenantId } });
+  const base = existingSub?.renewsAt && existingSub.renewsAt > new Date() ? existingSub.renewsAt : new Date();
   const renewsAt = plan
-    ? new Date(Date.now() + plan.intervalDays * 24 * 60 * 60 * 1000)
+    ? new Date(base.getTime() + plan.intervalDays * 24 * 60 * 60 * 1000)
     : null;
 
   await prisma.$transaction([
