@@ -192,14 +192,34 @@ export const listConversations = async (tenantId, { page = 1, limit = 25 } = {})
     prisma.conversation.count({ where: { tenantId } }),
     prisma.conversation.findMany({
       where: { tenantId },
-      include: { customer: true },
+      include: {
+        customer: true,
+        messages: { take: 1, orderBy: { createdAt: 'desc' } },
+      },
       orderBy: { updatedAt: 'desc' },
       skip,
       take,
     }),
   ]);
 
-  return { data: conversations, meta: { total, page, limit: take } };
+  // Preview text for the conversation list — same "what to show" logic as
+  // conversation.controller's notify() preview, so the list row and the
+  // in-app notification never disagree about what the last message said.
+  const data = conversations.map(({ messages, ...conv }) => {
+    const [last] = messages;
+    if (!last) return { ...conv, lastMessage: null };
+    const content = decryptMessage(last.content)?.trim();
+    return {
+      ...conv,
+      lastMessage: {
+        role: last.role,
+        content: content || (last.role === 'customer' ? 'Sent an attachment' : 'Sent a message'),
+        createdAt: last.createdAt,
+      },
+    };
+  });
+
+  return { data, meta: { total, page, limit: take } };
 };
 
 /**
