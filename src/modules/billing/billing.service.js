@@ -10,6 +10,22 @@ import { trackEvent } from '../../services/tiktok.js';
 
 const TRIAL_DAYS = 14;
 
+// ── Is this tenant currently allowed to use the product? ─────────────────────
+// Shared by the route-level requireActiveSubscription() middleware AND the AI
+// reply job — a lapsed tenant shouldn't just lose dashboard access, their
+// WhatsApp number should stop auto-replying too, otherwise the core paid
+// feature keeps running for free in the background.
+export const isSubscriptionActive = async (tenantId) => {
+  // MVP/onboarding phase — see config.billing.enforceGate comment.
+  if (!config.billing.enforceGate) return true;
+
+  const sub = await prisma.subscription.findUnique({ where: { tenantId } });
+  if (!sub) return false;
+  if (sub.status === 'ACTIVE') return true;
+  if (sub.status === 'TRIAL' && sub.trialEndsAt > new Date()) return true;
+  return false;
+};
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const getMonnifyToken = async () => {

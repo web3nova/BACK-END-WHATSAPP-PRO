@@ -6,6 +6,7 @@ import { notify } from '../../modules/notifications/notification.service.js';
 import { pushEvent } from '../../modules/sse/sse.service.js';
 import { escalationEmail } from '../../config/emailTemplates.js';
 import { encryptMessage, decryptMessage } from '../../common/utils/encryption.js';
+import { isSubscriptionActive } from '../../modules/billing/billing.service.js';
 
 export default async function processAiReply(job) {
   const { tenantId, conversationId, messageId } = job.data;
@@ -27,6 +28,14 @@ export default async function processAiReply(job) {
   // If conversation is escalated or closed, AI shouldn't reply automatically
   if (conversation.status !== 'open') {
     logger.info({ conversationId, status: conversation.status }, '[aiReply] conversation not open, skipping');
+    return;
+  }
+
+  // A lapsed trial/subscription shouldn't just lose dashboard access — the
+  // core paid feature (AI auto-reply) has to actually stop too, otherwise
+  // it keeps running for free. No-op while config.billing.enforceGate is off.
+  if (!(await isSubscriptionActive(tenantId))) {
+    logger.info({ tenantId, conversationId }, '[aiReply] subscription inactive, skipping auto-reply');
     return;
   }
 
