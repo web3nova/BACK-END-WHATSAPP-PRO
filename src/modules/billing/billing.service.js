@@ -45,11 +45,17 @@ export const startTrial = async (tenantId) => {
     return existing;
   }
 
-  // Create or reset the trial (covers new users and those whose trial expired)
+  // A trial is a one-time perk — once used (even if it since expired or was
+  // cancelled), never grant a second one. Only genuinely new tenants (no
+  // subscription row yet) fall through to create one below.
+  if (existing?.hasUsedTrial) {
+    throw new BadRequestError('Your free trial has already been used. Please subscribe to a plan to continue.');
+  }
+
   const sub = await prisma.subscription.upsert({
     where:  { tenantId },
-    update: { status: 'TRIAL', trialStartsAt, trialEndsAt },
-    create: { tenantId, status: 'TRIAL', trialStartsAt, trialEndsAt },
+    update: { status: 'TRIAL', trialStartsAt, trialEndsAt, hasUsedTrial: true },
+    create: { tenantId, status: 'TRIAL', trialStartsAt, trialEndsAt, hasUsedTrial: true },
   });
 
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } });
@@ -85,6 +91,7 @@ export const getSubscription = async (tenantId) => {
     trialEndsAt: sub.trialEndsAt ?? null,
     currentPeriodEnd: sub.currentPeriodEnd ?? null,
     isActive: !isTrialExpired && !isExpired && (sub.status === 'TRIAL' || sub.status === 'ACTIVE'),
+    hasUsedTrial: sub.hasUsedTrial,
   };
 };
 
