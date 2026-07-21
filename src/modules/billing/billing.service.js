@@ -92,6 +92,10 @@ export const getSubscription = async (tenantId) => {
     currentPeriodEnd: sub.currentPeriodEnd ?? null,
     isActive: !isTrialExpired && !isExpired && (sub.status === 'TRIAL' || sub.status === 'ACTIVE'),
     hasUsedTrial: sub.hasUsedTrial,
+    // MVP/onboarding phase — see config.billing.enforceGate comment in
+    // config/index.js. The frontend uses this to decide whether an
+    // expired/cancelled subscription should actually lock the tenant out.
+    gatingEnabled: config.billing.enforceGate,
   };
 };
 

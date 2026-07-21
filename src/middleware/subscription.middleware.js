@@ -1,6 +1,7 @@
 import { ForbiddenError } from '../common/errors/index.js';
 import { getPlanLimits } from '../common/constants/plans.js';
 import prisma from '../config/prisma.js';
+import { config } from '../config/index.js';
 
 // Usage on any route:  requireFeature('websiteBuilder')
 // Usage for limits:    requireFeature('maxUsers', async (tenantId) => prisma.user.count({ where: { tenantId } }))
@@ -8,6 +9,11 @@ import prisma from '../config/prisma.js';
 export const requireFeature = (feature, getCurrentCount = null) =>
   async (req, res, next) => {
     try {
+      // MVP/onboarding phase — see config.billing.enforceGate comment.
+      // No tenant should be locked out of plan features while we aren't
+      // actually charging anyone yet.
+      if (!config.billing.enforceGate) return next();
+
       if (req.user?.isSuperAdmin) return next();
 
       const tenantId = req.tenant?.id;

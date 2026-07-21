@@ -107,6 +107,14 @@ export const config = {
     baseUrl: process.env.MONNIFY_BASE_URL || 'https://api.monnify.com',
   },
 
+  billing: {
+    // MVP/onboarding phase: we aren't charging anyone yet, so an expired
+    // trial or cancelled subscription must not lock tenants out of the app.
+    // Flip ENFORCE_SUBSCRIPTION_GATE=true (no code change needed) once we're
+    // ready to actually require payment after trial.
+    enforceGate: process.env.ENFORCE_SUBSCRIPTION_GATE === 'true',
+  },
+
   lenco: {
     apiKey: process.env.LENCO_API_KEY,
     baseUrl: process.env.LENCO_BASE_URL || 'https://api.lenco.co/access/v1',
