@@ -52,6 +52,7 @@ async function loadBusinessContext(tenantId) {
     tone: ai.tone || 'Friendly',
     collectMeasurements: ai.collectMeasurements !== false,
     generateQuotes: ai.generateQuotes !== false,
+    suggestOutsideCatalog: ai.suggestOutsideCatalog === true,
   };
 }
 

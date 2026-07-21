@@ -11,6 +11,7 @@ export function buildSystemPrompt(business = {}) {
     tone: business.tone,
     collectMeasurements: business.collectMeasurements,
     generateQuotes: business.generateQuotes,
+    suggestOutsideCatalog: business.suggestOutsideCatalog,
   });
 
   // Current date/time in the business's timezone — the model's own sense of
