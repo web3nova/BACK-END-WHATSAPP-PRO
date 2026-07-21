@@ -130,8 +130,16 @@ export const updateBusinessProfile = async (tenantId, fields) => {
   return { success: true };
 };
 
+const PROFILE_PICTURE_MIME_TYPES = new Set(['image/jpeg', 'image/png']);
+
 /** Upload a profile picture to Meta and update the WhatsApp Business Profile. */
 export const uploadProfilePicture = async (tenantId, fileBuffer, mimeType) => {
+  if (!PROFILE_PICTURE_MIME_TYPES.has(mimeType)) {
+    const err = new Error('WhatsApp profile photos must be JPG or PNG. Meta rejects other formats (e.g. HEIC, WEBP, GIF).');
+    err.statusCode = 400;
+    throw err;
+  }
+
   const account = withDecryptedToken(await prisma.whatsappAccount.findUnique({
     where: { tenantId },
     select: { phoneNumberId: true, accessToken: true },
@@ -150,6 +158,7 @@ export const uploadProfilePicture = async (tenantId, fileBuffer, mimeType) => {
   );
   const sessionJson = await sessionRes.json().catch(() => ({}));
   if (!sessionRes.ok || !sessionJson.id) {
+    logger.error({ tenantId, step: 'create-upload-session', metaError: sessionJson?.error }, '[whatsapp] profile picture upload failed');
     throw new Error(sessionJson?.error?.message || 'Failed to create upload session');
   }
   const uploadSessionId = sessionJson.id;
@@ -166,6 +175,7 @@ export const uploadProfilePicture = async (tenantId, fileBuffer, mimeType) => {
   });
   const uploadJson = await uploadRes.json().catch(() => ({}));
   if (!uploadRes.ok || !uploadJson.h) {
+    logger.error({ tenantId, step: 'upload-binary', metaError: uploadJson?.error }, '[whatsapp] profile picture upload failed');
     throw new Error(uploadJson?.error?.message || 'Failed to upload image to Meta');
   }
 
@@ -180,6 +190,10 @@ export const uploadProfilePicture = async (tenantId, fileBuffer, mimeType) => {
   );
   const profileJson = await profileRes.json().catch(() => ({}));
   if (!profileRes.ok) {
+    // Meta's own message here is often the unhelpful generic "An unknown error
+    // occurred" — the real cause (bad aspect ratio, too small, corrupt handle)
+    // usually only shows up in code/error_subcode/fbtrace_id, so log those too.
+    logger.error({ tenantId, step: 'set-business-profile-picture', metaError: profileJson?.error }, '[whatsapp] profile picture upload failed');
     throw new Error(profileJson?.error?.message || 'Failed to update profile picture');
   }
   return { success: true };
