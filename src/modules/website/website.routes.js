@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireFeature } from '../../middleware/subscription.middleware.js';
+import { requireActiveSubscription } from '../../middleware/subscription.middleware.js';
 import { validate } from '../../middleware/validate.middleware.js';
 import { uploadImage } from '../../middleware/upload.middleware.js';
 import * as websiteController from './website.controller.js';
@@ -21,7 +21,7 @@ import {
 export const publicWebsiteRoutes = Router();
 const router = Router();
 
-router.use(requireFeature('websiteBuilder'));
+router.use(requireActiveSubscription());
 
 /**
  * @openapi

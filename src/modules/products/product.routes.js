@@ -3,8 +3,7 @@ import multer from 'multer';
 import { BadRequestError } from '../../common/errors/index.js';
 import { IMAGE_MIME_TYPES } from '../../common/constants/businessProfile.js';
 import { validate } from '../../middleware/validate.middleware.js';
-import { requireFeature } from '../../middleware/subscription.middleware.js';
-import { prisma } from '../../config/prisma.js';
+import { requireActiveSubscription } from '../../middleware/subscription.middleware.js';
 import * as productController from './product.controller.js';
 import {
   createProductSchema,
@@ -23,9 +22,6 @@ publicProductRoutes.get(
 );
 
 const router = Router();
-const enforceProductLimit = requireFeature('maxProducts', (tenantId) =>
-  prisma.product.count({ where: { tenantId } }),
-);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
@@ -159,7 +155,7 @@ router.get('/', validate(listProductsSchema, 'query'), productController.list);
  */
 router.post(
   '/',
-  enforceProductLimit,
+  requireActiveSubscription(),
   validate(createProductSchema, 'body'),
   productController.create,
 );
