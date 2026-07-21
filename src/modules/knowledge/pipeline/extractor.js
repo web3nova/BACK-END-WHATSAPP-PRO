@@ -20,14 +20,19 @@ export async function extractText(file) {
   }
 
   if (mimetype === 'application/pdf' || /\.pdf$/i.test(originalname)) {
+    // pdf-parse v2 replaced the old v1 `pdf(buffer) -> {text}` function
+    // export with a class-based API (new PDFParse({ data }).getText()) —
+    // the old call shape silently found no function to call at all.
+    let parser;
     try {
-      const pdfParseModule = await import('pdf-parse');
-      const pdfParse = pdfParseModule.default ?? pdfParseModule;
-      if (typeof pdfParse !== 'function') throw new Error('pdf-parse module did not export a function');
-      const data = await pdfParse(buffer);
-      return data.text;
+      const { PDFParse } = await import('pdf-parse');
+      parser = new PDFParse({ data: buffer });
+      const result = await parser.getText();
+      return result.text;
     } catch (err) {
       throw new BadRequestError(`PDF parsing failed: ${err?.message || 'unknown error'}`);
+    } finally {
+      await parser?.destroy?.().catch(() => {});
     }
   }
 
