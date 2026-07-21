@@ -297,13 +297,15 @@ export async function suggestDetails({ name, brand, category }) {
   "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
   "brand": "manufacturer/brand name if identifiable from the product name, else empty string",
   "specifications": [{"key": "Spec name", "value": "Spec value"}],
-  "features": [{"title": "Short feature name", "description": "One sentence on why it matters"}]
+  "features": [{"title": "Short feature name", "description": "One sentence on why it matters"}],
+  "faqs": [{"question": "A question a real customer would actually ask before buying this", "answer": "A helpful, specific answer"}]
 }
 Rules:
 - description: under 600 characters, no markdown formatting, written to actually sell the product, not just describe it.
 - tags: exactly 5, short, lowercase, realistic search/browse keywords a buyer would type.
 - specifications: 3 to 6 entries, genuinely plausible for this exact product type (e.g. a phone gets storage/RAM/screen size, a garment gets material/size range) — do not pad with generic filler like "Quality: High".
 - features: 2 to 4 entries, each a concrete selling point, not a restatement of the description.
+- faqs: 3 to 5 entries — these are used to auto-answer real customer questions on WhatsApp, so they must be genuinely useful (fit, compatibility, what's in the box, how it's used) not generic filler like "Is this a good product?". Never invent a specific warranty length, return policy, or delivery time here — if asked about those, answer generically (e.g. "check the business's stated policy") rather than stating a number you don't actually know.
 - If you are not confident about a specific spec value, omit that spec entirely rather than guessing a fake number.`;
 
   const userLines = [`Product name: ${name.trim()}`];
@@ -346,6 +348,12 @@ Rules:
         .filter((f) => isPlainObject(f) && typeof f.title === 'string' && typeof f.description === 'string')
         .map((f) => ({ title: f.title.slice(0, 200), description: f.description.slice(0, 2000) }))
         .slice(0, 4)
+      : [],
+    faqs: Array.isArray(parsed.faqs)
+      ? parsed.faqs
+        .filter((f) => isPlainObject(f) && typeof f.question === 'string' && typeof f.answer === 'string')
+        .map((f) => ({ question: f.question.slice(0, 500), answer: f.answer.slice(0, 2000) }))
+        .slice(0, 5)
       : [],
   };
 }
