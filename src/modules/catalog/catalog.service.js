@@ -2,8 +2,11 @@ import { prisma } from '../../config/prisma.js';
 import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
 import { paginate, paginatedResponse } from '../../common/utils/pagination.js';
 
-// Parse a CSV buffer into an array of objects using the first row as column headers.
-function parseCSV(buffer) {
+// Parse a CSV buffer into an array of objects using the first row as column
+// headers. Exported for reuse by product.service.js's bulk CSV import —
+// same parser, different destination (real Product rows instead of the
+// JSONB Catalog table).
+export function parseCSV(buffer) {
   const text = buffer.toString('utf8');
   const rows = [];
   let row = [];

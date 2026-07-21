@@ -25,6 +25,12 @@ export const suggest = asyncHandler(async (req, res) => {
   return ok(res, data);
 });
 
+export const importCsv = asyncHandler(async (req, res) => {
+  if (!req.file) throw new BadRequestError('CSV file is required.');
+  const data = await productService.importFromCSV(getTenantId(req), req.file.buffer);
+  return ok(res, data);
+});
+
 export const update = asyncHandler(async (req, res) => {
   const data = await productService.update(req.params.id, getTenantId(req), req.body);
   return ok(res, data);

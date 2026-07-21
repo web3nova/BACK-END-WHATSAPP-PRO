@@ -37,6 +37,15 @@ const upload = multer({
     }
   },
 });
+const uploadCsv = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ok = file.mimetype === 'text/csv' || file.mimetype === 'application/vnd.ms-excel' || file.originalname?.toLowerCase().endsWith('.csv');
+    if (ok) cb(null, true);
+    else cb(new BadRequestError('Only .csv files are accepted.'));
+  },
+});
 
 /**
  * @openapi
@@ -69,6 +78,31 @@ router.get('/categories', productController.listCategories);
  *       200: { description: Suggested description and tags }
  */
 router.post('/suggest', productController.suggest);
+
+/**
+ * @openapi
+ * /products/import-csv:
+ *   post:
+ *     tags: [Products]
+ *     summary: Bulk-create products from a CSV file
+ *     description: >
+ *       Columns (header names are case-insensitive, common aliases accepted):
+ *       name (required), price or priceMinor (required), stock, category,
+ *       description, brand, sku. Rows missing a name or valid price are
+ *       skipped and reported, not fatal to the rest of the import.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file: { type: string, format: binary }
+ *     responses:
+ *       200: { description: Import summary — created count and skipped rows with reasons }
+ */
+router.post('/import-csv', uploadCsv.single('file'), productController.importCsv);
 
 /**
  * @openapi

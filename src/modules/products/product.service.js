@@ -4,6 +4,7 @@ import { paginate, paginatedResponse } from '../../common/utils/pagination.js';
 import { uploadAsset } from '../../common/utils/uploadAsset.js';
 import { PRODUCT_CATEGORIES } from '../../common/constants/businessProfile.js';
 import { getChatProvider } from '../ai/providers/index.js';
+import { parseCSV } from '../catalog/catalog.service.js';
 
 async function findOwned(id, tenantId) {
   const product = await prisma.product.findFirst({
@@ -121,6 +122,85 @@ export async function create(tenantId, data) {
   });
 }
 
+const CSV_HEADER_ALIASES = {
+  name: ['name', 'product', 'product name', 'title'],
+  price: ['price', 'amount', 'unit price'],
+  priceMinor: ['priceminor', 'price minor', 'price (minor)'],
+  stock: ['stock', 'quantity', 'qty', 'inventory'],
+  category: ['category', 'type'],
+  description: ['description', 'desc', 'details'],
+  brand: ['brand', 'manufacturer'],
+  sku: ['sku', 'code', 'product code'],
+};
+
+// Case/whitespace-insensitive header lookup — merchants export CSVs from all
+// sorts of tools (Excel, Google Sheets, other platforms), so "Price", "price",
+// and " Price " should all resolve the same column, not silently miss it.
+function readField(row, field) {
+  const aliases = CSV_HEADER_ALIASES[field];
+  for (const key of Object.keys(row)) {
+    if (aliases.includes(key.trim().toLowerCase())) {
+      const value = row[key];
+      if (typeof value === 'string' && value.trim() !== '') return value.trim();
+    }
+  }
+  return undefined;
+}
+
+// Bulk-imports real Product rows from a CSV — reuses catalog.service.js's
+// parser but creates actual products (via the same create() used by the
+// one-at-a-time form) instead of the separate, disconnected JSONB Catalog
+// table that nothing else in the app reads from. Best-effort: one bad row
+// doesn't abort the whole import, it's just skipped and reported.
+export async function importFromCSV(tenantId, buffer) {
+  const rows = parseCSV(buffer);
+  const result = { created: 0, skipped: [] };
+
+  for (const [i, row] of rows.entries()) {
+    const rowNumber = i + 2; // +1 for header row, +1 for 1-indexing
+    const name = readField(row, 'name');
+    if (!name) {
+      result.skipped.push({ row: rowNumber, reason: 'Missing product name' });
+      continue;
+    }
+
+    const priceMinorRaw = readField(row, 'priceMinor');
+    const priceRaw = readField(row, 'price');
+    let priceMinor;
+    if (priceMinorRaw !== undefined) {
+      priceMinor = Number.parseInt(priceMinorRaw, 10);
+    } else if (priceRaw !== undefined) {
+      priceMinor = Math.round(Number.parseFloat(priceRaw) * 100);
+    }
+    if (!Number.isFinite(priceMinor) || priceMinor < 0) {
+      result.skipped.push({ row: rowNumber, reason: `Missing or invalid price for "${name}"` });
+      continue;
+    }
+
+    const stock = Math.max(0, Number.parseInt(readField(row, 'stock'), 10) || 0);
+    const categoryRaw = (readField(row, 'category') || '').toLowerCase().replace(/\s+/g, '-');
+    const category = PRODUCT_CATEGORIES.includes(categoryRaw) ? categoryRaw : 'regular';
+
+    try {
+      await create(tenantId, {
+        name,
+        priceMinor,
+        stock,
+        category,
+        description: readField(row, 'description'),
+        brand: readField(row, 'brand'),
+        sku: readField(row, 'sku'),
+        trackStock: stock > 0,
+      });
+      result.created += 1;
+    } catch (err) {
+      result.skipped.push({ row: rowNumber, reason: err.message || 'Could not create product' });
+    }
+  }
+
+  return result;
+}
+
 export async function update(id, tenantId, data) {
   await findOwned(id, tenantId);
   const { stock, variants, ...productData } = data;
@@ -201,23 +281,41 @@ export function listCategories() {
 }
 
 // AI-assisted product listing: given just a name (what a merchant would
-// naturally type first), suggest a description and a few tags — the tedious
-// part of adding a product one-by-one during onboarding. Deliberately does
-// NOT suggest a price: the AI has no idea what this merchant actually
-// charges, and a wrong hallucinated number silently accepted into a catalog
-// is worse than an empty field.
-export async function suggestDetails({ name, brand }) {
+// naturally type first), fill in the tedious-but-optional fields — the
+// description, browse tags, a guessed brand, spec sheet, and selling-point
+// features — so a product entry is close to complete after one click instead
+// of the merchant typing all of it by hand. Deliberately does NOT suggest a
+// price: the AI has no idea what this merchant actually charges, and a wrong
+// hallucinated number silently accepted into a catalog is worse than an
+// empty field.
+export async function suggestDetails({ name, brand, category }) {
   if (!name || !name.trim()) throw new BadRequestError('Product name is required to generate suggestions.');
 
-  const system = `You write concise, appealing e-commerce product listings for WhatsApp-first businesses in Nigeria. Given a product name (and optionally a brand), respond with ONLY a JSON object, no markdown, no commentary:
-{"description": "2-3 sentence sales-friendly description", "tags": ["tag1", "tag2", "tag3"]}
-Keep the description under 300 characters. Tags should be short, lowercase, relevant search/browse keywords (max 5).`;
+  const system = `You write complete, sales-ready e-commerce product listings for WhatsApp-first businesses in Nigeria. Given a product name (and optionally a brand/category), respond with ONLY a JSON object, no markdown, no commentary, matching this exact shape:
+{
+  "description": "3-4 sentence sales-friendly description covering what it is, who it's for, and why it's worth buying",
+  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
+  "brand": "manufacturer/brand name if identifiable from the product name, else empty string",
+  "specifications": [{"key": "Spec name", "value": "Spec value"}],
+  "features": [{"title": "Short feature name", "description": "One sentence on why it matters"}]
+}
+Rules:
+- description: under 600 characters, no markdown formatting, written to actually sell the product, not just describe it.
+- tags: exactly 5, short, lowercase, realistic search/browse keywords a buyer would type.
+- specifications: 3 to 6 entries, genuinely plausible for this exact product type (e.g. a phone gets storage/RAM/screen size, a garment gets material/size range) — do not pad with generic filler like "Quality: High".
+- features: 2 to 4 entries, each a concrete selling point, not a restatement of the description.
+- If you are not confident about a specific spec value, omit that spec entirely rather than guessing a fake number.`;
+
+  const userLines = [`Product name: ${name.trim()}`];
+  if (brand) userLines.push(`Brand: ${brand.trim()}`);
+  if (category) userLines.push(`Category: ${category.trim()}`);
 
   const provider = getChatProvider();
   const result = await provider.chat({
     system,
-    messages: [{ role: 'user', content: `Product name: ${name.trim()}${brand ? `\nBrand: ${brand.trim()}` : ''}` }],
+    messages: [{ role: 'user', content: userLines.join('\n') }],
     tools: [],
+    maxTokens: 1024,
   });
 
   const raw = result?.text || '';
@@ -231,9 +329,24 @@ Keep the description under 300 characters. Tags should be short, lowercase, rele
     throw new BadRequestError('AI suggestion failed — please write the details manually.');
   }
 
+  const isPlainObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
+
   return {
-    description: typeof parsed.description === 'string' ? parsed.description.slice(0, 500) : '',
+    description: typeof parsed.description === 'string' ? parsed.description.slice(0, 600) : '',
     tags: Array.isArray(parsed.tags) ? parsed.tags.filter((t) => typeof t === 'string').slice(0, 5) : [],
+    brand: typeof parsed.brand === 'string' ? parsed.brand.trim().slice(0, 100) : '',
+    specifications: Array.isArray(parsed.specifications)
+      ? parsed.specifications
+        .filter((s) => isPlainObject(s) && typeof s.key === 'string' && typeof s.value === 'string')
+        .map((s) => ({ key: s.key.slice(0, 100), value: s.value.slice(0, 500) }))
+        .slice(0, 6)
+      : [],
+    features: Array.isArray(parsed.features)
+      ? parsed.features
+        .filter((f) => isPlainObject(f) && typeof f.title === 'string' && typeof f.description === 'string')
+        .map((f) => ({ title: f.title.slice(0, 200), description: f.description.slice(0, 2000) }))
+        .slice(0, 4)
+      : [],
   };
 }
 
