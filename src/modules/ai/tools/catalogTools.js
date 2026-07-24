@@ -224,20 +224,60 @@ export const sendProductImage = {
 // a separate, optional bulk-upload feature (CSV/form import), distinct from
 // the structured Product records search_products/get_price read from.
 //
-// Most tenants never use the bulk-upload feature, so this returned
-// "No catalog uploaded yet." even when the tenant has a real, populated
-// product catalog — and models reach for this tool on broad "what do you
-// have" / "list everything" questions since its description reads as the
-// authoritative "give me everything" call. That false-empty message then
-// got paraphrased straight to the customer as "our catalog is empty",
-// contradicted by however many real products actually existed. Falls back to
-// the real product list so the answer is correct regardless of which tool a
-// given request reaches for.
+// If the business has defined a WhatsApp catalog arrangement, returns the
+// organized structure (sections with items) instead of a flat product list.
+// Falls back to the real product list when no arrangement exists.
 export const fetchCatalog = {
   name: 'fetch_catalog',
-  description: 'Fetch the latest bulk-uploaded catalog (categories, items, pricing) for this business, if one was ever CSV/form-imported. For "what products/items do you have" or "list everything", prefer search_products — it reads the actual, always-current product catalog; this tool only covers a separate, optional bulk-import feature most businesses never use.',
+  description: 'Fetch the full catalog for this business organized by sections/categories. Returns products grouped into named sections (like "New Arrivals", "Best Sellers") with their prices and stock. If no catalog arrangement exists, falls back to a plain product list. Use this when the customer asks "what do you have", "show me everything", or wants to browse the full catalog.',
   parameters: { type: 'object', properties: {} },
   async handler(_input, ctx) {
+    const arrangement = await prisma.catalogArrangement.findFirst({
+      where: { tenantId: ctx.tenantId, isActive: true, isDefault: true },
+      include: {
+        sections: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            items: {
+              where: { isActive: true },
+              orderBy: { sortOrder: 'asc' },
+              include: {
+                product: {
+                  select: {
+                    id: true, name: true, description: true,
+                    priceMinor: true, currency: true, stock: true,
+                    category: true, brand: true,
+                    imageStorageKey: true, imageUrl: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (arrangement?.sections?.length) {
+      return {
+        source: 'arrangement',
+        arrangement: arrangement.name,
+        sections: arrangement.sections.map((s) => ({
+          name: s.name,
+          description: s.description,
+          items: s.items.map((i) => ({
+            id: i.product.id,
+            name: i.product.name,
+            description: i.product.description,
+            price: money(i.customPriceMinor ?? i.product.priceMinor, i.product.currency),
+            stock: i.product.stock,
+            category: i.product.category,
+            brand: i.product.brand,
+            hasImage: !!(i.product.imageStorageKey || i.product.imageUrl),
+          })),
+        })),
+      };
+    }
+
     const catalog = await prisma.catalog.findFirst({
       where: { tenantId: ctx.tenantId },
       orderBy: { createdAt: 'desc' },

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import * as controller from './whatsapp.controller.js';
+import * as commerceController from './commerce.controller.js';
 import { verifySignature } from './whatsapp.middleware.js';
 import { BadRequestError } from '../../common/errors/index.js';
 
@@ -104,5 +105,35 @@ setupRouter.get('/business-profile', controller.getBusinessProfile);
 setupRouter.put('/business-profile', controller.updateBusinessProfile);
 setupRouter.post('/profile-picture', uploadProfilePic.single('image'), controller.uploadProfilePicture);
 setupRouter.post('/display-name', controller.requestDisplayNameChange);
+
+// ── Commerce / Catalog ────────────────────────────────────────────
+setupRouter.get('/commerce', commerceController.getCommerceStatus);
+setupRouter.post('/commerce/setup', commerceController.setupCommerce);
+setupRouter.post('/commerce/enable', commerceController.enableCommerceHandler);
+setupRouter.post('/commerce/sync', commerceController.syncArrangement);
+
+// Arrangements
+setupRouter.get('/catalog/arrangements', commerceController.listArrangements);
+setupRouter.post('/catalog/arrangements', commerceController.createArrangement);
+setupRouter.get('/catalog/arrangements/:id', commerceController.getArrangement);
+setupRouter.put('/catalog/arrangements/:id', commerceController.updateArrangement);
+setupRouter.delete('/catalog/arrangements/:id', commerceController.deleteArrangement);
+setupRouter.post('/catalog/arrangements/:id/set-default', commerceController.setDefaultArrangement);
+
+// Sections
+setupRouter.get('/catalog/arrangements/:arrangementId/sections', commerceController.listSections);
+setupRouter.post('/catalog/sections', commerceController.createSection);
+setupRouter.put('/catalog/sections/:id', commerceController.updateSection);
+setupRouter.delete('/catalog/sections/:id', commerceController.deleteSection);
+setupRouter.put('/catalog/sections/reorder', commerceController.reorderSections);
+
+// Items
+setupRouter.get('/catalog/sections/:sectionId/items', commerceController.listItems);
+setupRouter.post('/catalog/items', commerceController.addItem);
+setupRouter.delete('/catalog/items/:id', commerceController.removeItem);
+setupRouter.put('/catalog/items/reorder', commerceController.reorderItems);
+
+// Customer-facing catalog
+setupRouter.get('/catalog/for-customer', commerceController.getCatalogForCustomer);
 
 export default router;

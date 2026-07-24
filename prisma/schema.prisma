@@ -47,6 +47,10 @@ model Tenant {
   coupons             Coupon[]
   abandonedCarts      AbandonedCart[]
   reviews             ProductReview[]
+  whatsappCommerce    WhatsAppCommerce?
+  catalogArrangements CatalogArrangement[]
+  catalogSections     CatalogSection[]
+  catalogSectionItems CatalogSectionItem[]
 
   @@map("tenants")
 }
@@ -341,6 +345,7 @@ model Product {
   inventory Inventory?
   variants  ProductVariant[]
   reviews   ProductReview[]
+  catalogSectionItems CatalogSectionItem[]
 
   @@index([tenantId])
   @@index([category])
@@ -482,6 +487,81 @@ model WhatsappAccount {
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@map("whatsapp_accounts")
+}
+
+model WhatsAppCommerce {
+  id              String   @id @default(uuid())
+  tenantId        String   @unique
+  businessManagerId String?
+  catalogId       String?
+  commerceEnabled Boolean  @default(false)
+  meta            Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant        Tenant                @relation(fields: [tenantId], references: [id])
+  arrangements  CatalogArrangement[]
+
+  @@map("whatsapp_commerce")
+}
+
+model CatalogArrangement {
+  id              String   @id @default(uuid())
+  commerceId      String
+  tenantId        String
+  name            String
+  slug            String
+  description     String?
+  isDefault       Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  customerSegment String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  commerce WhatsAppCommerce @relation(fields: [commerceId], references: [id], onDelete: Cascade)
+  tenant   Tenant           @relation(fields: [tenantId], references: [id])
+  sections CatalogSection[]
+
+  @@unique([tenantId, slug])
+  @@map("catalog_arrangements")
+}
+
+model CatalogSection {
+  id            String   @id @default(uuid())
+  arrangementId String
+  tenantId      String
+  name          String
+  description   String?
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  arrangement CatalogArrangement    @relation(fields: [arrangementId], references: [id], onDelete: Cascade)
+  tenant      Tenant                @relation(fields: [tenantId], references: [id])
+  items       CatalogSectionItem[]
+
+  @@index([arrangementId, sortOrder])
+  @@map("catalog_sections")
+}
+
+model CatalogSectionItem {
+  id              String   @id @default(uuid())
+  sectionId       String
+  productId       String
+  tenantId        String
+  sortOrder       Int      @default(0)
+  customPriceMinor Int?
+  customImageUrl  String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  section CatalogSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  product Product        @relation(fields: [productId], references: [id])
+  tenant  Tenant         @relation(fields: [tenantId], references: [id])
+
+  @@unique([sectionId, productId])
+  @@index([sectionId, sortOrder])
+  @@map("catalog_section_items")
 }
 
 model Customer {
