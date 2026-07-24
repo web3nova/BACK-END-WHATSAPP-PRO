@@ -108,6 +108,7 @@ setupRouter.post('/display-name', controller.requestDisplayNameChange);
 
 // ── Commerce / Catalog ────────────────────────────────────────────
 setupRouter.get('/commerce', commerceController.getCommerceStatus);
+setupRouter.post('/commerce/detect', commerceController.detectCommerce);
 setupRouter.post('/commerce/setup', commerceController.setupCommerce);
 setupRouter.post('/commerce/enable', commerceController.enableCommerceHandler);
 setupRouter.post('/commerce/sync', commerceController.syncArrangement);

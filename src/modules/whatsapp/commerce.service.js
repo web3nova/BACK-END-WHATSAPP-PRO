@@ -130,9 +130,69 @@ export async function enableCommerce(tenantId) {
   return { success: true };
 }
 
+export async function detectExistingCommerce(tenantId) {
+  if (!hasCommerceModel()) return null;
+
+  try {
+    const account = await getWabaToken(tenantId);
+    if (!account.wabaId) return null;
+
+    // Check if a catalog is already connected to this WABA
+    const checkRes = await fetch(
+      `${GRAPH_BASE}/${account.wabaId}/whatsapp-business-catalog?access_token=${account.accessToken}`,
+    );
+    const checkJson = await checkRes.json().catch(() => ({}));
+
+    if (!checkRes.ok) {
+      logger.info({ tenantId, metaError: checkJson?.error }, '[commerce] detect: no existing catalog found on WABA');
+      return null;
+    }
+
+    const existingData = checkJson?.data;
+    const catalogId = Array.isArray(existingData) && existingData.length > 0
+      ? existingData[0].id
+      : null;
+
+    if (!catalogId) return null;
+
+    // Get catalog details to find the owning Business Manager
+    const detailRes = await fetch(
+      `${GRAPH_BASE}/${catalogId}?fields=id,name,owner_business_info&access_token=${account.accessToken}`,
+    );
+    const detailJson = await detailRes.json().catch(() => ({}));
+
+    if (!detailRes.ok) {
+      logger.warn({ tenantId, catalogId }, '[commerce] detect: found catalog but could not fetch details');
+      return null;
+    }
+
+    const businessManagerId = detailJson?.owner_business_info?.id || null;
+
+    // Save to local DB
+    const commerce = await prisma.whatsappCommerce.upsert({
+      where: { tenantId },
+      update: { catalogId, businessManagerId, commerceEnabled: true },
+      create: { tenantId, catalogId, businessManagerId, commerceEnabled: true },
+    });
+
+    logger.info({ tenantId, catalogId, businessManagerId }, '[commerce] detect: existing catalog linked');
+
+    return commerce;
+  } catch (e) {
+    logger.warn({ tenantId, err: e.message }, '[commerce] detect: error during auto-detection');
+    return null;
+  }
+}
+
 export async function getCommerceStatus(tenantId) {
   if (!hasCommerceModel()) return { status: 'not_setup', reason: 'model_unavailable' };
-  const commerce = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
+  let commerce = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
+
+  // Auto-detect existing catalog from Meta if no local record
+  if (!commerce) {
+    commerce = await detectExistingCommerce(tenantId);
+  }
+
   if (!commerce) return { status: 'not_setup' };
 
   const arrangements = await prisma.catalogArrangement.findMany({
