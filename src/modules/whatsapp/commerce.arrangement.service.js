@@ -2,6 +2,14 @@ import { prisma } from '../../config/prisma.js';
 import { NotFoundError, BadRequestError } from '../../common/errors/index.js';
 import { logger } from '../../config/logger.js';
 
+function hasModels() {
+  return typeof prisma.catalogArrangement?.findMany === 'function';
+}
+
+function requireModels() {
+  if (!hasModels()) throw new BadRequestError('Catalog arrangement models not available — Prisma client needs regeneration');
+}
+
 function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'untitled';
 }
@@ -9,6 +17,7 @@ function slugify(text) {
 // ── Arrangements ──────────────────────────────────────────────
 
 export async function listArrangements(tenantId) {
+  requireModels();
   return prisma.catalogArrangement.findMany({
     where: { tenantId },
     include: {
@@ -49,6 +58,7 @@ export async function getArrangement(tenantId, id) {
 }
 
 export async function createArrangement(tenantId, data) {
+  requireModels();
   const commerce = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
   if (!commerce) throw new BadRequestError('WhatsApp commerce not initialized. Setup commerce first.');
 
@@ -250,6 +260,7 @@ export async function reorderItems(tenantId, items) {
 // ── For Customers ─────────────────────────────────────────────
 
 export async function getArrangementForCustomer(tenantId, customerPhone) {
+  if (!hasModels()) return { sections: [], arrangement: null };
   let arrangement;
 
   if (customerPhone) {

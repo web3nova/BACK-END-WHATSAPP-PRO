@@ -19,12 +19,18 @@ async function getWabaToken(tenantId) {
   return account;
 }
 
+function hasCommerceModel() {
+  return typeof prisma.whatsappCommerce?.findUnique === 'function';
+}
+
 export async function getCommerce(tenantId) {
+  if (!hasCommerceModel()) return null;
   const commerce = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
   return commerce ?? null;
 }
 
 export async function setupCommerce(tenantId, businessManagerId) {
+  if (!hasCommerceModel()) throw new BadRequestError('Commerce models not available — Prisma client needs regeneration');
   let commerce = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
   if (commerce?.catalogId) {
     return { commerce, alreadySetup: true };
@@ -66,6 +72,7 @@ export async function setupCommerce(tenantId, businessManagerId) {
 }
 
 export async function connectCatalogToWABA(tenantId) {
+  if (!hasCommerceModel()) throw new BadRequestError('Commerce models not available');
   const commerce = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
   if (!commerce?.catalogId) throw new BadRequestError('No catalog created yet. Run setup first.');
 
@@ -124,6 +131,7 @@ export async function enableCommerce(tenantId) {
 }
 
 export async function getCommerceStatus(tenantId) {
+  if (!hasCommerceModel()) return { status: 'not_setup', reason: 'model_unavailable' };
   const commerce = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
   if (!commerce) return { status: 'not_setup' };
 
