@@ -47,7 +47,7 @@ model Tenant {
   coupons             Coupon[]
   abandonedCarts      AbandonedCart[]
   reviews             ProductReview[]
-  whatsappCommerce    WhatsAppCommerce?
+  whatsappCommerce    WhatsappCommerce?
   catalogArrangements CatalogArrangement[]
   catalogSections     CatalogSection[]
   catalogSectionItems CatalogSectionItem[]
@@ -489,7 +489,7 @@ model WhatsappAccount {
   @@map("whatsapp_accounts")
 }
 
-model WhatsAppCommerce {
+model WhatsappCommerce {
   id              String   @id @default(uuid())
   tenantId        String   @unique
   businessManagerId String?
@@ -518,7 +518,7 @@ model CatalogArrangement {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  commerce WhatsAppCommerce @relation(fields: [commerceId], references: [id], onDelete: Cascade)
+  commerce WhatsappCommerce @relation(fields: [commerceId], references: [id], onDelete: Cascade)
   tenant   Tenant           @relation(fields: [tenantId], references: [id])
   sections CatalogSection[]
 
