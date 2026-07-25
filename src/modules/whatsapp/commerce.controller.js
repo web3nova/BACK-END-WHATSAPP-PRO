@@ -30,6 +30,11 @@ export const detectCommerce = asyncHandler(async (req, res) => {
   return ok(res, { detected: false });
 });
 
+export const autoSetupCommerceHandler = asyncHandler(async (req, res) => {
+  const result = await commerceService.autoSetupCommerce(req.tenant.id);
+  return ok(res, result);
+});
+
 export const syncArrangement = asyncHandler(async (req, res) => {
   const data = validate.syncArrangementSchema.parse(req.body);
   const result = await commerceService.syncArrangementToFacebook(req.tenant.id, data.arrangementId);
@@ -133,7 +138,7 @@ export const getCatalogForCustomer = asyncHandler(async (req, res) => {
 });
 
 export default {
-  getCommerceStatus, setupCommerce, enableCommerceHandler, syncArrangement, detectCommerce,
+  getCommerceStatus, setupCommerce, enableCommerceHandler, syncArrangement, detectCommerce, autoSetupCommerceHandler,
   listArrangements, getArrangement, createArrangement, updateArrangement,
   deleteArrangement, setDefaultArrangement,
   listSections, createSection, updateSection, deleteSection, reorderSections,

@@ -112,7 +112,7 @@ export async function connectCatalogToWABA(tenantId) {
   if (!account.wabaId) throw new BadRequestError('No WABA ID found');
 
   const res = await fetch(
-    `${GRAPH_BASE}/${account.wabaId}/whatsapp-business-catalog?access_token=${account.accessToken}`,
+    `${GRAPH_BASE}/${account.wabaId}/product_catalogs?access_token=${account.accessToken}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -173,7 +173,7 @@ export async function detectExistingCommerce(tenantId) {
 
     // Check if a catalog is already connected to this WABA
     const checkRes = await fetch(
-      `${GRAPH_BASE}/${account.wabaId}/whatsapp-business-catalog?access_token=${account.accessToken}`,
+      `${GRAPH_BASE}/${account.wabaId}/product_catalogs?access_token=${account.accessToken}`,
     );
     const checkJson = await checkRes.json().catch(() => ({}));
 
@@ -333,9 +333,67 @@ export async function syncArrangementToFacebook(tenantId, arrangementId) {
   return { synced };
 }
 
+// Resolve the Business Manager ID that owns this tenant's WABA, so we can
+// create a catalog for businesses that connected before we started capturing
+// business_id at signup — without making them look the ID up by hand. Prefers
+// an ID we already stored, else asks Meta for the WABA's owning/on-behalf-of
+// business. Best-effort: returns null if it can't be determined.
+export async function resolveBusinessManagerId(tenantId) {
+  const existing = await getCommerce(tenantId);
+  if (existing?.businessManagerId) return existing.businessManagerId;
+
+  const account = await getWabaToken(tenantId);
+  if (!account.wabaId) return null;
+  try {
+    const res = await fetch(
+      `${GRAPH_BASE}/${account.wabaId}?fields=owner_business_info,on_behalf_of_business_info&access_token=${account.accessToken}`
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      logger.warn({ tenantId, metaError: json?.error }, '[commerce] resolveBusinessManagerId lookup failed');
+      return null;
+    }
+    return json?.owner_business_info?.id || json?.on_behalf_of_business_info?.id || null;
+  } catch (e) {
+    logger.warn({ tenantId, err: e.message }, '[commerce] resolveBusinessManagerId error');
+    return null;
+  }
+}
+
+// One-call "just set up my catalog" used by the dashboard: reuse an existing
+// catalog if one is already linked (locally or on the WABA), otherwise create
+// and enable one automatically. Only falls back to asking for a Business
+// Manager ID when we genuinely can't resolve it or Meta rejects the create.
+export async function autoSetupCommerce(tenantId) {
+  if (!hasCommerceModel()) return { status: 'not_setup', reason: 'model_unavailable' };
+
+  const local = await getCommerce(tenantId);
+  if (local?.catalogId) return getCommerceStatus(tenantId);
+
+  const detected = await detectExistingCommerce(tenantId);
+  if (detected?.catalogId) return getCommerceStatus(tenantId);
+
+  const businessManagerId = await resolveBusinessManagerId(tenantId);
+  if (!businessManagerId) {
+    return { status: 'not_setup', reason: 'needs_business_manager_id' };
+  }
+
+  try {
+    await setupCommerce(tenantId, businessManagerId);
+    await enableCommerce(tenantId);
+  } catch (e) {
+    logger.warn({ tenantId, businessManagerId, err: e.message }, '[commerce] autoSetupCommerce create failed');
+    return { status: 'not_setup', reason: 'create_failed', message: e.message };
+  }
+
+  return getCommerceStatus(tenantId);
+}
+
 export default {
   getCommerce,
   filterSyncedRetailerIds,
+  resolveBusinessManagerId,
+  autoSetupCommerce,
   setupCommerce,
   connectCatalogToWABA,
   enableCommerce,
