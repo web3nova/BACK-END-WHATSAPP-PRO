@@ -41,6 +41,11 @@ export const syncArrangement = asyncHandler(async (req, res) => {
   return ok(res, result);
 });
 
+export const syncAllProducts = asyncHandler(async (req, res) => {
+  const result = await commerceService.syncAllProducts(req.tenant.id);
+  return ok(res, result);
+});
+
 // ── Arrangements ──────────────────────────────────────────────
 
 export const listArrangements = asyncHandler(async (req, res) => {
@@ -138,7 +143,7 @@ export const getCatalogForCustomer = asyncHandler(async (req, res) => {
 });
 
 export default {
-  getCommerceStatus, setupCommerce, enableCommerceHandler, syncArrangement, detectCommerce, autoSetupCommerceHandler,
+  getCommerceStatus, setupCommerce, enableCommerceHandler, syncArrangement, syncAllProducts, detectCommerce, autoSetupCommerceHandler,
   listArrangements, getArrangement, createArrangement, updateArrangement,
   deleteArrangement, setDefaultArrangement,
   listSections, createSection, updateSection, deleteSection, reorderSections,

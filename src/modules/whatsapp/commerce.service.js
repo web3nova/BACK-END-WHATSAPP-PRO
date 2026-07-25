@@ -249,6 +249,56 @@ export async function getCommerceStatus(tenantId) {
   };
 }
 
+// Build one Meta catalog batch item from a product, applying optional
+// per-arrangement overrides (custom price/image) and section label.
+function buildCatalogItem(p, { customPriceMinor, customImageUrl, sectionName } = {}) {
+  const priceMinor = customPriceMinor ?? p.priceMinor;
+  const priceMajor = (priceMinor / 100).toFixed(2);
+  const imageUrl = customImageUrl ?? p.imageUrl ?? '';
+  return {
+    retailer_id: p.sku || p.id,
+    name: p.name,
+    description: p.description || '',
+    price: priceMajor,
+    currency: p.currency || 'NGN',
+    category: p.category || 'regular',
+    image_url: imageUrl.startsWith('http') ? imageUrl : `${process.env.APP_URL || 'https://biziq.online'}${imageUrl}`,
+    url: `${process.env.FRONTEND_URL || 'https://biziq.online'}/products/${p.slug || p.id}`,
+    brand: p.brand || '',
+    ...(p.tags?.length ? { tags: p.tags.join(',') } : {}),
+    additional_image_urls: Array.isArray(p.galleryImages)
+      ? p.galleryImages.map(g => g.url || '').filter(Boolean).join(',')
+      : '',
+    ...(sectionName ? { section: sectionName } : {}),
+  };
+}
+
+// Upsert catalog items to Meta in batches of 50 (Meta's batch limit).
+async function batchUpsertToCatalog(catalogId, accessToken, items) {
+  const batchSize = 50;
+  let synced = 0;
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const res = await fetch(
+      `${GRAPH_BASE}/${catalogId}/batch?access_token=${accessToken}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          allow_upsert: true,
+          requests: batch.map(item => ({ method: 'UPSERT', data: item })),
+        }),
+      }
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(`Failed to sync batch ${i / batchSize + 1}: ${json?.error?.message || JSON.stringify(json)}`);
+    }
+    synced += batch.length;
+  }
+  return synced;
+}
+
 export async function syncArrangementToFacebook(tenantId, arrangementId) {
   const commerce = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
   if (!commerce?.catalogId) throw new BadRequestError('No catalog. Run setup first.');
@@ -275,27 +325,11 @@ export async function syncArrangementToFacebook(tenantId, arrangementId) {
   const items = [];
   for (const section of arrangement.sections) {
     for (const item of section.items) {
-      const p = item.product;
-      const priceMinor = item.customPriceMinor ?? p.priceMinor;
-      const priceMajor = (priceMinor / 100).toFixed(2);
-      const imageUrl = item.customImageUrl ?? p.imageUrl ?? '';
-
-      items.push({
-        retailer_id: p.sku || p.id,
-        name: p.name,
-        description: p.description || '',
-        price: priceMajor,
-        currency: p.currency || 'NGN',
-        category: p.category || 'regular',
-        image_url: imageUrl.startsWith('http') ? imageUrl : `${process.env.APP_URL || 'https://biziq.online'}${imageUrl}`,
-        url: `${process.env.FRONTEND_URL || 'https://biziq.online'}/products/${p.slug || p.id}`,
-        brand: p.brand || '',
-        ...(p.tags?.length ? { tags: p.tags.join(',') } : {}),
-        additional_image_urls: Array.isArray(p.galleryImages)
-          ? p.galleryImages.map(g => g.url || '').filter(Boolean).join(',')
-          : '',
-        ...(section.name ? { section: section.name } : {}),
-      });
+      items.push(buildCatalogItem(item.product, {
+        customPriceMinor: item.customPriceMinor,
+        customImageUrl: item.customImageUrl,
+        sectionName: section.name,
+      }));
     }
   }
 
@@ -303,33 +337,27 @@ export async function syncArrangementToFacebook(tenantId, arrangementId) {
     return { synced: 0, message: 'No products in this arrangement to sync' };
   }
 
-  const batchSize = 50;
-  let synced = 0;
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
-    const res = await fetch(
-      `${GRAPH_BASE}/${commerce.catalogId}/batch?access_token=${account.accessToken}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          allow_upsert: true,
-          requests: batch.map(item => ({
-            method: 'UPSERT',
-            data: item,
-          })),
-        }),
-      }
-    );
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error(`Failed to sync batch ${i / batchSize + 1}: ${json?.error?.message || JSON.stringify(json)}`);
-    }
-    synced += batch.length;
+  const synced = await batchUpsertToCatalog(commerce.catalogId, account.accessToken, items);
+  logger.info({ tenantId, arrangementId: arrangement.id, synced }, '[commerce] arrangement synced to Facebook catalog');
+  return { synced };
+}
+
+// One-click "put everything on WhatsApp": push every active product straight
+// to the Meta catalog, no arrangement/section curation required. For businesses
+// that just want their whole inventory shoppable on WhatsApp.
+export async function syncAllProducts(tenantId) {
+  const commerce = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
+  if (!commerce?.catalogId) throw new BadRequestError('No catalog. Run setup first.');
+
+  const account = await getWabaToken(tenantId);
+  const products = await prisma.product.findMany({ where: { tenantId, isActive: true } });
+  if (!products.length) {
+    return { synced: 0, message: 'No active products to sync' };
   }
 
-  logger.info({ tenantId, arrangementId: arrangement.id, synced }, '[commerce] arrangement synced to Facebook catalog');
-
+  const items = products.map((p) => buildCatalogItem(p));
+  const synced = await batchUpsertToCatalog(commerce.catalogId, account.accessToken, items);
+  logger.info({ tenantId, synced }, '[commerce] all products synced to Facebook catalog');
   return { synced };
 }
 
@@ -399,4 +427,5 @@ export default {
   enableCommerce,
   getCommerceStatus,
   syncArrangementToFacebook,
+  syncAllProducts,
 };

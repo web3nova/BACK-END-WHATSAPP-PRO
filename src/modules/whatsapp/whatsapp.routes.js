@@ -113,6 +113,7 @@ setupRouter.post('/commerce/auto-setup', commerceController.autoSetupCommerceHan
 setupRouter.post('/commerce/setup', commerceController.setupCommerce);
 setupRouter.post('/commerce/enable', commerceController.enableCommerceHandler);
 setupRouter.post('/commerce/sync', commerceController.syncArrangement);
+setupRouter.post('/commerce/sync-all', commerceController.syncAllProducts);
 
 // Arrangements
 setupRouter.get('/catalog/arrangements', commerceController.listArrangements);
