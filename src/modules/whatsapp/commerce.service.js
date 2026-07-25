@@ -105,16 +105,18 @@ export async function connectCatalogToWABA(tenantId) {
 export async function enableCommerce(tenantId) {
   const account = await getWabaToken(tenantId);
   if (!account.wabaId) throw new BadRequestError('No WABA ID found');
+  if (!account.phoneNumberId) throw new BadRequestError('No phone number ID found');
 
   await connectCatalogToWABA(tenantId);
 
+  // Commerce settings (cart + catalog visibility) are per business phone
+  // number, not per WABA — Meta's endpoint is /{phoneNumberId}/whatsapp_commerce_settings
+  // with query-string params, not a JSON body. is_catalog_visible defaults
+  // to false, so it must be set explicitly or the storefront icon stays
+  // hidden even with the cart enabled.
   const res = await fetch(
-    `${GRAPH_BASE}/${account.wabaId}/commerce_settings?access_token=${account.accessToken}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_cart_enabled: true }),
-    }
+    `${GRAPH_BASE}/${account.phoneNumberId}/whatsapp_commerce_settings?is_cart_enabled=true&is_catalog_visible=true&access_token=${account.accessToken}`,
+    { method: 'POST' }
   );
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {

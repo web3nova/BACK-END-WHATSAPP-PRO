@@ -5,6 +5,7 @@ import { logger } from '../../config/logger.js';
 import { notify } from '../notifications/notification.service.js';
 import { encryptSecret, decryptSecret } from '../../common/utils/encryption.js';
 import { whatsappConnectedEmail, platformAlertEmail } from '../../config/emailTemplates.js';
+import { setupCommerce, enableCommerce } from './commerce.service.js';
 
 const GRAPH_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v20.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
@@ -21,7 +22,7 @@ const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
  * This function exchanges the code for a long-lived access token and persists
  * all three identifiers so the tenant can immediately start sending/receiving.
  */
-export async function exchangeCodeForAccount({ tenantId, code, redirectUri, wabaId, phoneNumberId }) {
+export async function exchangeCodeForAccount({ tenantId, code, redirectUri, wabaId, phoneNumberId, businessManagerId }) {
   if (!process.env.META_APP_ID || !process.env.META_APP_SECRET) {
     throw new Error('META_APP_ID / META_APP_SECRET not configured');
   }
@@ -201,6 +202,20 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
       metadata: { wabaId, phoneNumberId, phoneNumber, phoneRegistered, phoneStatus, webhookSubscribed },
       outbound: true,
     }).catch(() => {});
+  }
+
+  // 7. Auto-set-up the Facebook product catalog when Meta handed us the
+  // Business Manager ID during signup — the business never types this in
+  // manually. Best-effort: catalog setup failing shouldn't fail the whole
+  // WhatsApp connection, since messaging already works without it.
+  if (fullyConnected && businessManagerId) {
+    try {
+      await setupCommerce(tenantId, businessManagerId);
+      await enableCommerce(tenantId);
+      logger.info({ tenantId, businessManagerId }, '[whatsapp] catalog auto-setup from embedded signup succeeded');
+    } catch (err) {
+      logger.warn({ tenantId, businessManagerId, err: err?.message }, '[whatsapp] catalog auto-setup from embedded signup failed');
+    }
   }
 
   return { tenantId, wabaId, phoneNumberId, phoneNumber, verified: true };
