@@ -5,7 +5,7 @@ import { logger } from '../../config/logger.js';
 import { notify } from '../notifications/notification.service.js';
 import { encryptSecret, decryptSecret } from '../../common/utils/encryption.js';
 import { whatsappConnectedEmail, platformAlertEmail } from '../../config/emailTemplates.js';
-import { setupCommerce, enableCommerce } from './commerce.service.js';
+import { setupCommerce, enableCommerce, linkCatalog, setCommerceSettings } from './commerce.service.js';
 
 const GRAPH_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v20.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
@@ -22,7 +22,7 @@ const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
  * This function exchanges the code for a long-lived access token and persists
  * all three identifiers so the tenant can immediately start sending/receiving.
  */
-export async function exchangeCodeForAccount({ tenantId, code, redirectUri, wabaId, phoneNumberId, businessManagerId }) {
+export async function exchangeCodeForAccount({ tenantId, code, redirectUri, wabaId, phoneNumberId, businessManagerId, catalogId }) {
   if (!process.env.META_APP_ID || !process.env.META_APP_SECRET) {
     throw new Error('META_APP_ID / META_APP_SECRET not configured');
   }
@@ -208,19 +208,27 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
   // Business Manager ID during signup — the business never types this in
   // manually. Best-effort: catalog setup failing shouldn't fail the whole
   // WhatsApp connection, since messaging already works without it.
-  if (fullyConnected && businessManagerId) {
+  if (fullyConnected && (catalogId || businessManagerId)) {
     try {
-      await setupCommerce(tenantId, businessManagerId);
-      await enableCommerce(tenantId);
-      logger.info({ tenantId, businessManagerId }, '[whatsapp] catalog auto-setup from embedded signup succeeded');
+      if (catalogId) {
+        // Meta created/linked the catalog during signup and already connected
+        // it to the WABA — record that exact catalog (never create a duplicate)
+        // and just turn on cart + catalog visibility.
+        await linkCatalog(tenantId, catalogId, businessManagerId);
+        await setCommerceSettings(tenantId);
+      } else {
+        await setupCommerce(tenantId, businessManagerId);
+        await enableCommerce(tenantId);
+      }
+      logger.info({ tenantId, businessManagerId, catalogId }, '[whatsapp] catalog auto-setup from embedded signup succeeded');
     } catch (err) {
-      logger.warn({ tenantId, businessManagerId, err: err?.message }, '[whatsapp] catalog auto-setup from embedded signup failed');
+      logger.warn({ tenantId, businessManagerId, catalogId, err: err?.message }, '[whatsapp] catalog auto-setup from embedded signup failed');
     }
-  } else if (fullyConnected && !businessManagerId) {
-    // Connected fine, but Meta's signup callback didn't carry a business_id, so
-    // we can't auto-create the catalog. Almost always means the frontend sent
-    // an old payload (stale cached JS) — log it so this isn't invisible.
-    logger.warn({ tenantId, wabaId }, '[whatsapp] connected but no businessManagerId in signup payload — skipping catalog auto-setup (frontend may be sending a stale payload)');
+  } else if (fullyConnected) {
+    // Connected fine, but Meta's signup callback carried neither a catalog_id
+    // nor a business_id, so we can't set the catalog up. Usually a stale
+    // frontend bundle — log it so this isn't invisible.
+    logger.warn({ tenantId, wabaId }, '[whatsapp] connected but no catalog_id/businessManagerId in signup payload — skipping catalog auto-setup (frontend may be sending a stale payload)');
   }
 
   return { tenantId, wabaId, phoneNumberId, phoneNumber, verified: true };

@@ -111,6 +111,25 @@ export async function connectCatalogToWABA(tenantId) {
   const account = await getWabaToken(tenantId);
   if (!account.wabaId) throw new BadRequestError('No WABA ID found');
 
+  // If this catalog is already connected to the WABA (e.g. Meta linked it
+  // during embedded signup), don't POST again — Meta allows only one catalog
+  // per WABA and re-connecting can error. Treat "already connected" as success.
+  const currentRes = await fetch(
+    `${GRAPH_BASE}/${account.wabaId}/product_catalogs?fields=id&access_token=${account.accessToken}`,
+  );
+  const currentJson = await currentRes.json().catch(() => ({}));
+  const alreadyConnectedId = currentRes.ok && Array.isArray(currentJson.data) && currentJson.data.length
+    ? currentJson.data[0].id
+    : null;
+  if (alreadyConnectedId === commerce.catalogId) {
+    await prisma.whatsappCommerce.update({
+      where: { tenantId },
+      data: { commerceEnabled: true, meta: { ...commerce.meta, wabaCatalogConnected: true } },
+    });
+    logger.info({ tenantId, catalogId: commerce.catalogId }, '[commerce] catalog already connected to WABA — skipping connect');
+    return { success: true };
+  }
+
   const res = await fetch(
     `${GRAPH_BASE}/${account.wabaId}/product_catalogs?access_token=${account.accessToken}`,
     {
@@ -134,18 +153,27 @@ export async function connectCatalogToWABA(tenantId) {
   return { success: true };
 }
 
-export async function enableCommerce(tenantId) {
+// Record the exact catalog Meta linked (e.g. one created during embedded
+// signup, whose id arrives in the FINISH event) instead of creating our own.
+// Upsert-with-update so a reconnect overwrites any wrong id we stored earlier.
+export async function linkCatalog(tenantId, catalogId, businessManagerId) {
+  if (!hasCommerceModel()) throw new BadRequestError('Commerce models not available');
+  return prisma.whatsappCommerce.upsert({
+    where: { tenantId },
+    update: { catalogId, ...(businessManagerId ? { businessManagerId } : {}) },
+    create: { tenantId, catalogId, businessManagerId },
+  });
+}
+
+// Turn on cart + catalog visibility for the phone number. Settings are per
+// business phone number, not per WABA — Meta's endpoint is
+// /{phoneNumberId}/whatsapp_commerce_settings with query-string params, not a
+// JSON body. is_catalog_visible defaults to false, so it must be set explicitly
+// or the storefront icon stays hidden even with the cart enabled.
+export async function setCommerceSettings(tenantId) {
   const account = await getWabaToken(tenantId);
-  if (!account.wabaId) throw new BadRequestError('No WABA ID found');
   if (!account.phoneNumberId) throw new BadRequestError('No phone number ID found');
 
-  await connectCatalogToWABA(tenantId);
-
-  // Commerce settings (cart + catalog visibility) are per business phone
-  // number, not per WABA — Meta's endpoint is /{phoneNumberId}/whatsapp_commerce_settings
-  // with query-string params, not a JSON body. is_catalog_visible defaults
-  // to false, so it must be set explicitly or the storefront icon stays
-  // hidden even with the cart enabled.
   const res = await fetch(
     `${GRAPH_BASE}/${account.phoneNumberId}/whatsapp_commerce_settings?is_cart_enabled=true&is_catalog_visible=true&access_token=${account.accessToken}`,
     { method: 'POST' }
@@ -162,6 +190,47 @@ export async function enableCommerce(tenantId) {
   });
 
   return { success: true };
+}
+
+export async function enableCommerce(tenantId) {
+  const account = await getWabaToken(tenantId);
+  if (!account.wabaId) throw new BadRequestError('No WABA ID found');
+
+  await connectCatalogToWABA(tenantId);
+  return setCommerceSettings(tenantId);
+}
+
+// Self-heal: make our stored catalogId match whatever catalog is actually
+// connected to the WABA. Covers the case where Meta created/linked a catalog
+// during signup but we (previously) created a second, unconnected one and
+// stored the wrong id. Best-effort — returns the real connected catalog id.
+export async function reconcileConnectedCatalog(tenantId) {
+  if (!hasCommerceModel()) return null;
+  try {
+    const account = await getWabaToken(tenantId);
+    if (!account.wabaId) return null;
+    const res = await fetch(
+      `${GRAPH_BASE}/${account.wabaId}/product_catalogs?fields=id&access_token=${account.accessToken}`,
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) return null;
+    const actualId = Array.isArray(json.data) && json.data.length ? json.data[0].id : null;
+    if (!actualId) return null;
+
+    const local = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
+    if (!local || local.catalogId !== actualId) {
+      await prisma.whatsappCommerce.upsert({
+        where: { tenantId },
+        update: { catalogId: actualId },
+        create: { tenantId, catalogId: actualId, commerceEnabled: true },
+      });
+      logger.info({ tenantId, actualId, was: local?.catalogId }, '[commerce] reconciled stored catalog to the WABA-connected one');
+    }
+    return actualId;
+  } catch (e) {
+    logger.warn({ tenantId, err: e.message }, '[commerce] reconcileConnectedCatalog error');
+    return null;
+  }
 }
 
 export async function detectExistingCommerce(tenantId) {
@@ -225,6 +294,13 @@ export async function getCommerceStatus(tenantId) {
   // Auto-detect existing catalog from Meta if no local record
   if (!commerce) {
     commerce = await detectExistingCommerce(tenantId);
+  } else if (commerce.catalogId) {
+    // Self-heal any drift between our stored id and the catalog actually
+    // connected to the WABA (e.g. a duplicate created before this fix).
+    const reconciled = await reconcileConnectedCatalog(tenantId);
+    if (reconciled && reconciled !== commerce.catalogId) {
+      commerce = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
+    }
   }
 
   if (!commerce) return { status: 'not_setup' };
@@ -423,6 +499,9 @@ export default {
   resolveBusinessManagerId,
   autoSetupCommerce,
   setupCommerce,
+  linkCatalog,
+  setCommerceSettings,
+  reconcileConnectedCatalog,
   connectCatalogToWABA,
   enableCommerce,
   getCommerceStatus,
