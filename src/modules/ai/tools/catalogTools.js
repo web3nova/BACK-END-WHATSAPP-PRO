@@ -147,7 +147,7 @@ export const getPrice = {
 export const sendProductImage = {
   name: 'send_product_image',
   description:
-    'Send photos of one or more products to the customer on WhatsApp in a single call. Use this when the customer asks to see a product (or several), or when showing a picture would help them decide. Pass every product they want to see at once — do not call this tool separately per item. Only include products with hasImage: true (check search_products/get_price first).',
+    'Send plain photos (no cart button) of one or more products to the customer on WhatsApp in a single call. Use this only when the customer just wants to SEE a picture and is not shopping to buy — for shopping, prefer send_products, which sends shoppable cards with an add-to-cart button. Pass every product they want to see at once — do not call this tool separately per item. Only include products with hasImage: true (check search_products/get_price first).',
   parameters: {
     type: 'object',
     properties: {
@@ -217,6 +217,134 @@ export const sendProductImage = {
     }
 
     return { results };
+  },
+};
+
+// Tool: send one or more catalog products to the customer as native WhatsApp
+// interactive product cards. Unlike send_product_image (a plain photo), these
+// carry WhatsApp's built-in "View"/"Add to cart" buttons wired to the
+// business's synced Meta catalog, so the customer can add items to their
+// WhatsApp cart and place an order without leaving the chat.
+//
+// Interactive product messages only work for products already synced into the
+// connected Meta catalog — Meta rejects the entire send if any retailer_id is
+// missing. So we verify each product against the live catalog first and send
+// shoppable cards only for confirmed ones, quietly falling back to a plain
+// photo for any that aren't synced (or when commerce isn't set up at all).
+export const sendProducts = {
+  name: 'send_products',
+  description:
+    'Send one or more products to the customer as shoppable WhatsApp product cards with a built-in cart button, so they can add items to their WhatsApp cart and order without leaving the chat. Prefer this over send_product_image whenever the customer is shopping or asking about specific products to buy. Pass every product to show in a single call (get the ids from search_products first). If the catalog isn\'t set up, it automatically falls back to sending photos.',
+  parameters: {
+    type: 'object',
+    properties: {
+      items: {
+        type: 'array',
+        description: 'Every product to show, in the order to display them.',
+        items: {
+          type: 'object',
+          properties: {
+            productId: { type: 'string', description: 'The product id from search_products' },
+          },
+          required: ['productId'],
+        },
+      },
+      bodyText: { type: 'string', description: 'Short message shown with the product(s), e.g. "Here are the phones you asked about".' },
+      headerText: { type: 'string', description: 'Short title shown above the list when sending multiple products, e.g. "Our Phones".' },
+    },
+    required: ['items'],
+  },
+  async handler({ items, bodyText, headerText }, ctx) {
+    const customer = ctx.customerId
+      ? await prisma.customer.findUnique({ where: { id: ctx.customerId }, select: { phone: true } })
+      : null;
+    if (!customer?.phone) return { sent: false, message: 'No customer phone number on record.' };
+
+    const products = await prisma.product.findMany({
+      where: { id: { in: items.map((i) => i.productId) }, tenantId: ctx.tenantId },
+    });
+    if (!products.length) return { sent: false, message: 'None of those products were found.' };
+
+    // Preserve the AI's requested order.
+    const byId = new Map(products.map((p) => [p.id, p]));
+    const ordered = items.map((i) => byId.get(i.productId)).filter(Boolean);
+    const retailerId = (p) => p.sku || p.id;
+
+    const { getCommerce, filterSyncedRetailerIds } = await import('../../whatsapp/commerce.service.js');
+    const commerce = await getCommerce(ctx.tenantId);
+    const synced = commerce?.catalogId
+      ? await filterSyncedRetailerIds(ctx.tenantId, ordered.map(retailerId))
+      : new Set();
+
+    const shoppable = ordered.filter((p) => synced.has(retailerId(p)));
+    const photoOnly = ordered.filter((p) => !synced.has(retailerId(p)));
+
+    const { sendMessage } = await import('../../whatsapp/whatsapp.service.js');
+    const outcomes = [];
+
+    // 1. Shoppable interactive product cards for synced products.
+    if (shoppable.length) {
+      let interactive;
+      if (shoppable.length === 1) {
+        interactive = {
+          type: 'product',
+          ...(bodyText ? { body: { text: bodyText } } : {}),
+          action: { catalog_id: commerce.catalogId, product_retailer_id: retailerId(shoppable[0]) },
+        };
+      } else {
+        interactive = {
+          type: 'product_list',
+          header: { type: 'text', text: (headerText || 'Products').slice(0, 60) },
+          body: { text: bodyText || 'Here are some products you might like.' },
+          action: {
+            catalog_id: commerce.catalogId,
+            sections: [{
+              title: (headerText || 'Products').slice(0, 24),
+              product_items: shoppable.map((p) => ({ product_retailer_id: retailerId(p) })),
+            }],
+          },
+        };
+      }
+      await sendMessage(ctx.tenantId, customer.phone, { type: 'interactive', interactive });
+
+      const summary = shoppable.length === 1
+        ? `🛍️ Shared product: ${shoppable[0].name}`
+        : `🛍️ Shared ${shoppable.length} products: ${shoppable.map((p) => p.name).join(', ')}`;
+      const message = await prisma.message.create({
+        data: { conversationId: ctx.conversationId, role: 'ai', content: encryptMessage(summary), meta: { productIds: shoppable.map((p) => p.id), interactive: true } },
+      });
+      await prisma.conversation.update({ where: { id: ctx.conversationId }, data: { updatedAt: new Date() } }).catch(() => {});
+      pushEvent(ctx.tenantId, 'ai_message', {
+        conversationId: ctx.conversationId,
+        message: { id: message.id, role: 'ai', content: summary, createdAt: message.createdAt },
+      });
+      outcomes.push(`${shoppable.length} shoppable card(s) sent`);
+    }
+
+    // 2. Fall back to a plain photo for anything not in the synced catalog.
+    for (const p of photoOnly) {
+      const imageUrl = freshImageUrl(p);
+      if (!imageUrl) { outcomes.push(`${p.name}: not in catalog and no image to send`); continue; }
+      await sendMessage(ctx.tenantId, customer.phone, {
+        type: 'media', mediaType: 'image', url: imageUrl, caption: p.name,
+      });
+      const text = p.name;
+      const mimeType = mimeTypeFromKey(p.imageStorageKey || imageUrl);
+      const message = await prisma.message.create({
+        data: { conversationId: ctx.conversationId, role: 'ai', content: encryptMessage(text), meta: { productId: p.id } },
+      });
+      await prisma.mediaAsset.create({
+        data: { tenantId: ctx.tenantId, messageId: message.id, provider: 'upload', mimeType, storageKey: p.imageStorageKey || imageUrl, url: imageUrl },
+      });
+      await prisma.conversation.update({ where: { id: ctx.conversationId }, data: { updatedAt: new Date() } }).catch(() => {});
+      pushEvent(ctx.tenantId, 'ai_message', {
+        conversationId: ctx.conversationId,
+        message: { id: message.id, role: 'ai', content: text, createdAt: message.createdAt, media: [{ mimeType, url: imageUrl }] },
+      });
+      outcomes.push(`${p.name}: sent as photo (not in catalog yet)`);
+    }
+
+    return { sent: true, shoppable: shoppable.length, photoFallback: photoOnly.length, message: outcomes.join('; ') };
   },
 };
 
@@ -307,6 +435,6 @@ export const fetchCatalog = {
 // Duplicate tool names make Google/Gemini providers reject the whole request
 // with "Duplicate function declaration found".
 
-export const catalogTools = [searchProducts, getPrice, fetchCatalog, sendProductImage];
+export const catalogTools = [searchProducts, getPrice, fetchCatalog, sendProducts, sendProductImage];
 
 export default catalogTools;

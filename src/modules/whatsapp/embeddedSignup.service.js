@@ -216,6 +216,11 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
     } catch (err) {
       logger.warn({ tenantId, businessManagerId, err: err?.message }, '[whatsapp] catalog auto-setup from embedded signup failed');
     }
+  } else if (fullyConnected && !businessManagerId) {
+    // Connected fine, but Meta's signup callback didn't carry a business_id, so
+    // we can't auto-create the catalog. Almost always means the frontend sent
+    // an old payload (stale cached JS) — log it so this isn't invisible.
+    logger.warn({ tenantId, wabaId }, '[whatsapp] connected but no businessManagerId in signup payload — skipping catalog auto-setup (frontend may be sending a stale payload)');
   }
 
   return { tenantId, wabaId, phoneNumberId, phoneNumber, verified: true };

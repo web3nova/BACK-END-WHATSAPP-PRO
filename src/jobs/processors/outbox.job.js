@@ -76,6 +76,14 @@ export default async function processOutbox(job) {
             throw new Error('Missing media URL for outbox media payload');
         }
         body = { messaging_product: 'whatsapp', to: outbox.to, type: mediaType, [mediaType]: { link, caption: payload.caption } };
+    } else if (payload.type === 'interactive') {
+        // Pre-built interactive object (single-product, product_list, or
+        // catalog message) constructed by the caller. Meta requires the
+        // referenced products to already exist in the catalog connected to
+        // this WABA — an unsynced product_retailer_id makes Meta reject the
+        // whole send (error 131009), which the normal retry/failure path
+        // below already surfaces.
+        body = { messaging_product: 'whatsapp', recipient_type: 'individual', to: outbox.to, type: 'interactive', interactive: payload.interactive };
     } else {
         await prisma.outboxMessage.update({ where: { id: outboxId }, data: { status: 'failed', lastError: 'Unsupported outbox payload type' } });
         throw new Error('Unsupported outbox payload type');

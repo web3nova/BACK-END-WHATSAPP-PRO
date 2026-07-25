@@ -29,6 +29,38 @@ export async function getCommerce(tenantId) {
   return commerce ?? null;
 }
 
+// Given a set of retailer IDs (product.sku || product.id, matching what
+// syncArrangementToFacebook uploads), return the subset that actually exists
+// in the Meta catalog connected to this tenant's WABA. Used before sending
+// interactive product messages: Meta rejects the whole send if any
+// product_retailer_id isn't in the catalog, so callers send shoppable cards
+// only for confirmed-synced products and fall back (e.g. to a plain photo)
+// for the rest. Best-effort: on any error it returns an empty set so callers
+// treat everything as "not confirmed" rather than sending and failing.
+export async function filterSyncedRetailerIds(tenantId, retailerIds) {
+  const ids = [...new Set((retailerIds || []).filter(Boolean))];
+  if (!ids.length) return new Set();
+  try {
+    const commerce = await getCommerce(tenantId);
+    if (!commerce?.catalogId) return new Set();
+    const account = await getWabaToken(tenantId);
+    const filter = JSON.stringify({ retailer_id: { is_any: ids } });
+    const res = await fetch(
+      `${GRAPH_BASE}/${commerce.catalogId}/products?fields=retailer_id&limit=${ids.length}` +
+      `&filter=${encodeURIComponent(filter)}&access_token=${account.accessToken}`
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      logger.warn({ tenantId, metaError: json?.error }, '[commerce] filterSyncedRetailerIds lookup failed');
+      return new Set();
+    }
+    return new Set((json.data || []).map((p) => p.retailer_id).filter(Boolean));
+  } catch (e) {
+    logger.warn({ tenantId, err: e.message }, '[commerce] filterSyncedRetailerIds error');
+    return new Set();
+  }
+}
+
 export async function setupCommerce(tenantId, businessManagerId) {
   if (!hasCommerceModel()) throw new BadRequestError('Commerce models not available — Prisma client needs regeneration');
   let commerce = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
@@ -303,6 +335,7 @@ export async function syncArrangementToFacebook(tenantId, arrangementId) {
 
 export default {
   getCommerce,
+  filterSyncedRetailerIds,
   setupCommerce,
   connectCatalogToWABA,
   enableCommerce,
