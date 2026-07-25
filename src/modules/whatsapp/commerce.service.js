@@ -325,31 +325,38 @@ export async function getCommerceStatus(tenantId) {
   };
 }
 
-// Build one Meta catalog batch item from a product, applying optional
-// per-arrangement overrides (custom price/image) and section label.
+// Build one Meta catalog item from a product, applying optional per-arrangement
+// overrides (custom price/image) and section label. Field names/format follow
+// Meta's catalog batch spec: price is "<amount> <ISO currency>" (e.g. "12.34
+// NGN"), and availability + condition are REQUIRED — Meta rejects the whole
+// batch if they're missing.
 function buildCatalogItem(p, { customPriceMinor, customImageUrl, sectionName } = {}) {
-  const priceMinor = customPriceMinor ?? p.priceMinor;
-  const priceMajor = (priceMinor / 100).toFixed(2);
-  const imageUrl = customImageUrl ?? p.imageUrl ?? '';
+  const priceMinor = customPriceMinor ?? p.priceMinor ?? 0;
+  const currency = p.currency || 'NGN';
+  const rawImage = customImageUrl ?? p.imageUrl ?? '';
+  const imageUrl = rawImage.startsWith('http')
+    ? rawImage
+    : (rawImage ? `${process.env.APP_URL || 'https://biziq.online'}${rawImage}` : '');
+  // stock null/undefined = not tracked → treat as available; 0 = out of stock.
+  const inStock = p.stock == null || p.stock > 0;
   return {
     retailer_id: p.sku || p.id,
     name: p.name,
-    description: p.description || '',
-    price: priceMajor,
-    currency: p.currency || 'NGN',
-    category: p.category || 'regular',
-    image_url: imageUrl.startsWith('http') ? imageUrl : `${process.env.APP_URL || 'https://biziq.online'}${imageUrl}`,
+    description: p.description || p.name,
+    availability: inStock ? 'in stock' : 'out of stock',
+    condition: 'new',
+    price: `${(priceMinor / 100).toFixed(2)} ${currency}`,
+    image_url: imageUrl,
     url: `${process.env.FRONTEND_URL || 'https://biziq.online'}/products/${p.slug || p.id}`,
-    brand: p.brand || '',
+    ...(p.brand ? { brand: p.brand } : {}),
     ...(p.tags?.length ? { tags: p.tags.join(',') } : {}),
-    additional_image_urls: Array.isArray(p.galleryImages)
-      ? p.galleryImages.map(g => g.url || '').filter(Boolean).join(',')
-      : '',
     ...(sectionName ? { section: sectionName } : {}),
   };
 }
 
-// Upsert catalog items to Meta in batches of 50 (Meta's batch limit).
+// Upsert catalog items to Meta in batches of 50 (Meta's batch limit). Surfaces
+// Meta's actual rejection reason as a 400 (BadRequestError) instead of letting
+// it bubble up as an opaque 500, and logs the full error for debugging.
 async function batchUpsertToCatalog(catalogId, accessToken, items) {
   const batchSize = 50;
   let synced = 0;
@@ -362,13 +369,15 @@ async function batchUpsertToCatalog(catalogId, accessToken, items) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           allow_upsert: true,
-          requests: batch.map(item => ({ method: 'UPSERT', data: item })),
+          requests: batch.map(item => ({ method: 'UPDATE', data: item })),
         }),
       }
     );
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(`Failed to sync batch ${i / batchSize + 1}: ${json?.error?.message || JSON.stringify(json)}`);
+      logger.warn({ catalogId, status: res.status, metaError: json?.error, sampleItem: batch[0] }, '[commerce] catalog batch rejected by Meta');
+      const msg = json?.error?.error_user_msg || json?.error?.message || JSON.stringify(json);
+      throw new BadRequestError(`Meta rejected the catalog sync: ${msg}`);
     }
     synced += batch.length;
   }
