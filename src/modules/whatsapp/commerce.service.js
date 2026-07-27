@@ -276,8 +276,9 @@ export async function reconcileConnectedCatalog(tenantId) {
   try {
     const account = await getWabaToken(tenantId);
     if (!account.wabaId) return null;
+    const linkToken = catalogToken(account);
     const res = await fetch(
-      `${GRAPH_BASE}/${account.wabaId}/product_catalogs?fields=id,name&access_token=${account.accessToken}`,
+      `${GRAPH_BASE}/${account.wabaId}/product_catalogs?fields=id,name&access_token=${linkToken}`,
     );
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -287,27 +288,32 @@ export async function reconcileConnectedCatalog(tenantId) {
     logger.info({ tenantId, wabaId: account.wabaId, catalogs }, '[commerce] catalogs connected to WABA');
     let actualId = catalogs.length ? catalogs[0].id : null;
 
-    // Nothing connected to the WABA — connect the catalog our token can manage.
+    const local = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
+
+    // Nothing connected to the WABA yet. Connect the catalog WE ALREADY HAVE
+    // stored (captured from the signup catalog_ids) — do NOT grab some other
+    // owned catalog and overwrite it (that's how a stale generic catalog kept
+    // clobbering the freshly-created commerce one). Only discover a catalog if
+    // we have nothing stored at all.
     if (!actualId) {
-      const existingLocal = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
-      const manageableId = await resolveManageableCatalogId(account, existingLocal?.businessManagerId);
-      if (manageableId) {
+      const candidate = local?.catalogId
+        || await resolveManageableCatalogId(account, local?.businessManagerId);
+      if (candidate) {
         const connectRes = await fetch(
-          `${GRAPH_BASE}/${account.wabaId}/product_catalogs?access_token=${catalogToken(account)}`,
-          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ catalog_id: manageableId }) },
+          `${GRAPH_BASE}/${account.wabaId}/product_catalogs?access_token=${linkToken}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ catalog_id: candidate }) },
         );
         const connectJson = await connectRes.json().catch(() => ({}));
         if (!connectRes.ok) {
-          logger.warn({ tenantId, manageableId, metaError: connectJson?.error }, '[commerce] failed to connect token-manageable catalog to WABA');
+          logger.warn({ tenantId, candidate, metaError: connectJson?.error }, '[commerce] failed to connect catalog to WABA');
         } else {
-          logger.info({ tenantId, manageableId }, '[commerce] connected token-manageable catalog to WABA');
+          logger.info({ tenantId, candidate }, '[commerce] connected catalog to WABA');
         }
-        actualId = manageableId;
+        actualId = candidate;
       }
     }
     if (!actualId) return null;
 
-    const local = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
     if (!local || local.catalogId !== actualId) {
       await prisma.whatsappCommerce.upsert({
         where: { tenantId },
