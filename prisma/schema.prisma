@@ -556,7 +556,7 @@ model CatalogSectionItem {
   createdAt       DateTime @default(now())
 
   section CatalogSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  product Product        @relation(fields: [productId], references: [id])
+  product Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
   tenant  Tenant         @relation(fields: [tenantId], references: [id])
 
   @@unique([sectionId, productId])
