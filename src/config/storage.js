@@ -11,6 +11,13 @@ const client = new S3Client({
   },
   // Required for path-style access on non-AWS S3 providers (Cloudflare R2, MinIO, etc.)
   forcePathStyle: false,
+  // Newer @aws-sdk/client-s3 defaults to WHEN_SUPPORTED, which appends
+  // x-amz-checksum-* / x-amz-sdk-checksum-algorithm params to presigned URLs.
+  // Cloudflare R2 doesn't accept those signed params and rejects the request
+  // with 403 (broke all product/logo image loads after an SDK bump). Force the
+  // old behaviour so presigned GET URLs carry no checksum params.
+  requestChecksumCalculation: 'WHEN_REQUIRED',
+  responseChecksumValidation: 'WHEN_REQUIRED',
 });
 
 export const storage = {
