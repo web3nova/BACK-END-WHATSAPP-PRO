@@ -41,6 +41,10 @@ services:
         sync: false
       - key: META_APP_SECRET
         sync: false
+      # System-user token (own business) with catalog_management — used for all
+      # catalog Graph calls; the tenant WhatsApp token can't hold catalog_management.
+      - key: META_CATALOG_SYSTEM_TOKEN
+        sync: false
       - key: META_CONFIG_ID
         sync: false
       - key: WHATSAPP_VERIFY_TOKEN
@@ -134,6 +138,10 @@ services:
         sync: false
       - key: WHATSAPP_API_VERSION
         value: v20.0
+      # System-user token (own business) with catalog_management — the send_products
+      # AI tool reads the catalog to confirm products before sending shoppable cards.
+      - key: META_CATALOG_SYSTEM_TOKEN
+        sync: false
       - key: STORAGE_ENDPOINT
         sync: false
       - key: STORAGE_BUCKET

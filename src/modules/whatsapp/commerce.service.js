@@ -5,6 +5,19 @@ import { decryptSecret } from '../../common/utils/encryption.js';
 
 const GRAPH_BASE = `https://graph.facebook.com/${process.env.WHATSAPP_API_VERSION || 'v20.0'}`;
 
+// A system-user token (from our own business) that holds catalog_management +
+// business_management. The tenant's WhatsApp embedded-signup token can NEVER
+// carry catalog_management — Meta's WhatsApp login config doesn't offer that
+// permission — so all catalog-scoped Graph calls (create catalog, write items,
+// read catalog products) must use this system-user token instead. Each tenant
+// shares their catalog with our app during signup, so one system-user token
+// manages every tenant's catalog. WABA/messaging calls still use the tenant
+// token. Falls back to the tenant token when not configured (e.g. local dev).
+const CATALOG_SYSTEM_TOKEN = process.env.META_CATALOG_SYSTEM_TOKEN || null;
+function catalogToken(account) {
+  return CATALOG_SYSTEM_TOKEN || account?.accessToken;
+}
+
 function withDecryptedToken(account) {
   if (!account?.accessToken) return account;
   return { ...account, accessToken: decryptSecret(account.accessToken) };
@@ -47,7 +60,7 @@ export async function filterSyncedRetailerIds(tenantId, retailerIds) {
     const filter = JSON.stringify({ retailer_id: { is_any: ids } });
     const res = await fetch(
       `${GRAPH_BASE}/${commerce.catalogId}/products?fields=retailer_id&limit=${ids.length}` +
-      `&filter=${encodeURIComponent(filter)}&access_token=${account.accessToken}`
+      `&filter=${encodeURIComponent(filter)}&access_token=${catalogToken(account)}`
     );
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -78,7 +91,7 @@ export async function setupCommerce(tenantId, businessManagerId) {
   const catalogName = `${tenant?.name || 'Business'} Catalog`;
 
   const res = await fetch(
-    `${GRAPH_BASE}/${businessManagerId}/product_catalogs?access_token=${account.accessToken}`,
+    `${GRAPH_BASE}/${businessManagerId}/product_catalogs?access_token=${catalogToken(account)}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -214,7 +227,7 @@ async function resolveManageableCatalogId(account, businessManagerId) {
   if (appId && appSecret) {
     try {
       const res = await fetch(
-        `${GRAPH_BASE}/debug_token?input_token=${account.accessToken}&access_token=${appId}|${appSecret}`,
+        `${GRAPH_BASE}/debug_token?input_token=${catalogToken(account)}&access_token=${appId}|${appSecret}`,
       );
       const json = await res.json().catch(() => ({}));
       const data = json?.data || {};
@@ -231,7 +244,7 @@ async function resolveManageableCatalogId(account, businessManagerId) {
   if (businessManagerId) {
     try {
       const res = await fetch(
-        `${GRAPH_BASE}/${businessManagerId}/owned_product_catalogs?fields=id,name&access_token=${account.accessToken}`,
+        `${GRAPH_BASE}/${businessManagerId}/owned_product_catalogs?fields=id,name&access_token=${catalogToken(account)}`,
       );
       const json = await res.json().catch(() => ({}));
       logger.info({ ownedCatalogs: json?.data, metaError: json?.error }, '[commerce] business owned catalogs');
@@ -488,7 +501,7 @@ export async function syncArrangementToFacebook(tenantId, arrangementId) {
     return { synced: 0, message: 'No products in this arrangement to sync' };
   }
 
-  const synced = await batchUpsertToCatalog(commerce.catalogId, account.accessToken, items);
+  const synced = await batchUpsertToCatalog(commerce.catalogId, catalogToken(account), items);
   logger.info({ tenantId, arrangementId: arrangement.id, synced }, '[commerce] arrangement synced to Facebook catalog');
   return { synced };
 }
@@ -510,7 +523,7 @@ export async function syncAllProducts(tenantId) {
   }
 
   const items = products.map((p) => buildCatalogItem(p));
-  const synced = await batchUpsertToCatalog(commerce.catalogId, account.accessToken, items);
+  const synced = await batchUpsertToCatalog(commerce.catalogId, catalogToken(account), items);
   logger.info({ tenantId, synced }, '[commerce] all products synced to Facebook catalog');
   return { synced };
 }
