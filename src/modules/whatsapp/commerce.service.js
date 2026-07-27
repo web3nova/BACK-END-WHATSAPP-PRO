@@ -210,11 +210,16 @@ export async function reconcileConnectedCatalog(tenantId) {
     const account = await getWabaToken(tenantId);
     if (!account.wabaId) return null;
     const res = await fetch(
-      `${GRAPH_BASE}/${account.wabaId}/product_catalogs?fields=id&access_token=${account.accessToken}`,
+      `${GRAPH_BASE}/${account.wabaId}/product_catalogs?fields=id,name&access_token=${account.accessToken}`,
     );
     const json = await res.json().catch(() => ({}));
-    if (!res.ok) return null;
-    const actualId = Array.isArray(json.data) && json.data.length ? json.data[0].id : null;
+    if (!res.ok) {
+      logger.warn({ tenantId, metaError: json?.error }, '[commerce] reconcile: could not list WABA catalogs');
+      return null;
+    }
+    const catalogs = Array.isArray(json.data) ? json.data : [];
+    logger.info({ tenantId, wabaId: account.wabaId, catalogs }, '[commerce] catalogs connected to WABA');
+    const actualId = catalogs.length ? catalogs[0].id : null;
     if (!actualId) return null;
 
     const local = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
@@ -430,6 +435,9 @@ export async function syncArrangementToFacebook(tenantId, arrangementId) {
 // to the Meta catalog, no arrangement/section curation required. For businesses
 // that just want their whole inventory shoppable on WhatsApp.
 export async function syncAllProducts(tenantId) {
+  // Always target the catalog actually connected to the WABA (which our token
+  // provably has access to), not a possibly-stale/unwritable stored id.
+  await reconcileConnectedCatalog(tenantId);
   const commerce = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
   if (!commerce?.catalogId) throw new BadRequestError('No catalog. Run setup first.');
 
