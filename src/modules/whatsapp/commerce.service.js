@@ -90,12 +90,16 @@ export async function setupCommerce(tenantId, businessManagerId) {
 
   const catalogName = `${tenant?.name || 'Business'} Catalog`;
 
+  // vertical: 'commerce' makes it an E-Commerce catalog. WhatsApp only links
+  // E-Commerce catalogs to a WABA — a catalog created without a vertical
+  // defaults to a generic type and Meta rejects the link with
+  // UNSUPPORTED_PRODUCT_CATALOGUE_TYPE.
   const res = await fetch(
     `${GRAPH_BASE}/${businessManagerId}/product_catalogs?access_token=${catalogToken(account)}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: catalogName }),
+      body: JSON.stringify({ name: catalogName, vertical: 'commerce' }),
     }
   );
   const json = await res.json().catch(() => ({}));
