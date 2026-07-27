@@ -124,11 +124,17 @@ export async function connectCatalogToWABA(tenantId) {
   const account = await getWabaToken(tenantId);
   if (!account.wabaId) throw new BadRequestError('No WABA ID found');
 
+  // Linking a catalog to a WABA needs BOTH whatsapp_business_management (the
+  // WABA) and catalog_management (to validate the catalog) — only the system
+  // token has catalog_management, so use it here. The tenant WhatsApp token
+  // can't see the catalog and Meta rejects the link as INVALID_PRODUCT_CATALOGUE_ID.
+  const linkToken = catalogToken(account);
+
   // If this catalog is already connected to the WABA (e.g. Meta linked it
   // during embedded signup), don't POST again — Meta allows only one catalog
   // per WABA and re-connecting can error. Treat "already connected" as success.
   const currentRes = await fetch(
-    `${GRAPH_BASE}/${account.wabaId}/product_catalogs?fields=id&access_token=${account.accessToken}`,
+    `${GRAPH_BASE}/${account.wabaId}/product_catalogs?fields=id&access_token=${linkToken}`,
   );
   const currentJson = await currentRes.json().catch(() => ({}));
   const alreadyConnectedId = currentRes.ok && Array.isArray(currentJson.data) && currentJson.data.length
@@ -144,7 +150,7 @@ export async function connectCatalogToWABA(tenantId) {
   }
 
   const res = await fetch(
-    `${GRAPH_BASE}/${account.wabaId}/product_catalogs?access_token=${account.accessToken}`,
+    `${GRAPH_BASE}/${account.wabaId}/product_catalogs?access_token=${linkToken}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -283,7 +289,7 @@ export async function reconcileConnectedCatalog(tenantId) {
       const manageableId = await resolveManageableCatalogId(account, existingLocal?.businessManagerId);
       if (manageableId) {
         const connectRes = await fetch(
-          `${GRAPH_BASE}/${account.wabaId}/product_catalogs?access_token=${account.accessToken}`,
+          `${GRAPH_BASE}/${account.wabaId}/product_catalogs?access_token=${catalogToken(account)}`,
           { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ catalog_id: manageableId }) },
         );
         const connectJson = await connectRes.json().catch(() => ({}));
