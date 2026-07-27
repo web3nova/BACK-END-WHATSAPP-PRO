@@ -479,6 +479,42 @@ async function batchUpsertToCatalog(catalogId, accessToken, items) {
   return synced;
 }
 
+// Remove a product from the Meta catalog when it's deleted locally. Sync only
+// ever pushed creates/updates — nothing told Meta to drop an item once the
+// underlying product was gone, so the catalog silently accumulated stale
+// entries. A customer could then order a product that no longer existed
+// (the order tools then failed to verify it — see orderTools.js), and the
+// WhatsApp catalog kept showing products that were no longer for sale.
+// Best-effort: a tenant with no catalog set up, or a Meta error, must never
+// block the actual product deletion — log and move on.
+export async function deleteCatalogItem(tenantId, retailerId) {
+  if (!hasCommerceModel() || !retailerId) return;
+  try {
+    const commerce = await getCommerce(tenantId);
+    if (!commerce?.catalogId) return;
+    const account = await getWabaToken(tenantId);
+    const res = await fetch(
+      `${GRAPH_BASE}/${commerce.catalogId}/items_batch?access_token=${catalogToken(account)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_type: 'PRODUCT_ITEM',
+          requests: [{ method: 'DELETE', data: { id: retailerId } }],
+        }),
+      }
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      logger.warn({ tenantId, retailerId, metaError: json?.error }, '[commerce] failed to delete catalog item from Meta');
+    } else {
+      logger.info({ tenantId, retailerId }, '[commerce] deleted catalog item from Meta');
+    }
+  } catch (e) {
+    logger.warn({ tenantId, retailerId, err: e.message }, '[commerce] deleteCatalogItem error');
+  }
+}
+
 export async function syncArrangementToFacebook(tenantId, arrangementId) {
   const commerce = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
   if (!commerce?.catalogId) throw new BadRequestError('No catalog. Run setup first.');
@@ -541,7 +577,60 @@ export async function syncAllProducts(tenantId) {
   const items = products.map((p) => buildCatalogItem(p));
   const synced = await batchUpsertToCatalog(commerce.catalogId, catalogToken(account), items);
   logger.info({ tenantId, synced }, '[commerce] all products synced to Facebook catalog');
+
+  // Mirror the sync into a local "All Products" section so the dashboard's
+  // Catalog Arrangements view shows the same products that are actually live
+  // on Meta — previously "Sync all products" only wrote to Facebook, so a
+  // tenant looking at their arrangement/section page saw it empty even though
+  // the sync had succeeded, with no visual confirmation of what's really on
+  // WhatsApp. Best-effort: sync to Meta above already succeeded either way.
+  try {
+    await mirrorAllProductsSection(tenantId, commerce.id, products);
+  } catch (e) {
+    logger.warn({ tenantId, err: e.message }, '[commerce] failed to mirror synced products into a local section');
+  }
+
   return { synced };
+}
+
+// Upsert (create-if-missing) the tenant's "All Products" default arrangement +
+// section, and keep its items in lockstep with whatever set of products was
+// just pushed to Meta via syncAllProducts — added ones appear, ones no longer
+// active are marked inactive rather than deleted (keeps sort order stable if
+// a product is reactivated later).
+async function mirrorAllProductsSection(tenantId, commerceId, products) {
+  let arrangement = await prisma.catalogArrangement.findFirst({
+    where: { tenantId, slug: 'all-products' },
+  });
+  if (!arrangement) {
+    arrangement = await prisma.catalogArrangement.create({
+      data: { tenantId, commerceId, name: 'All Products', slug: 'all-products', isDefault: true },
+    });
+  }
+
+  let section = await prisma.catalogSection.findFirst({
+    where: { tenantId, arrangementId: arrangement.id },
+  });
+  if (!section) {
+    section = await prisma.catalogSection.create({
+      data: { tenantId, arrangementId: arrangement.id, name: 'All Products', sortOrder: 0 },
+    });
+  }
+
+  const activeProductIds = products.map((p) => p.id);
+
+  for (let i = 0; i < products.length; i++) {
+    await prisma.catalogSectionItem.upsert({
+      where: { sectionId_productId: { sectionId: section.id, productId: products[i].id } },
+      update: { isActive: true },
+      create: { tenantId, sectionId: section.id, productId: products[i].id, sortOrder: i, isActive: true },
+    });
+  }
+
+  await prisma.catalogSectionItem.updateMany({
+    where: { sectionId: section.id, productId: { notIn: activeProductIds }, isActive: true },
+    data: { isActive: false },
+  });
 }
 
 // Resolve the Business Manager ID that owns this tenant's WABA, so we can
@@ -614,4 +703,5 @@ export default {
   getCommerceStatus,
   syncArrangementToFacebook,
   syncAllProducts,
+  deleteCatalogItem,
 };

@@ -237,8 +237,17 @@ export async function update(id, tenantId, data) {
 }
 
 export async function remove(id, tenantId) {
-  await findOwned(id, tenantId);
+  const product = await findOwned(id, tenantId);
   await prisma.product.delete({ where: { id } });
+
+  // Best-effort: drop the corresponding item from the Meta catalog too, if one
+  // was ever synced. Without this the WhatsApp catalog keeps showing (and lets
+  // customers order) products that no longer exist locally — never let this
+  // block the actual deletion, which has already succeeded above.
+  const retailerId = product.sku || product.id;
+  import('../whatsapp/commerce.service.js')
+    .then(({ deleteCatalogItem }) => deleteCatalogItem(tenantId, retailerId))
+    .catch(() => {});
 }
 
 export async function uploadImage(id, tenantId, file) {
