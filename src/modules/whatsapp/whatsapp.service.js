@@ -132,6 +132,21 @@ export const updateBusinessProfile = async (tenantId, fields) => {
 
 const PROFILE_PICTURE_MIME_TYPES = new Set(['image/jpeg', 'image/png']);
 
+// Meta buries the actionable reason in error_user_title/error_user_msg (e.g.
+// "Please upload JPG image of resolution greater than 192 pixel * 192 pixel"),
+// while error.message is usually a useless "An unknown error occurred". Prefer
+// the user-facing fields and mark these as 400s — they're input problems the
+// tenant can fix, not server errors that should surface as an opaque 500.
+function metaUserError(error, fallback) {
+  const e = error || {};
+  const msg = e.error_user_msg
+    ? `${e.error_user_title ? e.error_user_title + ': ' : ''}${e.error_user_msg}`
+    : (e.message || fallback);
+  const err = new Error(msg);
+  err.statusCode = 400;
+  return err;
+}
+
 /** Upload a profile picture to Meta and update the WhatsApp Business Profile. */
 export const uploadProfilePicture = async (tenantId, fileBuffer, mimeType) => {
   if (!PROFILE_PICTURE_MIME_TYPES.has(mimeType)) {
@@ -159,7 +174,7 @@ export const uploadProfilePicture = async (tenantId, fileBuffer, mimeType) => {
   const sessionJson = await sessionRes.json().catch(() => ({}));
   if (!sessionRes.ok || !sessionJson.id) {
     logger.error({ tenantId, step: 'create-upload-session', metaError: sessionJson?.error }, '[whatsapp] profile picture upload failed');
-    throw new Error(sessionJson?.error?.message || 'Failed to create upload session');
+    throw metaUserError(sessionJson?.error, 'Failed to create upload session');
   }
   const uploadSessionId = sessionJson.id;
 
@@ -176,7 +191,7 @@ export const uploadProfilePicture = async (tenantId, fileBuffer, mimeType) => {
   const uploadJson = await uploadRes.json().catch(() => ({}));
   if (!uploadRes.ok || !uploadJson.h) {
     logger.error({ tenantId, step: 'upload-binary', metaError: uploadJson?.error }, '[whatsapp] profile picture upload failed');
-    throw new Error(uploadJson?.error?.message || 'Failed to upload image to Meta');
+    throw metaUserError(uploadJson?.error, 'Failed to upload image to Meta');
   }
 
   // Step 3: Set as WhatsApp Business Profile picture
@@ -194,7 +209,7 @@ export const uploadProfilePicture = async (tenantId, fileBuffer, mimeType) => {
     // occurred" — the real cause (bad aspect ratio, too small, corrupt handle)
     // usually only shows up in code/error_subcode/fbtrace_id, so log those too.
     logger.error({ tenantId, step: 'set-business-profile-picture', metaError: profileJson?.error }, '[whatsapp] profile picture upload failed');
-    throw new Error(profileJson?.error?.message || 'Failed to update profile picture');
+    throw metaUserError(profileJson?.error, 'Failed to update profile picture');
   }
   return { success: true };
 };
