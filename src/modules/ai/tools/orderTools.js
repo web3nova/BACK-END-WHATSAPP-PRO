@@ -17,12 +17,16 @@ async function resolveItemPrices(items = [], tenantId) {
   const byId = new Map(products.map((p) => [p.id, p]));
 
   return items.map((it) => {
-    if (!it.productId) return it;
+    // No productId = genuinely custom/bespoke line item, not tied to a catalog
+    // record — nothing to verify against, treat as trusted as before.
+    if (!it.productId) return { ...it, verified: true };
     const product = byId.get(it.productId);
-    // productId didn't resolve (wrong tenant, deleted, or hallucinated) —
-    // don't silently fall back to trusting the AI's own price for it.
-    if (!product) return { ...it, priceMinor: 0, name: it.name ? `${it.name} (unverified — product not found)` : 'Unverified item' };
-    return { ...it, name: it.name || product.name, priceMinor: product.priceMinor };
+    // productId didn't resolve (wrong tenant, deleted, or a stale WhatsApp
+    // catalog retailer_id pointing at a product that no longer exists) — don't
+    // silently fall back to trusting the AI's own price for it. `verified:
+    // false` lets the caller refuse to confirm a total built on this.
+    if (!product) return { ...it, priceMinor: 0, verified: false, name: it.name ? `${it.name} (unverified — product not found)` : 'Unverified item' };
+    return { ...it, name: it.name || product.name, priceMinor: product.priceMinor, verified: true };
   });
 }
 
@@ -41,7 +45,7 @@ const itemsFingerprint = (items = []) =>
 export const createQuote = {
   name: 'create_quote',
   description:
-    'Create a price quotation for the customer once you know the product(s), quantity and any custom details.',
+    'Create a price quotation for the customer once you know the product(s), quantity and any custom details. Check the response\'s hasUnverifiedItems field before quoting a price — if true, do NOT tell the customer this amount; say you need a moment to confirm and a team member will follow up with the real price.',
   parameters: {
     type: 'object',
     properties: {
@@ -97,14 +101,27 @@ export const createQuote = {
         details: { items: resolvedItems, ...details },
       },
     });
-    return { quoteId: quote.id, amountMinor, currency, status: quote.status };
+    const unverifiedItems = resolvedItems.filter((it) => it.verified === false);
+    const hasUnverifiedItems = unverifiedItems.length > 0;
+
+    return {
+      quoteId: quote.id,
+      amountMinor,
+      currency,
+      status: quote.status,
+      hasUnverifiedItems,
+      ...(hasUnverifiedItems && {
+        unverifiedItems: unverifiedItems.map((it) => ({ name: it.name, qty: it.qty })),
+        warning: 'Some items could not be matched to a real product, so amountMinor does NOT reflect the true price. Do not quote this amount to the customer — say you need a moment to confirm and a team member will follow up.',
+      }),
+    };
   },
 };
 
 // Tool: create an order.
 export const createOrder = {
   name: 'create_order',
-  description: 'Create an order after the customer confirms a quote or items to purchase.',
+  description: 'Create an order after the customer confirms a quote or items to purchase. Check the response\'s hasUnverifiedItems field before telling the customer a total — if true, do NOT quote or confirm any price; tell the customer their order needs a quick check and a team member will confirm the total shortly.',
   parameters: {
     type: 'object',
     properties: {
@@ -175,7 +192,27 @@ export const createOrder = {
       await prisma.quote.update({ where: { id: quote.id }, data: { status: 'accepted', orderId: order.id } });
     }
 
-    return { orderId: order.id, totalMinor, currency, status: order.status, ...(quote ? { linkedQuoteId: quote.id } : {}) };
+    // At least one item referenced a productId that didn't resolve to a real
+    // product (deleted, wrong tenant, or — for WhatsApp catalog checkouts — a
+    // stale retailer_id Meta still has cached after the product was removed
+    // locally). totalMinor is wrong/incomplete in this case; the order is
+    // still recorded (so staff can see and fix it) but the AI must not quote
+    // a price it can't stand behind.
+    const unverifiedItems = resolvedItems.filter((it) => it.verified === false);
+    const hasUnverifiedItems = unverifiedItems.length > 0;
+
+    return {
+      orderId: order.id,
+      totalMinor,
+      currency,
+      status: order.status,
+      ...(quote ? { linkedQuoteId: quote.id } : {}),
+      hasUnverifiedItems,
+      ...(hasUnverifiedItems && {
+        unverifiedItems: unverifiedItems.map((it) => ({ name: it.name, qty: it.qty })),
+        warning: 'Some items could not be matched to a real product, so totalMinor does NOT reflect the true order value. Do not quote this total to the customer — tell them their order needs a quick check and a team member will confirm the price shortly.',
+      }),
+    };
   },
 };
 
