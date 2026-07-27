@@ -593,18 +593,22 @@ export async function syncAllProducts(tenantId) {
   return { synced };
 }
 
-// Upsert (create-if-missing) the tenant's "All Products" default arrangement +
-// section, and keep its items in lockstep with whatever set of products was
-// just pushed to Meta via syncAllProducts — added ones appear, ones no longer
-// active are marked inactive rather than deleted (keeps sort order stable if
-// a product is reactivated later).
+// Upsert (create-if-missing) the tenant's "All Products" arrangement + section,
+// and keep its items in lockstep with whatever set of products was just pushed
+// to Meta via syncAllProducts — added ones appear, ones no longer active are
+// marked inactive rather than deleted (keeps sort order stable if a product is
+// reactivated later). Deliberately NOT isDefault: true — it's purely a visual
+// mirror of "what did the last sync-all push to Meta", not a claim on being
+// the tenant's default customer-facing arrangement (createArrangement's
+// unset-other-defaults logic isn't invoked here, so setting it here could
+// leave two arrangements both flagged default).
 async function mirrorAllProductsSection(tenantId, commerceId, products) {
   let arrangement = await prisma.catalogArrangement.findFirst({
     where: { tenantId, slug: 'all-products' },
   });
   if (!arrangement) {
     arrangement = await prisma.catalogArrangement.create({
-      data: { tenantId, commerceId, name: 'All Products', slug: 'all-products', isDefault: true },
+      data: { tenantId, commerceId, name: 'All Products', slug: 'all-products' },
     });
   }
 
