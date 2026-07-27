@@ -211,10 +211,15 @@ async function resolveManageableCatalogId(account) {
       `${GRAPH_BASE}/debug_token?input_token=${account.accessToken}&access_token=${account.accessToken}`,
     );
     const json = await res.json().catch(() => ({}));
-    const scopes = json?.data?.granular_scopes || [];
+    const data = json?.data || {};
+    // Log exactly what the token is allowed to do so we can see whether the
+    // catalog grant is present at all.
+    logger.info({ scopes: data.scopes, granular_scopes: data.granular_scopes }, '[commerce] token scopes');
+    const scopes = data.granular_scopes || [];
     const cat = scopes.find((s) => s.scope === 'catalog_management');
     return cat?.target_ids?.[0] || null;
-  } catch {
+  } catch (e) {
+    logger.warn({ err: e.message }, '[commerce] resolveManageableCatalogId error');
     return null;
   }
 }
