@@ -205,23 +205,43 @@ export async function enableCommerce(tenantId) {
 // to that specific catalog and records it in the token's granular_scopes. This
 // is the only catalog we can write to — a catalog we create ourselves via the
 // API is NOT writable by this token (Meta error 100 / subcode 33).
-async function resolveManageableCatalogId(account) {
-  try {
-    const res = await fetch(
-      `${GRAPH_BASE}/debug_token?input_token=${account.accessToken}&access_token=${account.accessToken}`,
-    );
-    const json = await res.json().catch(() => ({}));
-    const data = json?.data || {};
-    // Log exactly what the token is allowed to do so we can see whether the
-    // catalog grant is present at all.
-    logger.info({ scopes: data.scopes, granular_scopes: data.granular_scopes }, '[commerce] token scopes');
-    const scopes = data.granular_scopes || [];
-    const cat = scopes.find((s) => s.scope === 'catalog_management');
-    return cat?.target_ids?.[0] || null;
-  } catch (e) {
-    logger.warn({ err: e.message }, '[commerce] resolveManageableCatalogId error');
-    return null;
+async function resolveManageableCatalogId(account, businessManagerId) {
+  const appId = process.env.META_APP_ID;
+  const appSecret = process.env.META_APP_SECRET;
+
+  // 1. Ask Meta which catalog this token is scoped to manage. debug_token must
+  // be called with an APP access token (APP_ID|APP_SECRET), not the user token.
+  if (appId && appSecret) {
+    try {
+      const res = await fetch(
+        `${GRAPH_BASE}/debug_token?input_token=${account.accessToken}&access_token=${appId}|${appSecret}`,
+      );
+      const json = await res.json().catch(() => ({}));
+      const data = json?.data || {};
+      logger.info({ scopes: data.scopes, granular_scopes: data.granular_scopes, metaError: json?.error }, '[commerce] token scopes');
+      const cat = (data.granular_scopes || []).find((s) => s.scope === 'catalog_management');
+      if (cat?.target_ids?.[0]) return cat.target_ids[0];
+    } catch (e) {
+      logger.warn({ err: e.message }, '[commerce] debug_token error');
+    }
   }
+
+  // 2. Fallback: list the catalogs owned by the business and log them so we can
+  // see what exists / pick the right one.
+  if (businessManagerId) {
+    try {
+      const res = await fetch(
+        `${GRAPH_BASE}/${businessManagerId}/owned_product_catalogs?fields=id,name&access_token=${account.accessToken}`,
+      );
+      const json = await res.json().catch(() => ({}));
+      logger.info({ ownedCatalogs: json?.data, metaError: json?.error }, '[commerce] business owned catalogs');
+      if (Array.isArray(json.data) && json.data.length) return json.data[0].id;
+    } catch (e) {
+      logger.warn({ err: e.message }, '[commerce] owned_product_catalogs error');
+    }
+  }
+
+  return null;
 }
 
 // Self-heal: make our stored catalogId the one we can actually use. Prefers a
@@ -246,7 +266,8 @@ export async function reconcileConnectedCatalog(tenantId) {
 
     // Nothing connected to the WABA — connect the catalog our token can manage.
     if (!actualId) {
-      const manageableId = await resolveManageableCatalogId(account);
+      const existingLocal = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
+      const manageableId = await resolveManageableCatalogId(account, existingLocal?.businessManagerId);
       if (manageableId) {
         const connectRes = await fetch(
           `${GRAPH_BASE}/${account.wabaId}/product_catalogs?access_token=${account.accessToken}`,
