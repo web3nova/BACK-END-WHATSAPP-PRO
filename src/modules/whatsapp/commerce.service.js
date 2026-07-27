@@ -200,10 +200,29 @@ export async function enableCommerce(tenantId) {
   return setCommerceSettings(tenantId);
 }
 
-// Self-heal: make our stored catalogId match whatever catalog is actually
-// connected to the WABA. Covers the case where Meta created/linked a catalog
-// during signup but we (previously) created a second, unconnected one and
-// stored the wrong id. Best-effort — returns the real connected catalog id.
+// Find the catalog this token is actually allowed to manage. When a business
+// grants the Catalog asset during embedded signup, Meta scopes catalog_management
+// to that specific catalog and records it in the token's granular_scopes. This
+// is the only catalog we can write to — a catalog we create ourselves via the
+// API is NOT writable by this token (Meta error 100 / subcode 33).
+async function resolveManageableCatalogId(account) {
+  try {
+    const res = await fetch(
+      `${GRAPH_BASE}/debug_token?input_token=${account.accessToken}&access_token=${account.accessToken}`,
+    );
+    const json = await res.json().catch(() => ({}));
+    const scopes = json?.data?.granular_scopes || [];
+    const cat = scopes.find((s) => s.scope === 'catalog_management');
+    return cat?.target_ids?.[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+// Self-heal: make our stored catalogId the one we can actually use. Prefers a
+// catalog already connected to the WABA; if none is connected, finds the
+// token-manageable catalog (granted via the Catalog asset at signup) and
+// connects it to the WABA. Best-effort — returns the usable catalog id.
 export async function reconcileConnectedCatalog(tenantId) {
   if (!hasCommerceModel()) return null;
   try {
@@ -215,11 +234,28 @@ export async function reconcileConnectedCatalog(tenantId) {
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
       logger.warn({ tenantId, metaError: json?.error }, '[commerce] reconcile: could not list WABA catalogs');
-      return null;
     }
-    const catalogs = Array.isArray(json.data) ? json.data : [];
+    const catalogs = res.ok && Array.isArray(json.data) ? json.data : [];
     logger.info({ tenantId, wabaId: account.wabaId, catalogs }, '[commerce] catalogs connected to WABA');
-    const actualId = catalogs.length ? catalogs[0].id : null;
+    let actualId = catalogs.length ? catalogs[0].id : null;
+
+    // Nothing connected to the WABA — connect the catalog our token can manage.
+    if (!actualId) {
+      const manageableId = await resolveManageableCatalogId(account);
+      if (manageableId) {
+        const connectRes = await fetch(
+          `${GRAPH_BASE}/${account.wabaId}/product_catalogs?access_token=${account.accessToken}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ catalog_id: manageableId }) },
+        );
+        const connectJson = await connectRes.json().catch(() => ({}));
+        if (!connectRes.ok) {
+          logger.warn({ tenantId, manageableId, metaError: connectJson?.error }, '[commerce] failed to connect token-manageable catalog to WABA');
+        } else {
+          logger.info({ tenantId, manageableId }, '[commerce] connected token-manageable catalog to WABA');
+        }
+        actualId = manageableId;
+      }
+    }
     if (!actualId) return null;
 
     const local = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
@@ -229,7 +265,7 @@ export async function reconcileConnectedCatalog(tenantId) {
         update: { catalogId: actualId },
         create: { tenantId, catalogId: actualId, commerceEnabled: true },
       });
-      logger.info({ tenantId, actualId, was: local?.catalogId }, '[commerce] reconciled stored catalog to the WABA-connected one');
+      logger.info({ tenantId, actualId, was: local?.catalogId }, '[commerce] reconciled stored catalog to the usable one');
     }
     return actualId;
   } catch (e) {
