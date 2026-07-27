@@ -325,11 +325,10 @@ export async function getCommerceStatus(tenantId) {
   };
 }
 
-// Build one Meta catalog item from a product, applying optional per-arrangement
-// overrides (custom price/image) and section label. Field names/format follow
-// Meta's catalog batch spec: price is "<amount> <ISO currency>" (e.g. "12.34
-// NGN"), and availability + condition are REQUIRED — Meta rejects the whole
-// batch if they're missing.
+// Build one Meta catalog item for the /items_batch API. Field names/format
+// follow Meta's spec: the retailer id goes in `id`, product name in `title`,
+// links in `link`/`image_link`, price as "<amount> <ISO currency>" (e.g.
+// "12.34 NGN"); availability + condition are REQUIRED.
 function buildCatalogItem(p, { customPriceMinor, customImageUrl, sectionName } = {}) {
   const priceMinor = customPriceMinor ?? p.priceMinor ?? 0;
   const currency = p.currency || 'NGN';
@@ -340,42 +339,42 @@ function buildCatalogItem(p, { customPriceMinor, customImageUrl, sectionName } =
   // stock null/undefined = not tracked → treat as available; 0 = out of stock.
   const inStock = p.stock == null || p.stock > 0;
   return {
-    retailer_id: p.sku || p.id,
-    name: p.name,
+    id: p.sku || p.id,
+    title: p.name,
     description: p.description || p.name,
     availability: inStock ? 'in stock' : 'out of stock',
     condition: 'new',
     price: `${(priceMinor / 100).toFixed(2)} ${currency}`,
-    image_url: imageUrl,
-    url: `${process.env.FRONTEND_URL || 'https://biziq.online'}/products/${p.slug || p.id}`,
+    link: `${process.env.FRONTEND_URL || 'https://biziq.online'}/products/${p.slug || p.id}`,
+    ...(imageUrl ? { image_link: imageUrl } : {}),
     ...(p.brand ? { brand: p.brand } : {}),
-    ...(p.tags?.length ? { tags: p.tags.join(',') } : {}),
-    ...(sectionName ? { section: sectionName } : {}),
+    ...(sectionName ? { custom_label_0: sectionName } : {}),
   };
 }
 
-// Upsert catalog items to Meta in batches of 50 (Meta's batch limit). Surfaces
-// Meta's actual rejection reason as a 400 (BadRequestError) instead of letting
-// it bubble up as an opaque 500, and logs the full error for debugging.
+// Upsert catalog items to Meta via the /items_batch endpoint (the current
+// catalog write API — the legacy /batch edge isn't supported on catalogs
+// created through the newer WhatsApp/commerce flows). UPDATE upserts by `id`.
+// Surfaces Meta's actual rejection reason as a 400 instead of an opaque 500.
 async function batchUpsertToCatalog(catalogId, accessToken, items) {
   const batchSize = 50;
   let synced = 0;
   for (let i = 0; i < items.length; i += batchSize) {
     const batch = items.slice(i, i + batchSize);
     const res = await fetch(
-      `${GRAPH_BASE}/${catalogId}/batch?access_token=${accessToken}`,
+      `${GRAPH_BASE}/${catalogId}/items_batch?access_token=${accessToken}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          allow_upsert: true,
+          item_type: 'PRODUCT_ITEM',
           requests: batch.map(item => ({ method: 'UPDATE', data: item })),
         }),
       }
     );
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      logger.warn({ catalogId, status: res.status, metaError: json?.error, sampleItem: batch[0] }, '[commerce] catalog batch rejected by Meta');
+      logger.warn({ catalogId, status: res.status, metaError: json?.error, sampleItem: batch[0] }, '[commerce] catalog items_batch rejected by Meta');
       const msg = json?.error?.error_user_msg || json?.error?.message || JSON.stringify(json);
       throw new BadRequestError(`Meta rejected the catalog sync: ${msg}`);
     }
