@@ -62,6 +62,33 @@ export const handleIncomingMessage = async ({ phoneNumberId, senderPhone, sender
   }
   const tenantId = whatsappAccount.tenantId;
 
+  // 1b. Native WhatsApp catalog order: the parser only has Meta's retailer_ids
+  // (= product.sku || product.id), which mean nothing to the AI. Resolve them
+  // to real product names + our product ids and rebuild the message text so the
+  // AI understands the order and can confirm it / take payment instead of
+  // replying "unsupported message".
+  if (structured?.order?.items?.length) {
+    const ids = structured.order.items.map((i) => i.retailerId).filter(Boolean);
+    const products = await prisma.product.findMany({
+      where: { tenantId, OR: [{ sku: { in: ids } }, { id: { in: ids } }] },
+      select: { id: true, sku: true, name: true },
+    });
+    const byRetailer = new Map();
+    for (const p of products) {
+      if (p.sku) byRetailer.set(p.sku, p);
+      byRetailer.set(p.id, p);
+    }
+    structured.order.items = structured.order.items.map((i) => {
+      const p = byRetailer.get(i.retailerId);
+      return { ...i, productId: p?.id || null, name: p?.name || null };
+    });
+    const cur = structured.order.currency || '';
+    const lines = structured.order.items
+      .map((i) => `${i.quantity}x ${i.name || i.retailerId} @ ${cur}${i.unitPrice}`)
+      .join(', ');
+    text = `[Customer placed an order from your WhatsApp catalog cart: ${lines}. Total: ${cur}${structured.order.total}.${structured.order.note ? ` Customer note: "${structured.order.note}"` : ''} Confirm the order with the customer and guide them to checkout/payment.]`;
+  }
+
   // 2. DB-level dedup — the message.externalId unique constraint is the source of truth.
   // Webhook retries send the same messageId; if already saved, skip silently.
   if (messageId) {

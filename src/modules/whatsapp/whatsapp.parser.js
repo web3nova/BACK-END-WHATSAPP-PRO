@@ -48,6 +48,33 @@ export function parseMessage(message) {
       return { type, text, structured: { contacts: structuredContacts } };
     }
     text = `[Received contacts message]`;
+  } else if (type === 'order') {
+    // Native WhatsApp catalog checkout: the customer added catalog products to
+    // their cart and sent the order. Meta gives us product_items keyed by
+    // retailer_id (= product.sku || product.id) with quantity + item_price.
+    // We return it structured so conversation.service can resolve retailer_ids
+    // to real product names before the AI sees it, and build a readable text
+    // here as a fallback.
+    const order = message.order || {};
+    const rawItems = Array.isArray(order.product_items) ? order.product_items : [];
+    const items = rawItems.map((i) => {
+      const quantity = Number(i.quantity) || 1;
+      const unitPrice = Number(i.item_price) || 0;
+      return {
+        retailerId: i.product_retailer_id,
+        quantity,
+        unitPrice,
+        currency: i.currency || '',
+        lineTotal: quantity * unitPrice,
+      };
+    });
+    const currency = items[0]?.currency || '';
+    const total = items.reduce((sum, i) => sum + i.lineTotal, 0);
+    const summary = items.length
+      ? items.map((i) => `${i.quantity}x ${i.retailerId} @ ${i.currency}${i.unitPrice}`).join(', ')
+      : 'no items';
+    text = `[Customer placed an order from your WhatsApp catalog cart: ${summary}. Total: ${currency}${total}.${order.text ? ` Customer note: "${order.text}"` : ''}]`;
+    return { type, text, structured: { order: { catalogId: order.catalog_id || null, note: order.text || null, items, total, currency } } };
   } else if (type === 'sticker') {
     text = `[Received sticker message]`;
   } else {
