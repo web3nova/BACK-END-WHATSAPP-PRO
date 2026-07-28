@@ -425,15 +425,29 @@ export async function getCommerceStatus(tenantId) {
 // follow Meta's spec: the retailer id goes in `id`, product name in `title`,
 // links in `link`/`image_link`, price as "<amount> <ISO currency>" (e.g.
 // "12.34 NGN"); availability + condition are REQUIRED.
-function buildCatalogItem(p, { customPriceMinor, customImageUrl, sectionName } = {}) {
+function buildCatalogItem(p, { customPriceMinor, customImageUrl, sectionName, tenantSlug } = {}) {
   const priceMinor = customPriceMinor ?? p.priceMinor ?? 0;
   const currency = p.currency || 'NGN';
   const rawImage = customImageUrl ?? p.imageUrl ?? '';
   const imageUrl = rawImage.startsWith('http')
     ? rawImage
     : (rawImage ? `${process.env.APP_URL || 'https://biziq.online'}${rawImage}` : '');
-  // stock null/undefined = not tracked → treat as available; 0 = out of stock.
-  const inStock = p.stock == null || p.stock > 0;
+  // trackStock is opt-in and defaults to false, with `stock` itself defaulting
+  // to 0 for every product (see schema comment) — so a business that has never
+  // turned on stock tracking still has stock: 0 on every product. Checking
+  // stock alone (the old logic) marked their entire catalog "out of stock" on
+  // Meta regardless of real availability. Only actually enforce the count when
+  // the business opted into tracking it.
+  const inStock = !p.trackStock || p.stock > 0;
+  const base = process.env.FRONTEND_URL || 'https://biziq.online';
+  // The real public storefront route is /b/:slug/product/:id (or
+  // /storefront/:tenantId/product/:id without a slug) — /products/:id doesn't
+  // exist as a public route at all, so every "View" tap from the WhatsApp
+  // catalog was landing customers on the generic marketing homepage instead
+  // of the actual product.
+  const link = tenantSlug
+    ? `${base}/b/${tenantSlug}/product/${p.id}`
+    : `${base}/storefront/${p.tenantId}/product/${p.id}`;
   return {
     id: p.sku || p.id,
     title: p.name,
@@ -441,7 +455,7 @@ function buildCatalogItem(p, { customPriceMinor, customImageUrl, sectionName } =
     availability: inStock ? 'in stock' : 'out of stock',
     condition: 'new',
     price: `${(priceMinor / 100).toFixed(2)} ${currency}`,
-    link: `${process.env.FRONTEND_URL || 'https://biziq.online'}/products/${p.slug || p.id}`,
+    link,
     ...(imageUrl ? { image_link: imageUrl } : {}),
     ...(p.brand ? { brand: p.brand } : {}),
     ...(sectionName ? { custom_label_0: sectionName } : {}),
@@ -515,6 +529,11 @@ export async function deleteCatalogItem(tenantId, retailerId) {
   }
 }
 
+async function getTenantSlug(tenantId) {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } });
+  return tenant?.slug || null;
+}
+
 export async function syncArrangementToFacebook(tenantId, arrangementId) {
   const commerce = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
   if (!commerce?.catalogId) throw new BadRequestError('No catalog. Run setup first.');
@@ -537,6 +556,7 @@ export async function syncArrangementToFacebook(tenantId, arrangementId) {
   if (!arrangement) throw new BadRequestError('Arrangement not found');
 
   const account = await getWabaToken(tenantId);
+  const tenantSlug = await getTenantSlug(tenantId);
 
   const items = [];
   for (const section of arrangement.sections) {
@@ -545,6 +565,7 @@ export async function syncArrangementToFacebook(tenantId, arrangementId) {
         customPriceMinor: item.customPriceMinor,
         customImageUrl: item.customImageUrl,
         sectionName: section.name,
+        tenantSlug,
       }));
     }
   }
@@ -573,8 +594,9 @@ export async function syncAllProducts(tenantId) {
   if (!products.length) {
     return { synced: 0, message: 'No active products to sync' };
   }
+  const tenantSlug = await getTenantSlug(tenantId);
 
-  const items = products.map((p) => buildCatalogItem(p));
+  const items = products.map((p) => buildCatalogItem(p, { tenantSlug }));
   const synced = await batchUpsertToCatalog(commerce.catalogId, catalogToken(account), items);
   logger.info({ tenantId, synced }, '[commerce] all products synced to Facebook catalog');
 
@@ -590,7 +612,71 @@ export async function syncAllProducts(tenantId) {
     logger.warn({ tenantId, err: e.message }, '[commerce] failed to mirror synced products into a local section');
   }
 
-  return { synced };
+  // Two-way sync: remove anything Meta still has that no longer matches a
+  // current active local product. Sync only ever pushed creates/updates, so
+  // products deleted (or deactivated) before the per-delete Meta cleanup was
+  // added — or from earlier test syncs — stayed live on WhatsApp/Commerce
+  // Manager forever with no way to remove them from our dashboard, since our
+  // UI only has a delete action for products that still exist locally.
+  let removed = 0;
+  try {
+    const currentRetailerIds = new Set(products.map((p) => p.sku || p.id));
+    const metaRetailerIds = await listCatalogRetailerIds(commerce.catalogId, catalogToken(account));
+    const orphaned = metaRetailerIds.filter((id) => !currentRetailerIds.has(id));
+    if (orphaned.length) {
+      removed = await batchDeleteFromCatalog(commerce.catalogId, catalogToken(account), orphaned);
+      logger.info({ tenantId, removed }, '[commerce] removed orphaned items from Facebook catalog');
+    }
+  } catch (e) {
+    logger.warn({ tenantId, err: e.message }, '[commerce] failed to clean up orphaned catalog items');
+  }
+
+  return { synced, removed };
+}
+
+// Page through every retailer_id currently in the Meta catalog. Used to find
+// items with no matching local product (see syncAllProducts cleanup above).
+async function listCatalogRetailerIds(catalogId, accessToken) {
+  const ids = [];
+  let url = `${GRAPH_BASE}/${catalogId}/products?fields=retailer_id&limit=200&access_token=${accessToken}`;
+  while (url) {
+    const res = await fetch(url);
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) break;
+    for (const item of json.data || []) {
+      if (item.retailer_id) ids.push(item.retailer_id);
+    }
+    url = json.paging?.next || null;
+  }
+  return ids;
+}
+
+// Batch-delete catalog items by retailer_id (in batches of 50, matching
+// batchUpsertToCatalog's limit).
+async function batchDeleteFromCatalog(catalogId, accessToken, retailerIds) {
+  const batchSize = 50;
+  let removed = 0;
+  for (let i = 0; i < retailerIds.length; i += batchSize) {
+    const batch = retailerIds.slice(i, i + batchSize);
+    const res = await fetch(
+      `${GRAPH_BASE}/${catalogId}/items_batch?access_token=${accessToken}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_type: 'PRODUCT_ITEM',
+          requests: batch.map((id) => ({ method: 'DELETE', data: { id } })),
+        }),
+      }
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      logger.warn({ catalogId, status: res.status, metaError: json?.error }, '[commerce] orphan cleanup batch delete rejected by Meta');
+      continue;
+    }
+    removed += batch.length;
+  }
+  return removed;
 }
 
 // Upsert (create-if-missing) the tenant's "All Products" arrangement + section,
