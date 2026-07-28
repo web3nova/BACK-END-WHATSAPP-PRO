@@ -45,6 +45,12 @@ services:
       # catalog Graph calls; the tenant WhatsApp token can't hold catalog_management.
       - key: META_CATALOG_SYSTEM_TOKEN
         sync: false
+      # BSP model: platform business + system user that own every tenant's
+      # auto-provisioned catalog (see provisionPlatformCatalog in commerce.service.js).
+      - key: META_CATALOG_BUSINESS_ID
+        sync: false
+      - key: META_SYSTEM_USER_ID
+        sync: false
       - key: META_CONFIG_ID
         sync: false
       - key: WHATSAPP_VERIFY_TOKEN
@@ -141,6 +147,12 @@ services:
       # System-user token (own business) with catalog_management — the send_products
       # AI tool reads the catalog to confirm products before sending shoppable cards.
       - key: META_CATALOG_SYSTEM_TOKEN
+        sync: false
+      # BSP model: platform business + system user that own every tenant's
+      # auto-provisioned catalog (see provisionPlatformCatalog in commerce.service.js).
+      - key: META_CATALOG_BUSINESS_ID
+        sync: false
+      - key: META_SYSTEM_USER_ID
         sync: false
       - key: STORAGE_ENDPOINT
         sync: false

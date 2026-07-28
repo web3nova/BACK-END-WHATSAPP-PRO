@@ -120,6 +120,91 @@ export async function setupCommerce(tenantId, businessManagerId) {
   return { commerce };
 }
 
+// BSP ("Business Solution Provider") model: instead of using a catalog that
+// lives in the TENANT's own Meta business (which needs the tenant's business
+// to grant our app catalog_management — blocked until catalog_management gets
+// Advanced Access via App Review, and unusable at all while that review is
+// pending, since no new/updated submissions are accepted meanwhile), the
+// catalog is created and owned by OUR OWN business (META_CATALOG_BUSINESS_ID)
+// — an asset our system token already manages at Standard Access, the same
+// way the Abrahamnavig catalog already works today. Connecting it to a
+// tenant's WABA needs a single token with BOTH catalog_management (ours, on
+// our catalog) and whatsapp_business_management scoped to THAT WABA. Embedded
+// Signup already shares the tenant's WABA with our business the moment they
+// connect — that's inherent to how it works — so the WABA is already sitting
+// in our business as an asset; the only missing step is assigning it
+// internally to our own system user (META_SYSTEM_USER_ID), which needs no
+// separate tenant consent since it's entirely within our own business. Once
+// assigned, our system token has both permissions and can complete the whole
+// setup with zero manual steps, for any tenant, regardless of App Review
+// status — the earlier per-tenant blocker only existed because we were
+// reaching into catalogs OTHER businesses owned.
+export async function provisionPlatformCatalog(tenantId) {
+  if (!hasCommerceModel()) throw new BadRequestError('Commerce models not available');
+  const platformBusinessId = process.env.META_CATALOG_BUSINESS_ID;
+  const systemUserId = process.env.META_SYSTEM_USER_ID;
+  if (!platformBusinessId || !systemUserId) {
+    throw new BadRequestError('META_CATALOG_BUSINESS_ID / META_SYSTEM_USER_ID not configured');
+  }
+
+  const existing = await getCommerce(tenantId);
+  if (existing?.catalogId) return { commerce: existing, alreadySetup: true };
+
+  const account = await getWabaToken(tenantId);
+  if (!account.wabaId) throw new BadRequestError('No WABA ID found');
+  const token = catalogToken(account);
+
+  // 1. Assign the (already-shared-via-signup) WABA to our system user, so our
+  // system token gains whatsapp_business_management on it. Best-effort: if
+  // it's already assigned, Meta returns success/no-op either way. `tasks` is
+  // a repeated form field per Meta's documented example, not a JSON-array
+  // query param — MANAGE covers general account management.
+  const assignBody = new URLSearchParams();
+  assignBody.append('user', systemUserId);
+  assignBody.append('tasks', 'MANAGE');
+  const assignRes = await fetch(
+    `${GRAPH_BASE}/${account.wabaId}/assigned_users?access_token=${token}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: assignBody.toString() }
+  );
+  const assignJson = await assignRes.json().catch(() => ({}));
+  if (!assignRes.ok) {
+    logger.warn({ tenantId, wabaId: account.wabaId, metaError: assignJson?.error }, '[commerce] failed to assign WABA to platform system user');
+    throw new Error(`Failed to assign WABA: ${assignJson?.error?.message || JSON.stringify(assignJson)}`);
+  }
+  logger.info({ tenantId, wabaId: account.wabaId }, '[commerce] WABA assigned to platform system user');
+
+  // 2. Create the catalog under OUR business, not the tenant's.
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } });
+  const catalogName = `${tenant?.name || 'Business'} Catalog`;
+  const createRes = await fetch(
+    `${GRAPH_BASE}/${platformBusinessId}/product_catalogs?access_token=${token}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: catalogName, vertical: 'commerce' }),
+    }
+  );
+  const createJson = await createRes.json().catch(() => ({}));
+  if (!createRes.ok) {
+    throw new Error(`Failed to create platform catalog: ${createJson?.error?.message || JSON.stringify(createJson)}`);
+  }
+  const catalogId = createJson.id;
+
+  const commerce = await prisma.whatsappCommerce.upsert({
+    where: { tenantId },
+    update: { catalogId, businessManagerId: platformBusinessId },
+    create: { tenantId, catalogId, businessManagerId: platformBusinessId },
+  });
+  logger.info({ tenantId, catalogId }, '[commerce] platform catalog created');
+
+  // 3. Link it to the WABA and turn on cart + catalog visibility — our token
+  // now has both permissions needed, so this should succeed end-to-end.
+  await connectCatalogToWABA(tenantId);
+  await setCommerceSettings(tenantId);
+
+  return { commerce };
+}
+
 export async function connectCatalogToWABA(tenantId) {
   if (!hasCommerceModel()) throw new BadRequestError('Commerce models not available');
   const commerce = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
@@ -820,19 +905,19 @@ export async function autoSetupCommerce(tenantId) {
   const local = await getCommerce(tenantId);
   if (local?.catalogId) return getCommerceStatus(tenantId);
 
+  // If the business already manages their own Meta catalog and connected it
+  // to their WABA independently (outside our onboarding), respect that
+  // instead of provisioning a second, platform-owned one.
   const detected = await detectExistingCommerce(tenantId);
   if (detected?.catalogId) return getCommerceStatus(tenantId);
 
-  const businessManagerId = await resolveBusinessManagerId(tenantId);
-  if (!businessManagerId) {
-    return { status: 'not_setup', reason: 'needs_business_manager_id' };
-  }
-
+  // Otherwise provision one under our own business (BSP model) — see
+  // provisionPlatformCatalog's comment. Works regardless of App Review status
+  // since it only ever touches assets our own system token already manages.
   try {
-    await setupCommerce(tenantId, businessManagerId);
-    await enableCommerce(tenantId);
+    await provisionPlatformCatalog(tenantId);
   } catch (e) {
-    logger.warn({ tenantId, businessManagerId, err: e.message }, '[commerce] autoSetupCommerce create failed');
+    logger.warn({ tenantId, err: e.message }, '[commerce] autoSetupCommerce platform provisioning failed');
     return { status: 'not_setup', reason: 'create_failed', message: e.message };
   }
 
@@ -845,6 +930,7 @@ export default {
   resolveBusinessManagerId,
   autoSetupCommerce,
   setupCommerce,
+  provisionPlatformCatalog,
   linkCatalog,
   setCommerceSettings,
   reconcileConnectedCatalog,
