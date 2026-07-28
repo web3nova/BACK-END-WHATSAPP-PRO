@@ -483,8 +483,8 @@ model DocumentChunk {
 model WhatsappAccount {
   id            String  @id @default(uuid())
   tenantId      String  @unique
-  wabaId        String?
-  phoneNumberId String?
+  wabaId        String? @unique
+  phoneNumberId String? @unique
   phoneNumber   String?
   accessToken   String?
   twoStepPin    String?

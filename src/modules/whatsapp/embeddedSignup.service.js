@@ -30,6 +30,25 @@ export async function exchangeCodeForAccount({ tenantId, code, redirectUri, waba
   if (!wabaId) throw new BadRequestError('Missing wabaId');
   if (!phoneNumberId) throw new BadRequestError('Missing phoneNumberId');
 
+  // Refuse to connect a WABA/phone number that's already verified on a
+  // DIFFERENT tenant. Nothing previously checked this — whatsappAccount's
+  // upsert below is scoped only by tenantId, so two tenants could each end up
+  // with a row pointing at the same real WhatsApp number with no conflict
+  // ever surfacing. Every place that resolves "which tenant owns this
+  // number" (webhooks, incoming message routing) does a findFirst lookup, so
+  // a collision would silently route a customer's messages to whichever
+  // tenant Postgres happened to return first — a real cross-tenant leak, not
+  // just a UX nicety. Checked before spending any Graph API calls on a
+  // connection we're going to reject anyway.
+  const claimedBy = await prisma.whatsappAccount.findFirst({
+    where: { OR: [{ wabaId }, { phoneNumberId }], tenantId: { not: tenantId }, verified: true },
+    select: { tenantId: true },
+  });
+  if (claimedBy) {
+    logger.warn({ tenantId, wabaId, phoneNumberId, claimedByTenantId: claimedBy.tenantId }, '[whatsapp] rejected connect — WABA/phone already verified on a different tenant');
+    throw new BadRequestError('This WhatsApp Business account or phone number is already connected to a different BizIQ account. Disconnect it there first, or use a different number.');
+  }
+
   // 1. Exchange auth code → short-lived user token
   const shortTokenRes = await fetch(
     `${GRAPH_BASE}/oauth/access_token?` +

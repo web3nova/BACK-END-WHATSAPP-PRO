@@ -197,12 +197,48 @@ export async function provisionPlatformCatalog(tenantId) {
   });
   logger.info({ tenantId, catalogId }, '[commerce] platform catalog created');
 
-  // 3. Link it to the WABA and turn on cart + catalog visibility — our token
-  // now has both permissions needed, so this should succeed end-to-end.
-  await connectCatalogToWABA(tenantId);
+  // 3. Link it to the WABA and turn on cart + catalog visibility. The
+  // assigned_users grant above can return 200 before it's actually live on
+  // Meta's side — observed in practice: connectCatalogToWABA succeeds
+  // immediately after assignment, but a status check ~2 minutes later shows
+  // nothing actually attached. Retry with backoff and VERIFY against a fresh
+  // GET rather than trusting the POST's own 200, since that's exactly what
+  // looked deceptively successful.
+  await connectCatalogToWABAWithRetry(tenantId, account.wabaId, catalogId, token);
   await setCommerceSettings(tenantId);
 
   return { commerce };
+}
+
+async function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function connectCatalogToWABAWithRetry(tenantId, wabaId, catalogId, token) {
+  const delays = [0, 3000, 8000, 15000];
+  let lastErr;
+  for (let i = 0; i < delays.length; i++) {
+    if (delays[i]) await sleep(delays[i]);
+    try {
+      await connectCatalogToWABA(tenantId);
+    } catch (e) {
+      lastErr = e;
+      logger.warn({ tenantId, attempt: i + 1, err: e.message }, '[commerce] connectCatalogToWABA attempt failed, will retry');
+      continue;
+    }
+    // Verify against a fresh read — the POST returning 200 already proved
+    // unreliable once; don't trust it without checking actual WABA state.
+    const checkRes = await fetch(`${GRAPH_BASE}/${wabaId}/product_catalogs?fields=id&access_token=${token}`);
+    const checkJson = await checkRes.json().catch(() => ({}));
+    const connectedId = checkRes.ok && Array.isArray(checkJson.data) && checkJson.data.length ? checkJson.data[0].id : null;
+    if (connectedId === catalogId) {
+      logger.info({ tenantId, attempt: i + 1 }, '[commerce] verified catalog is actually connected to WABA');
+      return;
+    }
+    lastErr = new Error('Connect call succeeded but verification found the catalog not actually attached');
+    logger.warn({ tenantId, attempt: i + 1, connectedId }, '[commerce] connect looked successful but verification failed, will retry');
+  }
+  throw lastErr || new Error('Failed to connect catalog to WABA after retries');
 }
 
 export async function connectCatalogToWABA(tenantId) {
