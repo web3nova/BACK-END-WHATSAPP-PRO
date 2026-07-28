@@ -189,13 +189,34 @@ export async function provisionPlatformCatalog(tenantId) {
     throw new Error(`Failed to create platform catalog: ${createJson?.error?.message || JSON.stringify(createJson)}`);
   }
   const catalogId = createJson.id;
+  logger.info({ tenantId, catalogId }, '[commerce] platform catalog created');
+
+  // 2b. Explicitly self-assign our system user to the catalog we just
+  // created. Creating a business-owned resource via the Graph API does NOT
+  // automatically make the creating system user an admin of it — confirmed
+  // by the fact that reads/writes to this exact catalog still failed with
+  // "missing permissions" (subcode 33) even 30 minutes after creation, the
+  // same symptom the very first (manually-fixed-by-hand) catalog had before
+  // it was explicitly assigned via Business Settings. Same fix, via API.
+  const catalogAssignBody = new URLSearchParams();
+  catalogAssignBody.append('user', systemUserId);
+  catalogAssignBody.append('tasks', 'MANAGE');
+  const catalogAssignRes = await fetch(
+    `${GRAPH_BASE}/${catalogId}/assigned_users?access_token=${token}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: catalogAssignBody.toString() }
+  );
+  const catalogAssignJson = await catalogAssignRes.json().catch(() => ({}));
+  if (!catalogAssignRes.ok) {
+    logger.warn({ tenantId, catalogId, metaError: catalogAssignJson?.error }, '[commerce] failed to self-assign system user to platform catalog');
+    throw new Error(`Failed to assign catalog: ${catalogAssignJson?.error?.message || JSON.stringify(catalogAssignJson)}`);
+  }
+  logger.info({ tenantId, catalogId }, '[commerce] system user assigned to platform catalog');
 
   const commerce = await prisma.whatsappCommerce.upsert({
     where: { tenantId },
     update: { catalogId, businessManagerId: platformBusinessId },
     create: { tenantId, catalogId, businessManagerId: platformBusinessId },
   });
-  logger.info({ tenantId, catalogId }, '[commerce] platform catalog created');
 
   // 3. Link it to the WABA and turn on cart + catalog visibility. The
   // assigned_users grant above can return 200 before it's actually live on
