@@ -14,6 +14,19 @@ function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'untitled';
 }
 
+// product.imageUrl is a presigned S3/R2 URL captured at upload time and
+// expires after ~1hr (same issue already fixed for the Products page and
+// catalogTools.js's fetch_catalog) — the arrangement/section endpoints were
+// still returning that stale field directly, so a product's image shows fine
+// right after upload and then silently breaks in the Catalog Arrangements
+// dashboard once the presign expires. Rebuild it from imageStorageKey through
+// the /assets/product-images/:key proxy on every read instead.
+function freshProductImage(product) {
+  if (!product) return product;
+  if (!product.imageStorageKey) return product;
+  return { ...product, imageUrl: `/assets/product-images/${product.imageStorageKey}` };
+}
+
 // ── Arrangements ──────────────────────────────────────────────
 
 export async function listArrangements(tenantId) {
@@ -54,6 +67,10 @@ export async function getArrangement(tenantId, id) {
     },
   });
   if (!arrangement) throw new NotFoundError('Arrangement not found');
+  arrangement.sections = arrangement.sections.map((section) => ({
+    ...section,
+    items: section.items.map((item) => ({ ...item, product: freshProductImage(item.product) })),
+  }));
   return arrangement;
 }
 
@@ -187,7 +204,7 @@ export async function reorderSections(tenantId, items) {
 // ── Section Items ─────────────────────────────────────────────
 
 export async function listItems(tenantId, sectionId) {
-  return prisma.catalogSectionItem.findMany({
+  const items = await prisma.catalogSectionItem.findMany({
     where: { sectionId, tenantId, isActive: true },
     orderBy: { sortOrder: 'asc' },
     include: {
@@ -201,6 +218,7 @@ export async function listItems(tenantId, sectionId) {
       },
     },
   });
+  return items.map((item) => ({ ...item, product: freshProductImage(item.product) }));
 }
 
 export async function addItemToSection(tenantId, data) {
@@ -332,7 +350,7 @@ export async function getArrangementForCustomer(tenantId, customerPhone) {
       description: item.product.description,
       priceMinor: item.customPriceMinor ?? item.product.priceMinor,
       currency: item.product.currency,
-      imageUrl: item.customImageUrl ?? item.product.imageUrl,
+      imageUrl: item.customImageUrl ?? freshProductImage(item.product).imageUrl,
       sku: item.product.sku,
       category: item.product.category,
       brand: item.product.brand,
