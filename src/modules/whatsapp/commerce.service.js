@@ -361,6 +361,16 @@ export async function enableCommerce(tenantId) {
   const account = await getWabaToken(tenantId);
   if (!account.wabaId) throw new BadRequestError('No WABA ID found');
 
+  // Self-heal: if no catalog exists yet at all (e.g. this tenant's earlier
+  // provisioning attempt failed, or was cleared for a redo), provision one
+  // instead of throwing "No catalog created yet" — provisionPlatformCatalog
+  // already connects + enables internally, so we're done either way.
+  const existing = await getCommerce(tenantId);
+  if (!existing?.catalogId) {
+    await provisionPlatformCatalog(tenantId);
+    return { success: true };
+  }
+
   await connectCatalogToWABA(tenantId);
   return setCommerceSettings(tenantId);
 }
@@ -735,9 +745,20 @@ export async function syncArrangementToFacebook(tenantId, arrangementId) {
 // to the Meta catalog, no arrangement/section curation required. For businesses
 // that just want their whole inventory shoppable on WhatsApp.
 export async function syncAllProducts(tenantId) {
-  // Always target the catalog actually connected to the WABA (which our token
-  // provably has access to), not a possibly-stale/unwritable stored id.
-  await reconcileConnectedCatalog(tenantId);
+  // If there's no catalog at all yet, provision one properly (create + self-
+  // assign our system user + link + enable) instead of falling through to
+  // reconcileConnectedCatalog's older discovery fallback — that fallback
+  // rediscovers "manageable" catalogs via Meta's own token introspection,
+  // which can resurrect a catalog our token was never actually granted
+  // durable admin access to (missing the self-assignment step), silently
+  // undoing a fresh start.
+  const existing = await getCommerce(tenantId);
+  if (!existing?.catalogId) {
+    await provisionPlatformCatalog(tenantId);
+  } else {
+    // Already has a catalog — just self-heal WABA-link drift, same as before.
+    await reconcileConnectedCatalog(tenantId);
+  }
   const commerce = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
   if (!commerce?.catalogId) throw new BadRequestError('No catalog. Run setup first.');
 
