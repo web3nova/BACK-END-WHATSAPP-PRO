@@ -596,7 +596,7 @@ export async function syncAllProducts(tenantId) {
   }
   const tenantSlug = await getTenantSlug(tenantId);
 
-  const items = products.map((p) => buildCatalogItem(p, { tenantSlug }));
+  const items = products.map((p) => buildCatalogItem(p, { tenantSlug, sectionName: categoryLabel(p.category) }));
   const synced = await batchUpsertToCatalog(commerce.catalogId, catalogToken(account), items);
   logger.info({ tenantId, synced }, '[commerce] all products synced to Facebook catalog');
 
@@ -679,13 +679,34 @@ async function batchDeleteFromCatalog(catalogId, accessToken, retailerIds) {
   return removed;
 }
 
-// Upsert (create-if-missing) the tenant's "All Products" arrangement + section,
-// and keep its items in lockstep with whatever set of products was just pushed
-// to Meta via syncAllProducts — added ones appear, ones no longer active are
-// marked inactive rather than deleted (keeps sort order stable if a product is
-// reactivated later). Deliberately NOT isDefault: true — it's purely a visual
-// mirror of "what did the last sync-all push to Meta", not a claim on being
-// the tenant's default customer-facing arrangement (createArrangement's
+// Product.category is a small fixed enum (see product.validation.js) — used
+// here purely as the grouping key for auto-sections, independent of Meta's
+// own category taxonomy (buildCatalogItem deliberately does not send it as
+// Meta's "category" field — see its comment).
+const CATEGORY_LABELS = {
+  'best-selling': 'Best Selling',
+  'new-arrival': 'New Arrival',
+  featured: 'Featured',
+  discount: 'Discount',
+  regular: 'Regular',
+  others: 'Others',
+};
+function categoryLabel(category) {
+  return CATEGORY_LABELS[category] || 'Regular';
+}
+
+// Upsert (create-if-missing) the tenant's "All Products" arrangement, with one
+// Section per product category (Best Selling, New Arrival, Featured, etc.) —
+// matching the section label each item is actually synced to Meta under (see
+// buildCatalogItem's sectionName above) — instead of dumping every product
+// into a single flat section. Keeps items in lockstep with whatever set of
+// products was just pushed via syncAllProducts: added ones appear under their
+// category's section, ones no longer active are marked inactive rather than
+// deleted (keeps sort order stable if a product is reactivated later), and a
+// product whose category changed is moved to the new section and cleared from
+// the old one. Deliberately NOT isDefault: true — it's purely a visual mirror
+// of "what did the last sync-all push to Meta", not a claim on being the
+// tenant's default customer-facing arrangement (createArrangement's
 // unset-other-defaults logic isn't invoked here, so setting it here could
 // leave two arrangements both flagged default).
 async function mirrorAllProductsSection(tenantId, commerceId, products) {
@@ -698,27 +719,48 @@ async function mirrorAllProductsSection(tenantId, commerceId, products) {
     });
   }
 
-  let section = await prisma.catalogSection.findFirst({
+  const byCategory = new Map();
+  for (const p of products) {
+    const label = categoryLabel(p.category);
+    if (!byCategory.has(label)) byCategory.set(label, []);
+    byCategory.get(label).push(p);
+  }
+
+  const existingSections = await prisma.catalogSection.findMany({
     where: { tenantId, arrangementId: arrangement.id },
   });
-  if (!section) {
-    section = await prisma.catalogSection.create({
-      data: { tenantId, arrangementId: arrangement.id, name: 'All Products', sortOrder: 0 },
-    });
+  const sectionByName = new Map(existingSections.map((s) => [s.name, s]));
+
+  const keptItemIds = [];
+  let sortOrder = existingSections.length;
+  for (const [label, categoryProducts] of byCategory) {
+    let section = sectionByName.get(label);
+    if (!section) {
+      section = await prisma.catalogSection.create({
+        data: { tenantId, arrangementId: arrangement.id, name: label, sortOrder: sortOrder++ },
+      });
+      sectionByName.set(label, section);
+    }
+    for (let i = 0; i < categoryProducts.length; i++) {
+      const item = await prisma.catalogSectionItem.upsert({
+        where: { sectionId_productId: { sectionId: section.id, productId: categoryProducts[i].id } },
+        update: { isActive: true },
+        create: { tenantId, sectionId: section.id, productId: categoryProducts[i].id, sortOrder: i, isActive: true },
+      });
+      keptItemIds.push(item.id);
+    }
   }
 
-  const activeProductIds = products.map((p) => p.id);
-
-  for (let i = 0; i < products.length; i++) {
-    await prisma.catalogSectionItem.upsert({
-      where: { sectionId_productId: { sectionId: section.id, productId: products[i].id } },
-      update: { isActive: true },
-      create: { tenantId, sectionId: section.id, productId: products[i].id, sortOrder: i, isActive: true },
-    });
-  }
-
+  // Deactivate items that are no longer part of this sync — either the
+  // product is inactive/deleted, or it moved to a different category's
+  // section (its item under the OLD section should no longer show as active).
   await prisma.catalogSectionItem.updateMany({
-    where: { sectionId: section.id, productId: { notIn: activeProductIds }, isActive: true },
+    where: {
+      tenantId,
+      isActive: true,
+      id: { notIn: keptItemIds },
+      section: { arrangementId: arrangement.id },
+    },
     data: { isActive: false },
   });
 }
