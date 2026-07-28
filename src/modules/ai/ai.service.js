@@ -53,6 +53,13 @@ async function loadBusinessContext(tenantId) {
     collectMeasurements: ai.collectMeasurements !== false,
     generateQuotes: ai.generateQuotes !== false,
     suggestOutsideCatalog: ai.suggestOutsideCatalog === true,
+    // Captured during onboarding but previously never reached the AI at all —
+    // it would happily promise same-day service or chat identically at 2am on
+    // a closed day as at noon on a business day. buildSystemPrompt uses these
+    // to tell the model whether the business is open right now.
+    availableDays: business?.availableDays || [],
+    openingTime: business?.openingTime || null,
+    closingTime: business?.closingTime || null,
   };
 }
 
