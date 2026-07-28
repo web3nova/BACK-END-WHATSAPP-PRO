@@ -428,7 +428,17 @@ export async function getCommerceStatus(tenantId) {
 function buildCatalogItem(p, { customPriceMinor, customImageUrl, sectionName, tenantSlug } = {}) {
   const priceMinor = customPriceMinor ?? p.priceMinor ?? 0;
   const currency = p.currency || 'NGN';
-  const rawImage = customImageUrl ?? p.imageUrl ?? '';
+  // p.imageUrl is a presigned R2 URL captured at upload time and expires
+  // ~1hr later (same root cause fixed for the dashboard display in
+  // commerce.arrangement.service.js's freshProductImage) — sending that stale
+  // link to Meta is why items came back "Images: Missing" once enough time
+  // had passed since upload. Prefer rebuilding from imageStorageKey through
+  // the public /assets/product-images/:key proxy, which redirects to a fresh
+  // signed URL on every hit (including when Meta's crawler fetches it), and
+  // only fall back to the raw field for a legacy product with no storage key.
+  const rawImage = customImageUrl
+    ?? (p.imageStorageKey ? `/assets/product-images/${p.imageStorageKey}` : p.imageUrl)
+    ?? '';
   const imageUrl = rawImage.startsWith('http')
     ? rawImage
     : (rawImage ? `${process.env.APP_URL || 'https://biziq.online'}${rawImage}` : '');
