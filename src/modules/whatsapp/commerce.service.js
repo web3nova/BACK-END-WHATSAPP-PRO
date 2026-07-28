@@ -596,7 +596,7 @@ export async function syncAllProducts(tenantId) {
   }
   const tenantSlug = await getTenantSlug(tenantId);
 
-  const items = products.map((p) => buildCatalogItem(p, { tenantSlug, sectionName: categoryLabel(p.category) }));
+  const items = products.map((p) => buildCatalogItem(p, { tenantSlug, sectionName: groupLabel(p) }));
   const synced = await batchUpsertToCatalog(commerce.catalogId, catalogToken(account), items);
   logger.info({ tenantId, synced }, '[commerce] all products synced to Facebook catalog');
 
@@ -695,6 +695,14 @@ function categoryLabel(category) {
   return CATEGORY_LABELS[category] || 'Regular';
 }
 
+// The business's own free-text label (e.g. "Acrylic", "Gel") wins when set —
+// it actually describes what the product is, unlike the fixed 6-value
+// category. Falls back to the category label for products the business
+// hasn't labeled yet, so grouping still works without forcing extra data entry.
+function groupLabel(p) {
+  return p.label?.trim() || categoryLabel(p.category);
+}
+
 // Upsert (create-if-missing) the tenant's "All Products" arrangement, with one
 // Section per product category (Best Selling, New Arrival, Featured, etc.) —
 // matching the section label each item is actually synced to Meta under (see
@@ -721,7 +729,7 @@ async function mirrorAllProductsSection(tenantId, commerceId, products) {
 
   const byCategory = new Map();
   for (const p of products) {
-    const label = categoryLabel(p.category);
+    const label = groupLabel(p);
     if (!byCategory.has(label)) byCategory.set(label, []);
     byCategory.get(label).push(p);
   }

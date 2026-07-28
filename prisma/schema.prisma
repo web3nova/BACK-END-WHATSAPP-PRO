@@ -308,6 +308,12 @@ model Product {
   barcode         String?
   hsCode          String?
   category        String?
+  // Free-text grouping label the business defines themselves (e.g. "Acrylic",
+  // "Gel", "Nail Art") — unlike `category`, which is a fixed 6-value marketing
+  // taxonomy (Best Selling/New Arrival/Featured/Discount/Regular/Others) that
+  // doesn't describe what a product actually IS. Used to group the WhatsApp
+  // catalog into real, business-defined sections when set.
+  label           String?
   brand           String?
   description     String?
   review          String?

@@ -70,6 +70,7 @@ const productShape = {
   barcode: z.string().trim().max(100).optional(),
   hsCode: z.string().trim().max(20).optional(),
   category: categorySchema.optional(),
+  label: z.string().trim().max(60).optional(),
   brand: z.string().trim().max(100).optional(),
   description: z.string().trim().min(1).max(5000).optional(),
   review: z.string().trim().min(1).max(2000).optional(),
