@@ -393,7 +393,7 @@ async function resolveManageableCatalogId(account, businessManagerId) {
       );
       const json = await res.json().catch(() => ({}));
       const data = json?.data || {};
-      logger.info({ scopes: data.scopes, granular_scopes: data.granular_scopes, metaError: json?.error }, '[commerce] token scopes');
+      logger.debug({ scopes: data.scopes, granular_scopes: data.granular_scopes, metaError: json?.error }, '[commerce] token scopes');
       const cat = (data.granular_scopes || []).find((s) => s.scope === 'catalog_management');
       if (cat?.target_ids?.[0]) return cat.target_ids[0];
     } catch (e) {
@@ -409,7 +409,7 @@ async function resolveManageableCatalogId(account, businessManagerId) {
         `${GRAPH_BASE}/${businessManagerId}/owned_product_catalogs?fields=id,name&access_token=${catalogToken(account)}`,
       );
       const json = await res.json().catch(() => ({}));
-      logger.info({ ownedCatalogs: json?.data, metaError: json?.error }, '[commerce] business owned catalogs');
+      logger.debug({ ownedCatalogs: json?.data, metaError: json?.error }, '[commerce] business owned catalogs');
       if (Array.isArray(json.data) && json.data.length) return json.data[0].id;
     } catch (e) {
       logger.warn({ err: e.message }, '[commerce] owned_product_catalogs error');
@@ -437,7 +437,7 @@ export async function reconcileConnectedCatalog(tenantId) {
       logger.warn({ tenantId, metaError: json?.error }, '[commerce] reconcile: could not list WABA catalogs');
     }
     const catalogs = res.ok && Array.isArray(json.data) ? json.data : [];
-    logger.info({ tenantId, wabaId: account.wabaId, catalogs }, '[commerce] catalogs connected to WABA');
+    logger.debug({ tenantId, wabaId: account.wabaId, catalogs }, '[commerce] catalogs connected to WABA');
     let actualId = catalogs.length ? catalogs[0].id : null;
 
     const local = await prisma.whatsappCommerce.findUnique({ where: { tenantId } });
