@@ -85,10 +85,18 @@ export const stepDataBodySchema = z.object({
 
 export const businessProfileSchema = z
   .object({
-    // Identity
+    // Identity — onboarding wizard names
     businessName: z.string().trim().min(1, 'Business name is required').max(100).optional(),
     phoneNumber: z.string().trim().min(7, 'Enter a valid phone number').max(30).optional(),
     businessLocation: z.string().trim().min(1, 'Business location is required').max(200).optional(),
+
+    // Identity — Settings page names (same DB columns, different caller)
+    displayName: z.string().trim().min(1, 'Business name is required').max(100).optional(),
+    phone: z.string().trim().min(7, 'Enter a valid phone number').max(30).optional(),
+    location: z.string().trim().min(1, 'Business location is required').max(200).optional(),
+    tagline: z.string().trim().max(150).optional(),
+    description: z.string().trim().max(2000).optional(),
+    email: z.string().trim().email('Enter a valid email').max(150).optional(),
 
     // Compliance
     cacRegistrationNumber: z.string().trim().min(1, 'CAC registration number is required').max(50).optional(),
@@ -112,9 +120,12 @@ export const businessProfileSchema = z
   .strict()
   .refine((v) => Object.keys(v).length > 0, { message: 'Provide at least one field to update' })
   .transform((v) => ({
-    displayName: v.businessName,
-    phone: v.phoneNumber,
-    location: v.businessLocation,
+    displayName: v.displayName ?? v.businessName,
+    phone: v.phone ?? v.phoneNumber,
+    location: v.location ?? v.businessLocation,
+    tagline: v.tagline,
+    description: v.description,
+    email: v.email,
     cacNumber: v.cacRegistrationNumber,
     tin: v.tin,
     activeClients: v.numberOfActiveClients,
